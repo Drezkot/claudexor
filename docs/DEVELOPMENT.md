@@ -33,8 +33,8 @@ Read these together before changing shared behavior:
 - `packages/harness-*` translate native CLI/API streams into typed events. They
   do not select winners, manage budgets, or decide review policy. Each has a
   `fixtures/` dir backing its conformance parity test.
-- `packages/workspace` owns worktree envelopes, scoped harness homes, diff
-  capture, and cleanup.
+- `packages/workspace` owns Git and directory envelopes, scoped harness homes,
+  byte-faithful diff/file capture, and cleanup.
 - `packages/policy` owns typed risk classification, protected-path rules, and
   the workspace path guard.
 - `packages/context` owns the scope atlas and lazy ContextPack.
@@ -471,7 +471,8 @@ Do not add a parallel catalog cache, pricing ledger or preference resolver.
   places that pinned runtime beside the daemon and runs its help entrypoint under
   the app's bundled Node with an empty environment. Do not restore runtime `npx`, `@latest`, or a
   package-manager override.
-- Diffs come from git in the target workspace or envelope.
+- Git diffs come from the target workspace or envelope; directory results use
+  complete manifest-bound files through the same workspace owner.
 - Files and typed artifacts are the source of truth; terminal text and UI rows
   are projections.
 - Unknown modes, invalid config, unavailable harnesses, stale reviews, malformed

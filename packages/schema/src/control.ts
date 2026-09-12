@@ -492,7 +492,7 @@ export const RunApplyState = z
     "discarded",
   ])
   .describe(
-    "Honest application state of a run's changes: not_applied (no in-place mutation), applied (applied and review clean), applied_review_blocked (applied but review blocked/unconverged), or reverted.",
+    "Honest application state: not_applied (delivery pending), applied, applied_review_blocked, reverted, or discarded (remaining copied output deliberately not applied).",
   );
 export type RunApplyState = z.infer<typeof RunApplyState>;
 
@@ -540,7 +540,7 @@ export const ControlRunResult = z
       .enum(["patch", "files", "answer", "plan", "report", "none"])
       .default("none")
       .describe(
-        "What the turn actually produced: a patch, an answer, a plan (no files changed), a report, or nothing.",
+        "What the turn actually produced: a Git patch, directory files, an answer, a plan, a report, or nothing.",
       ),
     diffStat: z
       .object({
@@ -993,7 +993,7 @@ export const RunDecisionAction = z
     "discard",
   ])
   .describe(
-    "Operator decision on a blocked run: accept_clean_patch (apply it), rerun_with_feedback, accept_risk, override_needs_human, or revert_run (restore the pre-turn snapshot).",
+    "Operator decision: apply an accepted result, rerun with feedback, accept risk, override needs-human, revert a recorded Git effect, or discard remaining copied files without applying them.",
   );
 export type RunDecisionAction = z.infer<typeof RunDecisionAction>;
 
@@ -1020,7 +1020,7 @@ export const ControlRunDecisionRequest = z
     target: ApplyTarget.optional().describe("Delivery target for accept_clean_patch."),
   })
   .strict()
-  .describe("Typed, auditable operator decision on a NEEDS_HUMAN-blocked run.");
+  .describe("Typed operator decision on a run or its pending copied result.");
 export type ControlRunDecisionRequest = z.infer<typeof ControlRunDecisionRequest>;
 
 export const ControlRunDecisionResponse = z
