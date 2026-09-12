@@ -32,7 +32,8 @@ import { vendorVerifiedProfileStatus } from "@claudexor/orchestrator";
 import { profileDoctorStatus } from "./accounts-projection.js";
 import { createRetentionRunner } from "./retention-service.js";
 import { AuthReadinessService } from "@claudexor/gateway";
-import { buildGateway, harnessModels } from "./registry.js";
+import { buildGateway, harnessModels, harnessAccountModels } from "./registry.js";
+import { credentialUnusableLedger } from "./run-orchestrator.js";
 import {
   createCredentialProfilesService,
   projectHarnessStatuses,
@@ -318,8 +319,21 @@ export function controlServices(
       !input?.includeFakes && !input?.fresh && !input?.harnessIds?.length
         ? harnessesPollCache.read(() => listHarnesses())
         : listHarnesses(input),
-    harnessModels: async (input: { harnessId: string; route?: "local_session" | "api_key" }) =>
-      harnessModels(input.harnessId, NO_PROJECT_ROOT, true, input.route),
+    harnessModels: async (input: {
+      harnessId: string;
+      route?: "local_session" | "api_key";
+      view?: "accounts";
+      credentialProfileId?: string;
+    }) =>
+      input.view === "accounts"
+        ? harnessAccountModels({
+            ...input,
+            cwd: NO_PROJECT_ROOT,
+            config: loadConfig(NO_PROJECT_ROOT).global,
+            quota: quotaRegistry().read(),
+            unusable: credentialUnusableLedger.live(),
+          })
+        : harnessModels(input.harnessId, NO_PROJECT_ROOT, true, input.route),
     authReadiness: async (input: { harnessId: string; request: unknown }) =>
       authReadiness.refresh(input.harnessId, input.request),
     agentCapabilities: async () => buildAgentCapabilityCatalog(),

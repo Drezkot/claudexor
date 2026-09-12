@@ -49,6 +49,7 @@ export * from "./deep-scan.js";
 export * from "./telemetry.js";
 export * from "./config.js";
 export * from "./workspace.js";
+export * from "./files-manifest.js";
 export * from "./thread.js";
 export * from "./project.js";
 export * from "./cancel-reason.js";

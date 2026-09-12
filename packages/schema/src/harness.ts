@@ -21,7 +21,12 @@ import {
 import { QuotaConstraint, QuotaSource } from "./quota.js";
 import { RateLimitSignal } from "./rate-limit.js";
 import { EffortHint, ModelEffortCapability } from "./effort.js";
-import { ProcessingCostBasis, ProcessingPreference, ProcessingReceipt } from "./processing.js";
+import {
+  ProcessingCostBasis,
+  ProcessingPreference,
+  ProcessingReceipt,
+  UsageCostBasis,
+} from "./processing.js";
 import { AuthCapabilities } from "./platform-auth.js";
 export * from "./platform-auth.js";
 // Re-exported so sibling contract modules keep one import path for the type.
@@ -814,6 +819,7 @@ export const HarnessEvent = z
           .describe("Reported cache token count; relation to input_tokens is harness-specific."),
         input_token_usage: InputTokenUsage.optional(),
         cost_usd: z.number().nonnegative().optional().describe("Cost in USD."),
+        cost_basis: UsageCostBasis.optional(),
         /** True when cost_usd is derived from token pricing (not natively reported). */
         estimated: z
           .boolean()

@@ -135,7 +135,7 @@ import {
   ControlApplyRequest,
   AgentCapabilityCatalog,
   ControlHarnessListResponse,
-  ControlHarnessModelsResponse,
+  ControlHarnessModelsQueryResponse,
   ControlSetupJob,
   ControlSetupJobCreateRequest,
   ControlSetupJobInputRequest,
@@ -247,6 +247,8 @@ export interface DaemonControlApiOptions {
       harnessModels?: (input: {
         harnessId: string;
         route?: "local_session" | "api_key";
+        view?: "accounts";
+        credentialProfileId?: string;
       }) => Promise<unknown>;
       authReadiness?: (input: {
         harnessId: string;
@@ -1263,7 +1265,12 @@ export class DaemonControlApiServer {
     const harnessModelsMatch = /^\/harnesses\/([^/]+)\/models$/.exec(path);
     if (method === "GET" && harnessModelsMatch) {
       try {
-        assertOnlyQueryParams(url, ["route"]);
+        assertOnlyQueryParams(url, ["route", "view", "credentialProfileId"]);
+        const view = singleQuery(url, "view");
+        if (view !== undefined && view !== "accounts") throw new Error("view must be accounts");
+        const profile = singleQuery(url, "credentialProfileId");
+        if (profile !== undefined && view !== "accounts")
+          throw new Error("credentialProfileId requires view=accounts");
         const routeParam = url.searchParams.get("route");
         if (routeParam !== null && routeParam !== "local_session" && routeParam !== "api_key") {
           throw new Error("route must be exactly local_session or api_key");
@@ -1274,8 +1281,10 @@ export class DaemonControlApiServer {
           {
             harnessId: decodeURIComponent(harnessModelsMatch[1] as string),
             ...(routeParam ? { route: routeParam } : {}),
+            ...(view ? { view } : {}),
+            ...(profile !== undefined ? { credentialProfileId: Id.parse(profile) } : {}),
           },
-          ControlHarnessModelsResponse,
+          ControlHarnessModelsQueryResponse,
         );
       } catch (error) {
         return this.requestError(res, error);
