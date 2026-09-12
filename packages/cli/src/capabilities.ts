@@ -8,6 +8,7 @@ import {
   RUN_START_CLIENT_REJECTED_KEYS,
   RunApplyState,
   WorkspaceMode,
+  WorkspaceKind,
   type CatalogHarness,
   type ControlHarnessModelsResponse,
 } from "@claudexor/schema";
@@ -91,6 +92,8 @@ export async function buildAgentCapabilityCatalog(): Promise<AgentCapabilityCata
         webPolicy: s.manifest?.capabilities.web_policy ?? "none",
         attachmentInputs: [...(profile?.attachment_inputs ?? [])],
         effortLevels: [...(s.manifest?.capabilities.effort_levels ?? [])],
+        processingPreferences: [...(s.manifest?.capabilities.processing_preferences ?? [])],
+        accountCatalog: true,
         accessProfilesSupported: [...(s.manifest?.access_profiles_supported ?? [])],
         readonlyMechanism: profile?.access_control.readonly_mechanism ?? "none",
         writeMechanism: profile?.access_control.write_mechanism ?? "none",
@@ -121,6 +124,7 @@ export async function buildAgentCapabilityCatalog(): Promise<AgentCapabilityCata
     runControlKeys,
     outputSchemaDialects: OUTPUT_SCHEMA_DIALECTS.map((dialect) => ({ ...dialect })),
     mutability: {
+      workspaceKinds: [...WorkspaceKind.options],
       readOnlyModes: ModeKind.options.filter((m) => MODE_MUTABILITY[m] === "read"),
       writeModes: ModeKind.options.filter((m) => MODE_MUTABILITY[m] === "write"),
       isolationKinds: ["envelope", "live"],

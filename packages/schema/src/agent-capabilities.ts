@@ -7,6 +7,8 @@ import { OutputSchemaDialect } from "./output-schema-dialect.js";
 import { DelegationCapability } from "./delegation.js";
 import { GitCapability } from "./git-capability.js";
 import { SetupLoginCapability } from "./readiness.js";
+import { WorkspaceKind } from "./files-manifest.js";
+import { ProcessingPreference } from "./processing.js";
 
 /**
  * AgentCapabilityCatalog — the machine-readable answer to "what can this
@@ -80,6 +82,8 @@ export type CatalogModelSummary = z.infer<typeof CatalogModelSummary>;
 
 export const CatalogHarness = z
   .object({
+    processingPreferences: z.array(ProcessingPreference).optional(),
+    accountCatalog: z.boolean().optional(),
     id: z
       .string()
       .describe("Harness id (codex, claude, cursor, opencode, raw-api, openrouter, ...)."),
@@ -163,6 +167,7 @@ export type CatalogCliCommand = z.infer<typeof CatalogCliCommand>;
 
 export const CatalogMutabilityMatrix = z
   .object({
+    workspaceKinds: z.array(WorkspaceKind).optional(),
     readOnlyModes: z
       .array(ModeKind)
       .describe("Canonical modes that never mutate the project tree (ask/plan)."),

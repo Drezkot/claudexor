@@ -1055,6 +1055,28 @@ bundle with a reason, `skipped` = single report).
 
 ### Agent
 
+Explicit `execution.workspaceKind: directory` keeps the ordinary Agent pipeline
+and its requested strategy. `execution.isolation: live` operates directly in the
+actual execution folder; `envelope` materializes the entire selected `scopePaths`
+in the existing workspace namespace. Stable `scope.root` remains the project
+identity. No directory path initializes Git or creates a mandatory full-tree
+baseline copy. A direct footprint records selected preimage hashes and later
+output bytes; typed observed file changes may add outputs whose preimages are
+unknown. An empty or partial direct observation never proves `noChanges: true`.
+
+Directory work produces a `files` WorkProduct. Its `files.manifest` and
+`meta.manifest_sha256` address a complete file manifest in the existing run
+artifact tree, including source/execution roots, selection, completeness, modes,
+symlinks and full content references. Null preimages mean proven absence;
+`unknown` cannot authorize overwriting an existing target. Copied inputs remain
+available for fresh verification, and new outputs outside the initial selection
+are retained. The artifact endpoint streams exact manifest-referenced bytes;
+bounded previews are not delivery payloads. Apply uses the existing journal,
+target mutation lease, verifier and per-file preimage checks. A partial selection
+records delivered paths in `delivery_state.yaml` and keeps remaining custody.
+Explicit `discard` closes remaining copy delivery without applying or reverting
+anything. Direct effects are already in place and have no promised full rollback.
+
 `claudexor agent` defaults to `agent`. It is a one-candidate orchestrator/envelope
 run: the harness works in an isolated workspace, Claudexor captures the git diff,
 emits artifacts, and live project mutation happens only through explicit
@@ -1196,6 +1218,24 @@ Runs one selected compatible harness read-only with `intent: audit` and writes
 ## 7. Control API
 
 ### Caller-owned model operations
+
+The optional Processing contract follows the
+[single advisory rule](DEVELOPMENT.md#processing-preference). Model calls carry
+`options.processingPreference`; Agent inputs carry `processingPreference` through
+the captured task, helpers, reviewers, children and continuation. Adapter-owned
+preparation resolves the actual account's native control before ranking and budget
+reservation. `serviceTier` remains an exact native override. Requested cognitive
+model and native variant stay distinct, and the per-spawn model gate validates
+the actual account's chosen variant. Result/event Processing receipts separate
+request, submission and observation; sessions may remain mixed or unknown.
+
+Existing catalog endpoints provide an opt-in `view=accounts` declared in the
+operation catalog. The view includes every enabled compatible account, its
+availability/problem, and its own catalog/provenance/observation time. One failed
+account does not erase siblings. Manifest hints and cached observations never
+acquire a new provider timestamp. Explicit profile selection narrows only that
+account. Execution still performs its independent current readiness and model
+admission. Legacy queries retain their strict pre-existing response shape.
 
 The engine also accepts one raw model generation independently of Agent Runs.
 `ModelAdapter` in core and the model-operation schemas define caller-owned
@@ -2454,15 +2494,20 @@ comes from `budget.paid_budget_per_run`. A single root ledger grants leases to
 planner, candidates, synthesis, and review, and settles
 observed spend even when work errors. Every route carries cost knowledge
 (`exact | estimated | unknown`), billing knowledge, source, and provenance.
-Subscription token valuation is telemetry, not a cash debit — estimated OR
+Ordinary included-subscription token valuation is telemetry, not a cash debit — estimated OR
 exact, for candidates and each reviewer route. It is projected BESIDE cash on
 `ControlBudgetSnapshot` (`valuationUsd` + `valuationKnowledge`, also on the MCP
-read result), so a native-subscription run reads as exact `$0` cash with a
+read result), so proven included ordinary work reads as exact `$0` cash with a
 non-null valuation; an unknown valuation stays null, never a fabricated `$0`.
 Codex's token-only usage remains unpriced unless explicit
 `CLAUDEXOR_CODEX_PRICE_INPUT`, `_OUTPUT`, and `_CACHED` rates cover every used
-token category. Model names never imply a fallback tariff. Subscription cash
-remains exact zero independently of that optional valuation.
+token category. Model names never imply a fallback tariff. Included ordinary subscription cash remains exact zero independently of that optional
+valuation. Premium native processing is separately qualified before ranking and
+reservation; verified login alone cannot prove inclusion. Observed amount basis
+is independent: vendor list prices are valuation, while unknown cash or credit
+consumption stays unknown. Current native transports expose no authoritative
+paid-credit debit amount; the engine never invents one from token prices or a
+session-level Fast setting.
 Persisted routing cost averages carry a cost-evidence generation in the existing
 metrics file. Older unclassified costs are read as unknown while duration,
 sample counts and auth routing survive. A new explicitly unpriced attempt
@@ -2617,8 +2662,9 @@ the ids dropped by `paid_fallback`/cooldown, the decisive `reason`
 `expiring_quota_slack` / `all_incremental_cash_unknown` / `declared_order`), and a
 per-candidate `{billing_knowledge, incremental_cost_usd, eligible}` tuple. The
 rationale is axis-aligned with the ranker, so it can never disagree with the order
-actually taken, and it is derived from typed auth-route evidence: a doctor-VERIFIED
-vendor-native source proves `subscription_entitlement`, so that route survives
+actually taken. Mode-qualified billing evidence takes priority over ordinary
+auth-route evidence: verified included ordinary service proves
+`subscription_entitlement`, so that route survives
 `paid_fallback: never` and ranks with a real economy tuple instead of reading as
 unknown/paid. Surfaces project the rationale verbatim (run detail) and never
 reconstruct the order from prose. A deep-scan swarm reserves n>1 subscription

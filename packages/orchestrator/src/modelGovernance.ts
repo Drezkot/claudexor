@@ -178,5 +178,14 @@ export async function* runModelGovernedRoute(
       );
     }
   }
+  if (spec.processing?.reason === "processing_control_unavailable") {
+    yield {
+      type: "status",
+      ts: new Date().toISOString(),
+      session_id: spec.session_id,
+      processing: spec.processing,
+      text: "Processing preference is unavailable; using ordinary native execution.",
+    };
+  }
   yield* routed.adapter.run(spec);
 }

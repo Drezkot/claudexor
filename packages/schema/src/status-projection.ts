@@ -141,6 +141,8 @@ export function outcomeBanner(
       return "Applied · review blocked";
     case "reverted":
       return "Reverted — changes rolled back";
+    case "discarded":
+      return "Discarded — not applied";
     case "not_applied":
       break;
   }

@@ -10,6 +10,7 @@ import type { ServerResponse } from "node:http";
 import {
   ControlRunStartInfo,
   ControlRunStartRequest,
+  RunExecution,
   ControlThreadTurnResponse,
   TRUST_FULL_ACCESS_CODE,
 } from "@claudexor/schema";
@@ -337,7 +338,12 @@ export function handleThreadTurnCreate(
       }
       // Agent turns run "live" in the execution tree (in-place project or the
       // thread worktree — the runner resolves which from thread.workspace).
-      const isolation = mode === "agent" ? "live" : "envelope";
+      const isolation =
+        body.execution?.workspaceKind === "directory"
+          ? (body.execution.isolation ?? (mode === "agent" ? "live" : "envelope"))
+          : mode === "agent"
+            ? "live"
+            : "envelope";
       // Sticky routing inheritance (thin gateway — pure DTO passthrough, the
       // engine's orderPool/resolveCandidateAdapters owns all ordering): pool/
       // primary precedence is per-turn body > thread sticky > omit (engine then
@@ -374,7 +380,7 @@ export function handleThreadTurnCreate(
           prompt,
           scope: thread.repo ? { kind: "project", root: thread.repo.root } : { kind: "none" },
           mode,
-          execution: { isolation },
+          execution: { ...RunExecution.parse(runStartBody.execution ?? {}), isolation },
           threadId,
           parentRunId: thread.head_run_id ?? undefined,
           planRunId: planRunId ?? undefined,
