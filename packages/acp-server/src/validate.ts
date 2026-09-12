@@ -35,6 +35,7 @@ export function validateRunControls(params: unknown): RunControlError | null {
     "model",
     "effort",
     "processingPreference",
+    "execution",
     "n",
     "race",
     "untilClean",

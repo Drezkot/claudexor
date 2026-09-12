@@ -78,6 +78,26 @@ const MCP_TO_CLI = {
   primaryHarness: { cli: "primary-harness" },
   model: { cli: "model" },
   effort: { cli: "effort" },
+  processingPreference: { cli: "processing" },
+  execution: {
+    cli: null,
+    reason:
+      "ControlRunStartRequest.execution groups isolation and directory geometry; validate each member below instead of exempting the object",
+    nested: {
+      isolation: { type: "string", booleanCli: "in-place" },
+      workspaceKind: { type: "string", cli: "workspace-kind" },
+      scopePaths: { type: "array", cli: "scope-path" },
+      delegated: {
+        type: "boolean",
+        reason: "external orchestrator workspace custody; public CLI starts its own managed runs",
+      },
+      workspaceRoot: {
+        type: "string",
+        reason:
+          "external delegated execution address; CLI executes in its cwd without a fabricated root",
+      },
+    },
+  },
   web: { cli: "web" },
   externalContextPolicy: { cli: "web", reason: "control-api parity alias of web" },
   n: { cli: "n" },
@@ -132,8 +152,8 @@ const BOOLEAN_FLAG_MAP = {
       "delegation belt (D32) is injected into a harness sandbox by the engine; the PUBLIC MCP surface has no delegate flag (the belt IS the scoped MCP surface)",
   },
   "in-place": {
-    mcp: null,
-    reason: "live-tree mutation is a CLI-only explicit opt-in (never a remote-ish surface default)",
+    mcp: "execution.isolation",
+    reason: "explicit live isolation; omission remains an envelope on public MCP",
   },
   json: { mcp: null, reason: "CLI output shaping, not a run control" },
   "json-stream": {
@@ -157,6 +177,10 @@ const BOOLEAN_FLAG_MAP = {
   "accept-risk": { mcp: null, reason: "decision subcommand flag" },
   override: { mcp: null, reason: "decision subcommand flag" },
   revert: { mcp: null, reason: "decision subcommand flag" },
+  discard: {
+    mcp: null,
+    reason: "decision subcommand flag; public MCP has no result-disposition mutation tool",
+  },
   "accept-clean-patch": { mcp: null, reason: "decision subcommand flag" },
   rerun: { mcp: null, reason: "decision subcommand flag" },
   help: { mcp: null, reason: "CLI affordance" },
@@ -234,6 +258,27 @@ for (const arg of mcpArgs) {
       `MCP arg '${arg}' maps to CLI flag '--${mapping.cli}' which is not in VALUE_FLAGS`,
     );
   }
+  if (mapping.nested) {
+    for (const tool of runTools) {
+      const properties = tool.inputSchema.properties?.[arg]?.properties ?? {};
+      for (const field of Object.keys(properties)) {
+        if (!(field in mapping.nested))
+          failures.push(`MCP '${arg}.${field}' has no declared nested CLI mapping or reason`);
+      }
+      for (const [field, member] of Object.entries(mapping.nested)) {
+        if (properties[field]?.type !== member.type)
+          failures.push(`MCP '${tool.name}' must expose '${arg}.${field}' as ${member.type}`);
+        if (member.cli && !cliValueFlags.includes(member.cli))
+          failures.push(`MCP '${arg}.${field}' maps to missing CLI value flag '--${member.cli}'`);
+        if (member.booleanCli && !cliBooleanFlags.includes(member.booleanCli))
+          failures.push(
+            `MCP '${arg}.${field}' maps to missing CLI boolean flag '--${member.booleanCli}'`,
+          );
+        if (!member.cli && !member.booleanCli && !member.reason)
+          failures.push(`MCP '${arg}.${field}' has no CLI mapping or reason`);
+      }
+    }
+  }
   const expectedTools = mapping.tools ?? RUN_TOOL_NAMES;
   const actualTools = mcpArgTools.get(arg) ?? [];
   if (JSON.stringify(actualTools) !== JSON.stringify(expectedTools)) {
@@ -252,7 +297,10 @@ for (const declared of Object.keys(MCP_TO_CLI)) {
 
 const mappedCliFlags = new Set(
   Object.values(MCP_TO_CLI)
-    .map((m) => m.cli)
+    .flatMap((mapping) => [
+      mapping.cli,
+      ...Object.values(mapping.nested ?? {}).map((member) => member.cli),
+    ])
     .filter(Boolean),
 );
 for (const flag of cliValueFlags) {

@@ -20,6 +20,19 @@ import {
 } from "./acp-surface-runner.js";
 
 describe("ACP run-control projection", () => {
+  it("keeps explicit Standard and directory footprint on the thread request", () => {
+    const execution = { workspaceKind: "directory", scopePaths: ["input", "image.bin"] };
+    const reviewerPanel = [{ harness: "claude", processingPreference: "economy" }];
+    expect(
+      projectAcpRunControls({
+        mode: "__acp_session_prompt",
+        runMode: "agent",
+        processingPreference: "standard",
+        execution,
+        reviewerPanel,
+      }),
+    ).toEqual({ mode: "agent", processingPreference: "standard", execution, reviewerPanel });
+  });
   it.each([true, false])("preserves review=%s through the thread projection", (review) => {
     expect(
       projectAcpRunControls({ mode: "__acp_session_prompt", runMode: "agent", review }),

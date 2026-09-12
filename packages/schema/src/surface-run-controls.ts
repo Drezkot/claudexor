@@ -1,3 +1,4 @@
+import { RunExecution } from "./control-run-execution.js";
 import { AccessProfile, ExternalContextPolicy, ModeKind, ProviderFamily } from "./primitives.js";
 import { EffortHint } from "./harness.js";
 import { ProcessingPreference } from "./processing.js";
@@ -17,6 +18,11 @@ import { runStartStrategyViolations } from "./run-strategy.js";
  * per-tool race `n` minimum, prompt/cwd requirements).
  */
 export function validateSurfaceRunControls(obj: Record<string, unknown>): string | null {
+  if (obj.execution !== undefined) {
+    const parsed = RunExecution.safeParse(obj.execution);
+    if (!parsed.success)
+      return `execution: ${parsed.error.issues.map((issue) => `${issue.path.join(".")}: ${issue.message}`).join("; ")}`;
+  }
   if (
     obj.processingPreference !== undefined &&
     !ProcessingPreference.safeParse(obj.processingPreference).success

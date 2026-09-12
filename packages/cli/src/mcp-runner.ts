@@ -2,6 +2,8 @@ import {
   ControlProblem,
   isTerminalLifecycle,
   ModeKind,
+  RunExecution,
+  type ProcessingPreference,
   normalizeCancelReasonCode,
   type RunOutcomeFacts,
 } from "@claudexor/schema";
@@ -38,18 +40,16 @@ export interface SurfaceRunnerHooks {
 }
 
 export interface McpSurfaceRunnerOptions {
-  /** Belt subprocesses must bind to their already-running parent daemon and
-   * never create a second authority under a scoped HOME. */
+  /** Bind belt subprocesses to their existing parent daemon. */
   requireExistingDaemon?: boolean;
   /** Belt-only lineage bound by the bridge from its injected environment.
    * Raw tool arguments can never switch the generic MCP runner into this path. */
   delegationParentRunId?: string | null;
-  /** Belt-only original project root, bound by the engine descriptor. Raw tool
-   * arguments cannot redirect a child into the parent envelope or another repo. */
+  /** Original project root from the engine descriptor, never from child arguments. */
   delegationRepoRoot?: string | null;
-  /** ACP composition is supplied only by the ACP-aware bridge. Keeping this
-   * dependency injected prevents the packaged belt self-entry from pulling in
-   * or initializing the ACP surface. */
+  delegationProcessingPreference?: ProcessingPreference;
+  delegationExecution?: Pick<RunExecution, "workspaceKind" | "scopePaths">;
+  /** ACP-aware bridges inject this; the packaged belt does not initialize ACP. */
   acpSessionQuery?: (
     input: any,
     hooks: SurfaceRunnerHooks | undefined,
@@ -111,11 +111,16 @@ export function mcpSurfaceRunner(options: McpSurfaceRunnerOptions = {}) {
     const repoRoot =
       options.delegationRepoRoot ??
       (typeof p?.repoPath === "string" && p.repoPath.trim() ? p.repoPath : process.cwd());
+    const processingPreference = options.delegationParentRunId
+      ? options.delegationProcessingPreference
+      : p?.processingPreference;
     const body: Record<string, unknown> = {
       prompt: String(p?.prompt ?? ""),
       mode,
       scope: { kind: "project", root: repoRoot },
-      execution: { isolation: "envelope" },
+      execution: options.delegationParentRunId
+        ? { ...options.delegationExecution, isolation: "envelope" }
+        : RunExecution.parse(p?.execution ?? { isolation: "envelope" }),
       ...(p?.harness ? { harnesses: [String(p.harness)] } : {}),
       ...(p?.primaryHarness ? { primaryHarness: String(p.primaryHarness) } : {}),
       ...(p?.race === true
@@ -139,7 +144,7 @@ export function mcpSurfaceRunner(options: McpSurfaceRunnerOptions = {}) {
           : {}),
       ...(p?.model ? { model: String(p.model) } : {}),
       ...(p?.effort ? { effort: String(p.effort) } : {}),
-      ...(p?.processingPreference ? { processingPreference: p.processingPreference } : {}),
+      ...(processingPreference !== undefined ? { processingPreference } : {}),
       ...(typeof p?.review === "boolean" ? { review: p.review } : {}),
       ...(Array.isArray(p?.reviewerPanel) ? { reviewerPanel: p.reviewerPanel } : {}),
       ...(p?.reviewerModels && typeof p.reviewerModels === "object"
