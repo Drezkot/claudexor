@@ -28,6 +28,7 @@ import { ProtectedPathApproval, TestCommandInvocation } from "./task.js";
 import { RunScope } from "./control-run-scope.js";
 import { RunFailure } from "./control-run-failure.js";
 import { RunExecution } from "./control-run-execution.js";
+import { WorkspaceScopePath } from "./files-manifest.js";
 import { makeControlRunRetrySchemas } from "./control-run-retry.js";
 import { ControlAuthRoute } from "./control-auth-route.js";
 import { DelegatedChildRunIds, RunDelegationInfo } from "./delegation.js";
@@ -488,6 +489,7 @@ export const RunApplyState = z
     "applied_review_blocked",
     /** A prior in-place application was reverted to its pre-turn snapshot. */
     "reverted",
+    "discarded",
   ])
   .describe(
     "Honest application state of a run's changes: not_applied (no in-place mutation), applied (applied and review clean), applied_review_blocked (applied but review blocked/unconverged), or reverted.",
@@ -504,6 +506,13 @@ export type RunApplyState = z.infer<typeof RunApplyState>;
 export const RunDeliveryState = z
   .object({
     applyState: RunApplyState.default("not_applied"),
+    appliedPaths: z
+      .array(WorkspaceScopePath)
+      .optional()
+      .describe(
+        "Paths already delivered from a directory result; remaining paths retain pending custody.",
+      ),
+    discardedAt: z.string().nullable().optional(),
     deliveredAt: z
       .string()
       .nullable()
@@ -528,7 +537,7 @@ export type RunDeliveryState = z.infer<typeof RunDeliveryState>;
 export const ControlRunResult = z
   .object({
     kind: z
-      .enum(["patch", "answer", "plan", "report", "none"])
+      .enum(["patch", "files", "answer", "plan", "report", "none"])
       .default("none")
       .describe(
         "What the turn actually produced: a patch, an answer, a plan (no files changed), a report, or nothing.",
@@ -945,6 +954,7 @@ export type ApplyTarget = z.infer<typeof ApplyTarget>;
 
 export const ControlApplyCheckRequest = z
   .object({
+    paths: z.array(WorkspaceScopePath).optional(),
     target: ApplyTarget.default({ kind: "original_project" }),
   })
   .strict()
@@ -953,6 +963,7 @@ export type ControlApplyCheckRequest = z.infer<typeof ControlApplyCheckRequest>;
 
 export const ControlApplyRequest = z
   .object({
+    paths: z.array(WorkspaceScopePath).optional(),
     target: ApplyTarget.default({ kind: "original_project" }),
     mode: z
       .enum(["apply", "branch", "commit", "pr"])
@@ -979,6 +990,7 @@ export const RunDecisionAction = z
     /** Restore the live in-place tree to this turn's pre-turn snapshot (server-owned;
      * refuses if the tree has diverged from the recorded post-turn state). */
     "revert_run",
+    "discard",
   ])
   .describe(
     "Operator decision on a blocked run: accept_clean_patch (apply it), rerun_with_feedback, accept_risk, override_needs_human, or revert_run (restore the pre-turn snapshot).",
@@ -1015,7 +1027,7 @@ export const ControlRunDecisionResponse = z
   .object({
     accepted: z.boolean().describe("Whether the decision was accepted."),
     status: z
-      .enum(["applied", "requeued", "rejected", "unsupported"])
+      .enum(["applied", "requeued", "rejected", "unsupported", "discarded"])
       .describe("Outcome: applied, requeued (a new turn was enqueued), rejected, or unsupported."),
     /** New run id when the decision re-enqueues a turn (rerun_with_feedback). */
     newRunId: Id.optional().describe(

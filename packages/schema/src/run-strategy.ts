@@ -296,7 +296,7 @@ export function runStartRequiresGit(
     access?: AccessProfile;
     untilClean?: boolean;
     attempts?: number | null;
-    execution?: { isolation?: "envelope" | "live" };
+    execution?: { isolation?: "envelope" | "live"; workspaceKind?: "git" | "directory" };
   },
   context: {
     effectiveWorkspaceRequiresGit?: boolean;
@@ -308,6 +308,7 @@ export function runStartRequiresGit(
     context.effectiveAccess ??
     resolveRunAccess(value, context.accessDefault ?? "workspace_write").effective;
   if (effectiveAccess === "readonly") return false;
+  if (value.execution?.workspaceKind === "directory") return false;
   // A thread may execute "live" *inside a worktree*: isolated threads and
   // protected-path promotion are resolved by the daemon from durable thread /
   // project state, not from the wire isolation flag. That effective workspace

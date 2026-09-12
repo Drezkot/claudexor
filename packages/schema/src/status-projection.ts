@@ -354,7 +354,7 @@ export function makeOutcomeFacts(
 ): RunOutcomeFacts {
   return {
     lifecycle,
-    noChanges: partial.noChanges ?? false,
+    noChanges: partial.noChanges === undefined ? false : partial.noChanges,
     checks: partial.checks ?? "not_configured",
     review: partial.review ?? "not_run",
     ...(partial.review_requested !== undefined

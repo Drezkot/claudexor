@@ -20,7 +20,16 @@ import { RunFailure } from "./control-run-failure.js";
 export const ControlPrimaryOutput = z
   .object({
     kind: z
-      .enum(["answer", "report", "plan", "summary", "patch", "diagnostic", "structured_output"])
+      .enum([
+        "answer",
+        "report",
+        "plan",
+        "summary",
+        "patch",
+        "files",
+        "diagnostic",
+        "structured_output",
+      ])
       .describe(
         "What kind of output this is: answer, report, plan, summary, patch, diagnostic, or structured_output (schema-conformant final/output.json).",
       ),
