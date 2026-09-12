@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, rm, writeFile, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createHash } from "node:crypto";
@@ -49,7 +49,13 @@ async function fixture(big = false, isolation: "envelope" | "live" = "envelope")
     const sha256 = digest(bytes),
       artifactPath = `final/files/content/${sha256.slice(7)}`;
     await writeFile(join(run, artifactPath), bytes);
-    return { kind: "file" as const, sha256, sizeBytes: bytes.length, mode: 420, artifactPath };
+    return {
+      kind: "file" as const,
+      sha256,
+      sizeBytes: bytes.length,
+      mode: (await stat(join(run, artifactPath))).mode & 0o777,
+      artifactPath,
+    };
   };
   await writeFile(join(source, "document.bin"), old);
   const manifest: WorkspaceFilesManifest = {
