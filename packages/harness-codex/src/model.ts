@@ -30,6 +30,7 @@ import {
   validateCodexModelOptions,
 } from "./responses.js";
 import { CODEX_VENDOR_CLI_VERSION } from "./vendor-cli-version.js";
+import { processingAdmissionProblem } from "./processing-refusal.js";
 
 const ENDPOINT = "https://chatgpt.com/backend-api/codex";
 const CLIENT = "claudexor";
@@ -348,7 +349,11 @@ export function createCodexModelAdapter(deps: CodexModelAdapterDeps = {}): Model
           } catch {
             /* HTTP status remains an authoritative refusal. */
           }
-          result.problem = authenticatedProblem(response, error, auth, now());
+          result.problem = processingAdmissionProblem(
+            authenticatedProblem(response, error, auth, now()),
+            request.options,
+            processing,
+          );
           return withTurnState(result);
         }
         // Capture before reading the stream. A truncated body still owns this
