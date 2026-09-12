@@ -60,6 +60,28 @@ describe("Claude processing", () => {
       submittedNative: "fastMode=false",
     });
   });
+  it("keeps a saved explicit ordinary setting included without rewriting legacy input", () => {
+    const ordinary = prepareClaudeProcessing(undefined, false);
+    expect(ordinary).toMatchObject({
+      requested: null,
+      submitted: "standard",
+      submittedNative: "fastMode=false",
+      reason: "native_explicit",
+      observed: "unknown",
+    });
+    expect(claudeProcessingCost(ordinary, true).kind).toBe("included");
+    const unknown = prepareClaudeProcessing(undefined, undefined);
+    expect(unknown.submitted).toBeNull();
+    expect(claudeProcessingCost(unknown, true).kind).toBe("unknown");
+    const spec = HarnessRunSpec.parse({
+      session_id: "s",
+      intent: "implement",
+      prompt: "test",
+      cwd: "/repo",
+      processing: ordinary,
+    });
+    expect(claudeArgsForSpec(spec, false, true)).not.toContain("--settings");
+  });
   it("uses message_delta speed instead of interpreting service_tier as speed", () => {
     const receipt = prepareClaudeProcessing("fast");
     const observe = claudeProcessingObserver(receipt, claudeProcessingCost(receipt, true));

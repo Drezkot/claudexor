@@ -20,11 +20,11 @@ export function prepareClaudeProcessing(
   if (preference === undefined && allowPaid)
     return {
       requested: null,
-      submitted: inheritedFast === true ? "fast" : null,
+      submitted: inheritedFast === true ? "fast" : inheritedFast === false ? "standard" : null,
       submittedNative: inheritedFast === undefined ? null : `fastMode=${inheritedFast}`,
       observed: "unknown",
       observedNative: [],
-      reason: inheritedFast === true ? "native_explicit" : "native_default_unconfirmed",
+      reason: inheritedFast !== undefined ? "native_explicit" : "native_default_unconfirmed",
       source: "claude.managed_settings",
     };
   const fast = preference === "fast" && allowPaid;
