@@ -100,6 +100,7 @@ export type McpRunToolResult = z.infer<typeof McpRunToolResult>;
  */
 export const McpRunHandleResult = z
   .object({
+    attemptExecution: z.array(AttemptExecutionEvidence).optional(),
     summary: z
       .string()
       .describe("Human-readable outcome/status text (same as the tool's text content)."),
