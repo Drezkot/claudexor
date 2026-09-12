@@ -1889,6 +1889,15 @@ lost" when the stream ends without a terminal event.
 
 ### Daemon lifecycle (signals, orphans, crash GC)
 
+Directory terminal facts require a reader that supports the files-result
+contract. The new reader retains compatibility with earlier state and requests;
+the 3.10.5 reader cannot reopen a journal containing these terminal facts for
+normal service. Returning to an older binary after using the new feature is
+therefore not a supported rollback of that state. Keep journals and results
+intact and recover with a compatible newer reader. A pre-update backup must not
+automatically replace later work. This boundary uses the existing runtime version
+floor and recovery plane; it adds no alternate journal or compatibility shim.
+
 Every shutdown trigger — SIGTERM/SIGINT, the `claudexor.shutdown` socket RPC,
 a startup failure — enters ONE state machine (`DaemonRuntimeShutdown
 .beginShutdown(reason)`): abort in-flight runs, complete their journaled
@@ -3443,7 +3452,10 @@ confirmation with no-successor proof (never a raw kill) → ATOMIC `current.json
 swap (write a temp file + a single rename, inside a `flock` over the whole
 check-then-swap critical section) → relaunch → handshake-verify the new engine
 identity against the signed manifest → rollback to `last-known-good.json` on
-ANY failure, accepting recovery only when the prior exact identity returns.
+activation failure while that reader remains compatible with the retained state,
+accepting recovery only when its exact identity returns. After a feature writes
+new terminal facts an older reader cannot understand, recovery retains that state
+and uses a compatible newer runtime, as described in the daemon lifecycle section.
 Rollback authority comes from the same launcher selection: current.json's exact
 `{version,engineSha}` for an installed closure or the app-signed bundled script's
 stamped probe. If that authority is unavailable, installation refuses before it
