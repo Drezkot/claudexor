@@ -940,6 +940,15 @@
             {
               "type": "object",
               "properties": {
+                "cashKnowledge": {
+                  "type": "string",
+                  "enum": [
+                    "exact",
+                    "estimated",
+                    "unknown"
+                  ],
+                  "description": "Cash certainty from the ledger; explicit unknown keeps spendUsd null independently of valuation."
+                },
                 "paidBudget": {
                   "anyOf": [
                     {
