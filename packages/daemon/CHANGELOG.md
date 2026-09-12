@@ -1,5 +1,15 @@
 # @claudexor/daemon
 
+## 3.11.0
+
+### Patch Changes
+
+- Updated dependencies
+  - @claudexor/schema@3.11.0
+  - @claudexor/core@3.11.0
+  - @claudexor/journal@3.11.0
+  - @claudexor/util@3.11.0
+
 ## 3.10.5
 
 ### Patch Changes
