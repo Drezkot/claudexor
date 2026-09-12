@@ -22,7 +22,12 @@
  * here would reject a valid cross-profile fallback.
  */
 import type { HarnessAdapter } from "@claudexor/core";
-import { HarnessUnavailableError, validateModel, prepareHarnessProcessing } from "@claudexor/core";
+import {
+  HarnessUnavailableError,
+  validateModel,
+  prepareHarnessProcessing,
+  admitPreparedProcessing,
+} from "@claudexor/core";
 import {
   knownModelIdsForRoute,
   type CredentialProfile,
@@ -178,6 +183,7 @@ export async function* runModelGovernedRoute(
       );
     }
   }
+  await admitPreparedProcessing(spec);
   if (spec.processing?.reason === "processing_control_unavailable") {
     yield {
       type: "status",

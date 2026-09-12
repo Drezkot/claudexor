@@ -334,6 +334,50 @@ describe("sealed release native reviewer contract", () => {
       });
     },
   );
+  it.each([false, true])(
+    "admits the exact prepared reviewer before native dispatch (refused=%s)",
+    async (refused) => {
+      const reviewer = makeReviewer("processing-admission-reviewer", "anthropic", []);
+      reviewer.processingPreference = "fast";
+      reviewer.adapter.prepareProcessing = async () => ({
+        model: null,
+        receipt: {
+          requested: "fast",
+          submitted: "fast",
+          submittedNative: "priority",
+          observed: "unknown",
+          observedNative: [],
+          reason: null,
+          source: "fixture",
+        },
+        costBasis: { kind: "paid_credits", nativeMode: "priority", source: "fixture" },
+      });
+      const order: string[] = [];
+      reviewer.adapter.run = async function* (spec) {
+        order.push("native");
+        yield {
+          type: "message",
+          session_id: spec.session_id,
+          ts: new Date().toISOString(),
+          text: "```json\n[]\n```",
+        };
+      };
+      await reviewCandidate({
+        candidateLabel: "Candidate",
+        diff: "diff --git a/a b/a\n",
+        ...makeReviewWorkspace(),
+        reviewers: [reviewer],
+        onBeforeDispatch: (index, actual) => {
+          expect(index).toBe(0);
+          expect(actual.processing_cost_basis?.kind).toBe("paid_credits");
+          expect(actual.processing?.submittedNative).toBe("priority");
+          order.push("admission");
+          if (refused) throw new Error("fixture budget admission refused");
+        },
+      });
+      expect(order).toEqual(refused ? ["admission"] : ["admission", "native"]);
+    },
+  );
   it("keeps the release transport schema provider-strict and semantic-free", () => {
     expect(strictifyForStructuredOutput(SEALED_REVIEW_OUTPUT_SCHEMA)).toEqual(
       SEALED_REVIEW_OUTPUT_SCHEMA,

@@ -1,4 +1,4 @@
-import { ProcessingReceipt, ProcessingCostBasis } from "@claudexor/schema";
+import { ProcessingReceipt, ProcessingCostBasis, type HarnessRunSpec } from "@claudexor/schema";
 import type {
   HarnessAdapter,
   HarnessProcessingSpec,
@@ -32,4 +32,13 @@ export async function prepareHarnessProcessing(
     receipt,
     costBasis: ProcessingCostBasis.parse(prepared.costBasis),
   };
+}
+
+/** Runtime-only callback owned by the caller's existing budget lease. It sees
+ * the exact prepared spec, after account/model resolution and before spawn. */
+export type ProcessingAdmission = (spec: HarnessRunSpec) => void | Promise<void>;
+
+export async function admitPreparedProcessing(spec: HarnessRunSpec): Promise<void> {
+  const admission = spec.extra["processingAdmission"];
+  if (typeof admission === "function") await (admission as ProcessingAdmission)(spec);
 }

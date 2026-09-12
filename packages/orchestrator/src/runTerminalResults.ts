@@ -1,3 +1,5 @@
+import { ProcessingBudgetAdmissionError } from "./processing-dispatch.js";
+import { classifyBudgetFailure } from "./budgetFailure.js";
 import { join } from "node:path";
 import { cancelReasonFromSignalToken } from "./runTerminals.js";
 import type { ArtifactStore } from "@claudexor/artifact-store";
@@ -194,24 +196,35 @@ export function failTerminally(
     priorFacts?: RunOutcomeFacts;
   } = {},
 ): OrchestratorResult {
-  const message = redactSecrets(err instanceof Error ? err.message : String(err));
+  const budget =
+    err instanceof ProcessingBudgetAdmissionError
+      ? classifyBudgetFailure({ denial: err.denial, terminal: null })
+      : null;
+  if (budget) phase = budget.phase;
+  const message =
+    budget?.safeMessage ?? redactSecrets(err instanceof Error ? err.message : String(err));
   const declared = declaredFailure(err);
-  const failFacts = terminalOutcomeFacts(failureMeta.priorFacts, "failed", "harness_failed");
+  const failFacts = terminalOutcomeFacts(
+    failureMeta.priorFacts,
+    "failed",
+    budget?.reason ?? "harness_failed",
+  );
   store.writeText(
     join(paths.finalDir, "summary.md"),
     `# Run ${runId} (${mode})\n\n- Lifecycle: failed\n- Phase: ${phase}\n\n${message}\n`,
   );
   writeFailure(store, paths, {
     phase,
-    category: declared.category ?? failureMeta.category ?? "internal",
+    category: budget?.category ?? declared.category ?? failureMeta.category ?? "internal",
     code: declared.code,
-    harnessId: failureMeta.harnessId,
-    attemptId: failureMeta.attemptId,
+    harnessId: budget?.harnessId ?? failureMeta.harnessId,
+    attemptId: budget?.attemptId ?? failureMeta.attemptId,
     safeMessage: message,
     rawDetailRef: failureMeta.rawDetailRef,
     runDir: paths.root,
     resetsAt: declared.resetsAt,
-    nextActions: failureMeta.nextActions ?? ["Open diagnostics", "Retry the run"],
+    nextActions: budget?.nextActions ??
+      failureMeta.nextActions ?? ["Open diagnostics", "Retry the run"],
   });
   log.emit("output.ready", { kind: "summary", path: "final/summary.md", state: "diagnostic" });
   log.emit("run.failed", {

@@ -1,4 +1,9 @@
 import {
+  bindProcessingAdmission,
+  updateProcessingStreamHold,
+  ProcessingBudgetAdmissionError,
+} from "./processing-dispatch.js";
+import {
   cancelledCandidatesResult,
   emptyCandidateResult,
   failedCandidatesResult,
@@ -2346,6 +2351,7 @@ export class Orchestrator {
     paths: ReturnType<ArtifactStore["runPaths"]>,
     wsm: WorkspaceManager,
     ledger: BudgetLedger,
+    processingLease: { id: string; onDenied: (denial: BudgetDenial) => void },
     access: AccessProfile,
     onHarnessEvent: ((event: HarnessEvent) => void) | undefined,
     signal: AbortSignal | undefined,
@@ -2470,6 +2476,14 @@ export class Orchestrator {
       raw_context_packet: rawContextPacket,
       stream_deltas: streamDeltas,
     });
+    bindProcessingAdmission(
+      spec,
+      ledger,
+      processingLease.id,
+      adapter.id,
+      attemptId,
+      processingLease.onDenied,
+    );
     if (interaction) spec.extra["interactionChannel"] = interaction;
     // D-16: compile the WorkReport envelope onto the spec (overriding the plain
     // caller-schema transport) and keep the mode for the answer unwrap.
@@ -2495,6 +2509,7 @@ export class Orchestrator {
     let cost = 0;
     let costEstimated = false;
     let harnessErrored = false;
+    let processingRefusal: ProcessingBudgetAdmissionError | null = null;
     let poolExhausted: Error | null = null; // A5: typed pool-exhausted refusal
     const deltaFlood = { count: 0, disclosed: false }; // W-C4 per-attempt delta budget
     // QA-024: emit the belt-failure disclosure event at most once per attempt.
@@ -2665,6 +2680,10 @@ export class Orchestrator {
           // gate and required-actions read a typed category, not a bare boolean.
           harnessErrored = true;
           errors.push(safeErrorMessage(err));
+          if (err instanceof ProcessingBudgetAdmissionError) {
+            processingRefusal = err;
+            break;
+          }
           telemetry.transientFailures.push(
             classifyAdapterThrow({ errorName: err instanceof Error ? err.name : null }),
           );
@@ -2769,7 +2788,7 @@ export class Orchestrator {
     }
     // A pool-exhausted terminal is rotation's verdict, not the transient
     // machinery's — no `route.transient.exhausted` rides along with it.
-    if (harnessErrored && !poolExhausted) {
+    if (harnessErrored && !poolExhausted && !processingRefusal) {
       emitTransientExhausted(
         (t, p) => log?.emit(t, p),
         adapter.id,
@@ -2946,7 +2965,9 @@ export class Orchestrator {
       telemetry,
       ...(secretDiffRefusal ? { secretDiffRefusal } : {}),
       // A5: the typed refusal survives NORMAL attempt finalization (no throw).
-      ...(poolExhausted ? { declaredFailure: declaredFailure(poolExhausted) } : {}),
+      ...(poolExhausted || processingRefusal
+        ? { declaredFailure: declaredFailure(processingRefusal ?? poolExhausted) }
+        : {}),
       outcomeClass: finalized.outcomeClass,
       applied,
     };
@@ -3292,6 +3313,13 @@ export class Orchestrator {
           paths,
           wsm,
           ledger,
+          {
+            id: slot.leaseId,
+            onDenied: (denial) => {
+              budgetStopped = true;
+              budgetDenial ??= denial;
+            },
+          },
           candidateAccess,
           (ev) => {
             const safeEv = redactHarnessEvent(ev);
@@ -3421,6 +3449,13 @@ export class Orchestrator {
                   paths,
                   wsm,
                   ledger,
+                  {
+                    id: contLeaseId,
+                    onDenied: (denial) => {
+                      budgetStopped = true;
+                      budgetDenial ??= denial;
+                    },
+                  },
                   candidateAccess,
                   (ev) => {
                     const safeEv = redactHarnessEvent(ev);
@@ -3705,6 +3740,7 @@ export class Orchestrator {
         mode,
         ledger,
         runs,
+        budgetDenial,
         writeTelemetry: () =>
           this.writeRunTelemetry(
             store,
@@ -3850,6 +3886,13 @@ export class Orchestrator {
             paths,
             wsm,
             ledger,
+            {
+              id: lease.lease!.lease_id,
+              onDenied: (denial) => {
+                budgetStopped = true;
+                budgetDenial ??= denial;
+              },
+            },
             candidateAccess,
             (ev) => {
               const safeEv = redactHarnessEvent(ev);
@@ -4730,6 +4773,7 @@ export class Orchestrator {
     let attempt = 0;
     let converged = false;
     let exhausted = false;
+    let processingBudgetDenial: BudgetDenial | null = null;
     let interrupted = false; // D-16 r8: terminalizes the run interrupted
 
     let lastFindings: ReviewFinding[] = [];
@@ -4857,6 +4901,13 @@ export class Orchestrator {
             paths,
             wsm,
             ledger,
+            {
+              id: lease.lease!.lease_id,
+              onDenied: (denial) => {
+                exhausted = true;
+                processingBudgetDenial ??= denial;
+              },
+            },
             convergenceAccess,
             (ev) => {
               const safeEv = redactHarnessEvent(ev);
@@ -4979,7 +5030,7 @@ export class Orchestrator {
         assertDelegatedEvidence(input.delegated === true, convergenceAccess, [run]);
         attemptTelemetries.push({ attemptId, harnessId: adapter.id, telemetry: run.telemetry });
         // Cancellation/deadline keeps priority over a belt failure finalized concurrently.
-        if (input.signal?.aborted) break;
+        if (input.signal?.aborted || processingBudgetDenial) break;
         if (delegateFailure.candidateFailureKind(run)) {
           const failure = delegateFailure.candidateFailureTerminal(run, "convergence");
           if (run.files) {
@@ -5433,6 +5484,9 @@ export class Orchestrator {
         !convNeedsDecision && facts.lifecycle === "failed" && !isBudgetTerminal(facts.reason)
           ? lastRun?.declaredFailure
           : undefined;
+      const processingBudgetMapping = processingBudgetDenial
+        ? classifyBudgetFailure({ denial: processingBudgetDenial, terminal: ledger.terminal() })
+        : null;
       writeFailure(store, paths, {
         phase: convNeedsDecision ? "review" : "convergence",
         category: isBudgetTerminal(facts.reason)
@@ -5442,7 +5496,7 @@ export class Orchestrator {
             : convNeedsDecision
               ? "policy"
               : (convDeclared?.category ?? "internal"),
-        code: convDeclared?.code ?? null,
+        code: processingBudgetMapping?.code ?? convDeclared?.code ?? null,
         resetsAt: convDeclared?.resetsAt ?? null,
         safeMessage: convNeedsDecision
           ? `review escalated to a human decision after ${attempt} attempt(s)`
@@ -5476,6 +5530,9 @@ export class Orchestrator {
                     "Inspect latest patch and review findings",
                     "Retry with more attempts or a narrower prompt",
                   ],
+        ...(processingBudgetMapping
+          ? budgetFailureRecord(processingBudgetMapping, { runDir: paths.root })
+          : {}),
       });
       // D-16 r8/r9: an INTERRUPTED envelope run still gets its diagnostic
       // summary + output.ready (only patch/work_product are withheld) — the
@@ -6564,6 +6621,17 @@ export class Orchestrator {
       } = preparation.value;
       let { answer } = preparation.value;
       let spec = preparedSpec;
+      bindProcessingAdmission(
+        spec,
+        ledger,
+        lease.lease!.lease_id,
+        adapter.id,
+        attemptId,
+        (denial) => {
+          budgetStopped = true;
+          budgetDenial ??= denial;
+        },
+      );
       const retryPolicy = transientRetryPolicy(this.config(input.repoRoot));
       let activeSessionId = spec.session_id;
       const onAbort = () => {
@@ -6576,6 +6644,8 @@ export class Orchestrator {
       let cost = 0;
       let costEstimated = false;
       let harnessError: string | null = null;
+      let streamBudgetDenied = false;
+      let processingRefusal: ProcessingBudgetAdmissionError | null = null;
       let poolExhausted: Error | null = null; // A5: typed pool-exhausted refusal
       try {
         const triedProfiles = new Set<string>(); // W5.4 failover: each profile at most once
@@ -6645,6 +6715,22 @@ export class Orchestrator {
               );
               cost += spend.costUsd;
               costEstimated ||= spend.estimated;
+              const streamDenial = updateProcessingStreamHold(
+                runSpec,
+                telemetry.usageCost,
+                ledger,
+                lease.lease!.lease_id,
+                adapter.id,
+                attemptId,
+              );
+              if (streamDenial) {
+                budgetStopped = streamBudgetDenied = true;
+                budgetDenial ??= streamDenial;
+                harnessError = streamDenial.reason;
+                reportAbort.abort();
+                void adapter.cancel?.(activeSessionId)?.catch(() => {});
+                break;
+              }
               // A TYPED final message wins verbatim over joined narration.
               answer.observe(safeEv);
               if (safeEv.type === "error")
@@ -6654,12 +6740,17 @@ export class Orchestrator {
             }
           } catch (err) {
             harnessError = safeErrorMessage(err);
+            if (err instanceof ProcessingBudgetAdmissionError) {
+              processingRefusal = err;
+              break;
+            }
             // #31: classify the throw (watchdog timeout vs process crash) as typed.
             telemetry.transientFailures.push(
               classifyAdapterThrow({ errorName: err instanceof Error ? err.name : null }),
             );
           }
 
+          if (streamBudgetDenied) break;
           const newTransients = telemetry.transientFailures.slice(transientStart);
           const transient = newTransients.at(-1) ?? null;
           const sawRetryable = newTransients.some((f) => f.retryable);
@@ -6757,7 +6848,7 @@ export class Orchestrator {
           preStreamFailureSource: "readonly-pre-stream",
         });
       }
-      if (harnessError && !poolExhausted) {
+      if (harnessError && !poolExhausted && !processingRefusal) {
         emitTransientExhausted(
           (t, p) => log.emit(t, p),
           adapter.id,
@@ -6828,7 +6919,9 @@ export class Orchestrator {
           report,
           error: harnessError,
           telemetry,
-          ...(poolExhausted ? { declaredFailure: declaredFailure(poolExhausted) } : {}),
+          ...(poolExhausted || processingRefusal
+            ? { declaredFailure: declaredFailure(processingRefusal ?? poolExhausted) }
+            : {}),
         });
         if (opts.deepScan) {
           store.writeText(
@@ -7142,7 +7235,7 @@ export class Orchestrator {
       });
       const terminalFacts = makeOutcomeFacts(roTerminal.lifecycle, {
         ...(roTerminal.review ? { review: roTerminal.review } : {}),
-        reason: roTerminal.reason,
+        reason: budgetMapping?.reason ?? roTerminal.reason,
       });
       const terminalHarnessId = budgetMapping?.harnessId ?? last?.harnessId;
       store.writeText(

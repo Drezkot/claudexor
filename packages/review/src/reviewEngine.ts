@@ -1,5 +1,6 @@
 import {
   prepareHarnessProcessing,
+  admitPreparedProcessing,
   type HarnessAdapter,
   type PreparedHarnessProcessing,
 } from "@claudexor/core";
@@ -122,6 +123,8 @@ export interface ReviewCandidateInput {
   onReviewerEvent?: (event: ReviewerProgressEvent) => void;
   /** Cumulative panel cash plus amounts of unknown meaning on potentially paid routes. */
   onUsageCost?: (panelPaidOrUnknownUsd: number) => boolean;
+  /** Exact prepared slot, before each physical send; caller owns the panel lease. */
+  onBeforeDispatch?: (reviewerIndex: number, spec: HarnessRunSpec) => void | Promise<void>;
 }
 
 const DEFAULT_REVIEWER_TIMEOUT_MS = 10 * 60_000;
@@ -529,6 +532,9 @@ export async function reviewCandidate(input: ReviewCandidateInput): Promise<Revi
           : {}),
         env: reviewerEnv,
       });
+      if (input.onBeforeDispatch)
+        spec.extra["processingAdmission"] = (actual: HarnessRunSpec) =>
+          input.onBeforeDispatch!(index, actual);
       writeText(artifact.promptPath, spec.prompt);
       updateReviewerMetadata(artifact, {
         session_id: spec.session_id,
@@ -863,6 +869,8 @@ async function collectReviewerOutput(
         processing_cost_basis: prepared.costBasis,
       };
     }
+    if (isCancelled()) throw new Error("Reviewer cancelled before dispatch");
+    await admitPreparedProcessing(runSpec);
     if (isCancelled()) throw new Error("Reviewer cancelled before dispatch");
     currentAuthMode = null;
     costKnowledge.startAttempt(runSpec);

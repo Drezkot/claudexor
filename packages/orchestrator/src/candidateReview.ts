@@ -1,3 +1,8 @@
+import {
+  reviewerProcessingAdmission,
+  ProcessingBudgetAdmissionError,
+} from "./processing-dispatch.js";
+import type { BudgetDenial } from "./budgetFailure.js";
 import { join } from "node:path";
 import { reviewerProcessingCost } from "./processing-routing.js";
 import type { ArtifactStore, RunPaths } from "@claudexor/artifact-store";
@@ -203,6 +208,7 @@ export async function reviewCandidateRuns(
               ),
             })
           : undefined;
+      let processingDenial: BudgetDenial | null = null;
       const result =
         hasDiff && reviewers.length > 0 && (reviewLease?.granted ?? true)
           ? await deps.reviewScoped({
@@ -217,6 +223,18 @@ export async function reviewCandidateRuns(
               envInheritance: envInheritance(deps.config(cwd)),
               signal,
               onReviewerEvent: (event) => log.emit(event.type, { ...event }),
+              onBeforeDispatch:
+                ledger && reviewLease?.granted
+                  ? reviewerProcessingAdmission(
+                      ledger,
+                      reviewLease.lease!.lease_id,
+                      reviewers,
+                      run.attemptId,
+                      (denial) => {
+                        processingDenial ??= denial;
+                      },
+                    )
+                  : undefined,
               onUsageCost: (usd) => {
                 if (reviewLease?.granted) ledger?.updateHold(reviewLease.lease!.lease_id, usd);
                 return ledger?.tier() === "hard";
@@ -272,6 +290,7 @@ export async function reviewCandidateRuns(
           harness_id: "review-panel",
         });
       }
+      if (processingDenial) throw new ProcessingBudgetAdmissionError(processingDenial);
       const revalidated = await revalidateFindings(result.findings, {
         candidateRoot: candidateCwd,
         evidenceDir: candidateEvidenceDir,

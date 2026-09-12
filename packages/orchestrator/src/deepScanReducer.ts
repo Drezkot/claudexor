@@ -1,3 +1,8 @@
+import {
+  bindProcessingAdmission,
+  updateProcessingStreamHold,
+  ProcessingBudgetAdmissionError,
+} from "./processing-dispatch.js";
 import { join } from "node:path";
 import type {
   CostEvidence,
@@ -204,7 +209,7 @@ export async function runDeepScanReducer(
     };
   }
 
-  type ReducerStop = "timeout" | "cancelled";
+  type ReducerStop = "timeout" | "cancelled" | "budget";
   const cleanupGraceMs = deps.cleanupGraceMs ?? REDUCER_CLEANUP_GRACE_MS;
   const reducerAbort = new AbortController();
   let resolveStop!: (reason: ReducerStop) => void;
@@ -239,6 +244,7 @@ export async function runDeepScanReducer(
   let settlementTelemetry: AttemptTelemetry | null = null;
   let cost = 0;
   let costEstimated = false;
+  let processingDenial: BudgetDenial | null = null;
   const cleanupAttempt = (): void => {
     clearTimeout(hardTimer);
     args.signal?.removeEventListener("abort", onOuterAbort);
@@ -274,7 +280,9 @@ export async function runDeepScanReducer(
   const resultForStop = (reason: ReducerStop): DeepScanReducerResult =>
     reason === "cancelled"
       ? { status: "cancelled" }
-      : { status: "failed", error: `deep-scan reducer timed out after ${deps.hardTimeoutMs}ms` };
+      : reason === "budget" && processingDenial
+        ? { status: "budget_denied", denial: processingDenial }
+        : { status: "failed", error: `deep-scan reducer timed out after ${deps.hardTimeoutMs}ms` };
 
   if (stopReason) return finishBeforeHarness(resultForStop(stopReason));
   let prompt: string;
@@ -314,6 +322,7 @@ export async function runDeepScanReducer(
 
   const built = prepared.built;
   const spec = built.spec;
+  bindProcessingAdmission(spec, ledger, lease.lease!.lease_id, adapter.id, attemptId);
   activeSessionId = spec.session_id;
   if (stopReason) {
     cancelActiveSession();
@@ -356,7 +365,19 @@ export async function runDeepScanReducer(
         estimated: safeEv.usage.estimated === true,
       });
     }
-    if (acceptDeliverable) answer.observe(safeEv);
+    const streamDenial = updateProcessingStreamHold(
+      spec,
+      telemetry.usageCost,
+      ledger,
+      lease.lease!.lease_id,
+      adapter.id,
+      attemptId,
+    );
+    if (streamDenial) {
+      processingDenial ??= streamDenial;
+      requestStop("budget");
+    }
+    if (acceptDeliverable && !streamDenial) answer.observe(safeEv);
     if (safeEv.type === "error") {
       harnessError = safeEv.error ? redactSecrets(safeEv.error) : "harness emitted an error";
     }
@@ -432,6 +453,7 @@ export async function runDeepScanReducer(
     }
   } catch (err) {
     harnessError = safeErrorMessage(err);
+    if (err instanceof ProcessingBudgetAdmissionError) processingDenial = err.denial;
   } finally {
     cleanupAttempt();
   }
@@ -490,6 +512,7 @@ export async function runDeepScanReducer(
     });
     return { status: "cancelled" };
   }
+  if (processingDenial) return { status: "budget_denied", denial: processingDenial };
   if (harnessError) {
     log.emit("harness.completed", {
       harness_id: adapter.id,

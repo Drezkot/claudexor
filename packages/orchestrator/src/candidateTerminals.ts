@@ -139,13 +139,21 @@ export function emptyCandidateResult(
 export async function failedCandidatesResult(
   input: CandidateTerminalContext & {
     runs: CandidateRun[];
+    budgetDenial?: BudgetDenial | null;
     writeTelemetry(): void;
   },
 ): Promise<OrchestratorResult> {
   const { store, paths, log, runId, taskId, mode, ledger, runs, writeTelemetry } = input;
   const first = runs[0] as CandidateRun;
-  const phase = first.secretDiffRefusal ? "artifact_security" : (first.infraPhase ?? "harness");
-  const { facts, why: rootCause } = partitionCandidates(runs);
+  const budget = input.budgetDenial
+    ? classifyBudgetFailure({ denial: input.budgetDenial, terminal: ledger.terminal() })
+    : null;
+  const phase =
+    budget?.phase ??
+    (first.secretDiffRefusal ? "artifact_security" : (first.infraPhase ?? "harness"));
+  const partition = partitionCandidates(runs);
+  const facts = budget ? { ...partition.facts, reason: budget.reason } : partition.facts;
+  const rootCause = budget?.safeMessage ?? partition.why;
   const captured = runs.find((run) => run.files);
   if (captured?.files)
     await publishDirectoryCandidate({
@@ -198,6 +206,9 @@ export async function failedCandidatesResult(
       : phase === "workspace"
         ? ["Check the project folder", "Open diagnostics", "Retry the run"]
         : harnessFailureNextActions(harnessCategory),
+    ...(budget
+      ? budgetFailureRecord(budget, { eventRefs: existingEventRefs, runDir: paths.root })
+      : {}),
   });
   log.emit("output.ready", { kind: "summary", path: "final/summary.md", state: "diagnostic" });
   log.emit("run.failed", {
