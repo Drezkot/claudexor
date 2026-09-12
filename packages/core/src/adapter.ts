@@ -12,6 +12,9 @@ import type {
   HarnessRunSpec,
   InteractionAnswerSet,
   InteractionRequest,
+  ProcessingPreference,
+  ProcessingReceipt,
+  ProcessingCostBasis,
 } from "@claudexor/schema";
 
 /** Accounts-only doctor receipt. Identity never widens generic HarnessStatus. */
@@ -45,6 +48,18 @@ export interface DoctorSpec {
  * doctor cache contract. */
 export interface HarnessModelSpec extends DoctorSpec {
   credentialProfile?: CredentialProfile | null;
+}
+
+export interface HarnessProcessingSpec extends HarnessModelSpec {
+  preference: ProcessingPreference;
+  model: string | null;
+  effort: string | null;
+}
+
+export interface PreparedHarnessProcessing {
+  model: string | null;
+  receipt: ProcessingReceipt;
+  costBasis: ProcessingCostBasis;
 }
 
 /**
@@ -90,6 +105,10 @@ export interface HarnessAdapter {
    * (return [] on network/auth error) — never throw into a picker/consumer.
    */
   models?(spec?: HarnessModelSpec): Promise<HarnessModel[]>;
+
+  /** Translate service intent using this account's inventory before ranking or
+   * reserving spend. Discovery only; never starts a generation or changes auth. */
+  prepareProcessing?(spec: HarnessProcessingSpec): Promise<PreparedHarnessProcessing>;
 
   /** Optional cancellation. */
   cancel?(sessionId: string): Promise<void>;
