@@ -18,6 +18,7 @@ import {
 import { redactSecrets } from "@claudexor/util";
 import * as belt from "./delegationToolEvidence.js";
 import * as marks from "./attemptOutputMarkers.js";
+import { observeProcessing, type ProcessingTelemetry } from "./processing-telemetry.js";
 import {
   type TransientFailureObservation,
   classifyCompletedCrash,
@@ -87,7 +88,7 @@ export interface DelegationBeltState {
   toolEvidence: boolean;
 }
 
-export interface AttemptTelemetry {
+export interface AttemptTelemetry extends ProcessingTelemetry {
   requestRequirements: RequestRequirementResolution[];
   toolErrors: ToolErrorRecord[];
   /** tool_result events without a status field: never silently treated as ok. */
@@ -278,6 +279,7 @@ function bumpWebVerification(t: AttemptTelemetry, retrieval: string | undefined)
 
 /** Observe typed adapter evidence, never payload strings or tool-name heuristics. */
 export function observeAttemptTelemetry(t: AttemptTelemetry, ev: HarnessEvent): void {
+  observeProcessing(t, ev);
   marks.observeAttemptOutputMarkers(t.outputMarkers, ev);
   // Delegation belt readiness (QA-024): normalized startup/error events carry
   // typed MCP server statuses. Read THAT server's status as first-class truth;
@@ -673,6 +675,8 @@ export function attemptTelemetryRecord(
       cashKnowledge: t.usageCost.cashKnowledge ?? "unknown",
       valuationKnowledge: t.usageCost.valuationKnowledge ?? "unknown",
     },
+    processing: t.processing,
+    processing_cost_basis: t.processingCostBasis,
     attempt_id: attemptId,
     harness_id: harnessId,
     observed_model: t.observedModel,

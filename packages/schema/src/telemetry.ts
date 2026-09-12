@@ -16,6 +16,7 @@ import { AuthMode, RouteRankingRationale, UsageCostSummary } from "./budget.js";
 import { AuthRouteReason, AuthSourceKind } from "./auth.js";
 import { RequestRequirementResolution } from "./request-requirements.js";
 import { WorkState } from "./work-report.js";
+import { ProcessingReceipt, ProcessingCostBasis } from "./processing.js";
 import { RunDelegationInfo } from "./delegation.js";
 import { RunFacts } from "./run-facts.js";
 import { InputTokenUsage } from "./harness.js";
@@ -379,6 +380,8 @@ export type BrowserEvidenceRecord = z.infer<typeof BrowserEvidenceRecord>;
 
 export const AttemptTelemetryRecord = z
   .object({
+    processing: ProcessingReceipt.optional(),
+    processing_cost_basis: ProcessingCostBasis.optional(),
     usage_cost: UsageCostSummary.optional(),
     attempt_id: Id.describe("Attempt id."),
     harness_id: Id.describe("Harness that ran the attempt."),
@@ -494,6 +497,18 @@ export const AttemptTelemetryRecord = z
     "Telemetry for one attempt: route evidence, web evidence, tool errors, dropped events, and outcome.",
   );
 export type AttemptTelemetryRecord = z.infer<typeof AttemptTelemetryRecord>;
+
+export const AttemptExecutionEvidence = z
+  .object({
+    attemptId: Id,
+    harnessId: Id,
+    processing: ProcessingReceipt.optional(),
+    processingCostBasis: ProcessingCostBasis.optional(),
+    usageCost: UsageCostSummary.optional(),
+  })
+  .strict()
+  .describe("Compact projection of existing attempt execution and amount evidence.");
+export type AttemptExecutionEvidence = z.infer<typeof AttemptExecutionEvidence>;
 
 export const RunTelemetry = z
   .object({

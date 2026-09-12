@@ -2649,7 +2649,15 @@ function detailFor(
     expectedRunFacts(rec),
   );
   const planProjection = planProjectionFor(rec, summary.mode);
+  const telemetry = safeReadStructuredArtifact(rec, "final/telemetry.yaml", RunTelemetry);
   return ControlRunDetail.parse({
+    attemptExecution: telemetry?.attempts.map((attempt) => ({
+      attemptId: attempt.attempt_id,
+      harnessId: attempt.harness_id,
+      processing: attempt.processing,
+      processingCostBasis: attempt.processing_cost_basis,
+      usageCost: attempt.usage_cost,
+    })),
     summary: {
       ...summary,
       outcomeFacts,

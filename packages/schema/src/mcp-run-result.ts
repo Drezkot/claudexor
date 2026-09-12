@@ -6,6 +6,7 @@ import { RunOutcomeFacts } from "./decision.js";
 import { RunDelegationInfo } from "./delegation.js";
 import { CouncilProjection, PlanReadiness } from "./plan.js";
 import { RunFacts } from "./run-facts.js";
+import { AttemptExecutionEvidence } from "./telemetry.js";
 
 export const RunDetailProblem = z
   .object({
@@ -23,6 +24,7 @@ export type RunDetailProblem = z.infer<typeof RunDetailProblem>;
  */
 export const McpRunToolResult = z
   .object({
+    attemptExecution: z.array(AttemptExecutionEvidence).optional(),
     summary: z
       .string()
       .describe("Human-readable outcome summary (same text as the tool's text content)."),

@@ -7,6 +7,7 @@ import { DecisionRecord } from "./decision.js";
 import { WorkProduct } from "./workproduct.js";
 import { ReviewFinding } from "./review.js";
 import { RunFacts } from "./run-facts.js";
+import { AttemptExecutionEvidence } from "./telemetry.js";
 import {
   ControlArtifactInfo,
   ControlBudgetSnapshot,
@@ -168,6 +169,7 @@ export type ControlCandidate = z.infer<typeof ControlCandidate>;
 
 export const ControlRunDetail = z
   .object({
+    attemptExecution: z.array(AttemptExecutionEvidence).optional(),
     summary: ControlRunSummary,
     children: z
       .array(ControlRunSummary)
