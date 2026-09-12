@@ -2,6 +2,7 @@ import { z } from "zod/v3";
 import { BillingKnowledge, CostKnowledge } from "./auth.js";
 import { Id, Intent } from "./primitives.js";
 import { EffortHint, SignalQuality } from "./harness.js";
+import { ProcessingCostBasis } from "./processing.js";
 
 export const PaidBudget = z
   .discriminatedUnion("kind", [
@@ -13,6 +14,7 @@ export type PaidBudget = z.infer<typeof PaidBudget>;
 
 export const CostEvidence = z
   .object({
+    processing: ProcessingCostBasis.optional(),
     knowledge: CostKnowledge,
     billing: BillingKnowledge,
     source: z.string().min(1),

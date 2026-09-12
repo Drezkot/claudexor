@@ -21,6 +21,12 @@ import {
 import { QuotaConstraint, QuotaSource } from "./quota.js";
 import { RateLimitSignal } from "./rate-limit.js";
 import { EffortHint, ModelEffortCapability } from "./effort.js";
+import {
+  ProcessingCapability,
+  ProcessingCostBasis,
+  ProcessingPreference,
+  ProcessingReceipt,
+} from "./processing.js";
 import { AuthCapabilities } from "./platform-auth.js";
 export * from "./platform-auth.js";
 // Re-exported so sibling contract modules keep one import path for the type.
@@ -70,6 +76,12 @@ export type WebPolicySupport = z.infer<typeof WebPolicySupport>;
  */
 export const HarnessCapabilities = z
   .object({
+    processing_preferences: z
+      .array(ProcessingPreference)
+      .optional()
+      .describe(
+        "Service preferences translated by this adapter; model/account support is separate.",
+      ),
     plan: z.boolean().default(false).describe("The harness can produce plans (plan intent)."),
     implement: z
       .boolean()
@@ -368,6 +380,7 @@ export type HarnessCapabilityProfile = z.infer<typeof HarnessCapabilityProfile>;
  */
 export const HarnessModel = z
   .object({
+    processing: ProcessingCapability.optional(),
     id: z.string().describe("Model id as the vendor enumerates it."),
     label: z
       .string()
@@ -521,6 +534,11 @@ export type ExtraMcpServer = z.infer<typeof ExtraMcpServer>;
 /** Spec passed to a harness adapter's run(). */
 export const HarnessRunSpec = z
   .object({
+    processing_preference: ProcessingPreference.optional(),
+    processing: ProcessingReceipt.optional().describe(
+      "Prepared native service choice for this exact attempt.",
+    ),
+    processing_cost_basis: ProcessingCostBasis.optional(),
     session_id: Id.describe("Session id this run belongs to."),
     intent: Intent,
     prompt: z.string().describe("Prompt text delivered to the harness."),
@@ -770,6 +788,8 @@ export type InputTokenUsage = z.infer<typeof InputTokenUsage>;
 /** Normalized event emitted by every adapter (the SSOT of adapter output). */
 export const HarnessEvent = z
   .object({
+    processing: ProcessingReceipt.optional(),
+    processing_cost_basis: ProcessingCostBasis.optional(),
     type: z
       .enum([
         "started",
