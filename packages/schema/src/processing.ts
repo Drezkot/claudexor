@@ -51,3 +51,14 @@ export const ProcessingCostBasis = z
     "Mode-qualified billing evidence for an existing cost record. Authentication alone does not establish included premium service; credits, cash, and token valuation stay distinct.",
   );
 export type ProcessingCostBasis = z.infer<typeof ProcessingCostBasis>;
+
+export const UsageCostBasis = z
+  .object({
+    kind: z.enum(["cash", "valuation", "unknown"]),
+    source: NonBlankString,
+  })
+  .strict()
+  .describe(
+    "Observed meaning of this usage.cost_usd amount, separate from prospective processing billing. List-price valuation is not a cash or credit debit receipt. Native paid-credit consumption remains unknown when the vendor exposes no amount evidence.",
+  );
+export type UsageCostBasis = z.infer<typeof UsageCostBasis>;
