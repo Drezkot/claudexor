@@ -403,7 +403,7 @@ positive promise instead of relying on a one-time documentation cleanup.
 independent of routing goal, reasoning effort, context and output policy.
 Standard requests ordinary service. Fast and Economy may fall back to Standard;
 fallback, account rotation and retry must never introduce Fast. Omission keeps
-legacy behavior, while explicit native `ModelCallOptions.serviceTier` takes
+legacy behavior, while explicit native `serviceTier` on `ModelCallOptions` takes
 precedence and is disclosed. Keep the captured preference and canonical request
 unchanged on exact replay. A confirmed no-generation processing refusal may
 produce a new Standard request and reservation; an unknown outcome may not.
