@@ -96,7 +96,7 @@ export function buildReviewPrompt(
     | boolean
     | {
         sealed?: boolean;
-        candidateInventoryMode?: "git_visible" | "diff_only";
+        candidateInventoryMode?: "git_visible" | "diff_only" | "explicit_manifest";
         /** Owner-amended delta scope (INV-125 second amendment, 2026-08-04):
          * this lane's review subject is the sealed DELTA.patch since the
          * recorded base SHA; the full packet stays its context. */
