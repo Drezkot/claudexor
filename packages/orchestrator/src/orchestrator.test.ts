@@ -14417,6 +14417,9 @@ describe("delegation belt injection (D32)", () => {
       delegationBelt: belt,
       runId: "run-current-delegate",
       parentRunId: "run-prior-thread-turn",
+      processingPreference: "standard",
+      workspaceKind: "directory",
+      scopePaths: ["README.md"],
     });
     // The engine rebinds the belt's parent-budget env to the resolved run
     // budget (default = unlimited here), preserving the descriptor's other env.
@@ -14429,6 +14432,9 @@ describe("delegation belt injection (D32)", () => {
     // parent envelope and never a raw path proposed by the harness.
     expect(list[0]!.env.CLAUDEXOR_DELEGATION_REPO_ROOT).toBe(repo);
     expect(JSON.parse(list[0]!.env.CLAUDEXOR_DELEGATION_BUDGET)).toEqual({ kind: "unlimited" });
+    expect(list[0]!.env.CLAUDEXOR_DELEGATION_PROCESSING_PREFERENCE).toBe("standard");
+    expect(list[0]!.env.CLAUDEXOR_DELEGATION_WORKSPACE_KIND).toBe("directory");
+    expect(JSON.parse(list[0]!.env.CLAUDEXOR_DELEGATION_SCOPE_PATHS)).toEqual(["README.md"]);
   });
 
   it("rebinds the belt budget to the configured global cap when the request supplied none (config-cap inheritance)", async () => {

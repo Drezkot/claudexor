@@ -30,7 +30,7 @@ export async function finalVerifyFiles(
   });
   const root = await mkdtemp(join(tmpdir(), "claudexor-verify-files-"));
   try {
-    if (`sha256:${sha256(JSON.stringify(candidate.manifest) + "\n")}` !== candidate.manifestSha256)
+    if (sha256(JSON.stringify(candidate.manifest) + "\n") !== candidate.manifestSha256)
       throw new Error("Files manifest does not match its canonical digest");
     await verifyWorkspaceFiles(candidate.manifest, candidate.artifactRoot);
     await materializeWorkspaceBaseline(root, candidate.manifest, candidate.artifactRoot);

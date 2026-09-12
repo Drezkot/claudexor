@@ -7,7 +7,7 @@ import {
   type WorkspaceFileState,
   type WorkspaceFileChange,
 } from "@claudexor/schema";
-import { nowIso, sha256 } from "@claudexor/util";
+import { containsSecretLikeToken, nowIso, sha256 } from "@claudexor/util";
 import {
   directoryInventory,
   materializeWorkspaceFile,
@@ -183,6 +183,8 @@ export async function captureDirectoryWorkspace(input: {
   const manifestPath = "final/files/manifest.json";
   await mkdir(join(input.runRoot, "final/files"), { recursive: true });
   const text = JSON.stringify(manifest) + "\n";
+  if (containsSecretLikeToken(text))
+    throw new Error("Manifest contains credential material; no result was published");
   const path = join(input.runRoot, manifestPath);
   await writeFile(`${path}.pending`, text);
   await rename(`${path}.pending`, path);
@@ -192,11 +194,14 @@ export async function captureDirectoryWorkspace(input: {
   return {
     manifest,
     manifestPath,
-    manifestSha256: `sha256:${sha256(text)}`,
+    manifestSha256: sha256(text),
     changedPaths,
-    noChanges:
-      changedPaths.length > 0
-        ? false
+    noChanges: entries.some(
+      (entry) => entry.before !== "unknown" && !sameWorkspaceFile(entry.before, entry.after),
+    )
+      ? false
+      : changedPaths.length > 0
+        ? null
         : baseline.isolation === "envelope" || baseline.scopePaths.includes(".")
           ? true
           : null,

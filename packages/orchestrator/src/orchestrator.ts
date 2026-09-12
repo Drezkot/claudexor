@@ -1,3 +1,8 @@
+import {
+  cancelledCandidatesResult,
+  emptyCandidateResult,
+  failedCandidatesResult,
+} from "./candidateTerminals.js";
 import { existsSync } from "node:fs";
 import {
   effectiveAuthPreference,
@@ -21,6 +26,12 @@ import {
 } from "./candidateOutputs.js";
 import { processAttemptUsage } from "./attemptUsage.js";
 import {
+  captureDirectoryCandidate,
+  directoryHasOutput,
+  observeDirectoryPaths,
+  publishDirectoryCandidate,
+} from "./directoryCandidate.js";
+import {
   appliedAttemptFacts,
   assertDelegatedEvidence,
   isMutatingAccess,
@@ -32,11 +43,11 @@ import * as AC from "./attemptUsageCost.js";
 import {
   type CandidateRun,
   candidateRoster,
+  candidateStatuses,
   convergenceOutcomeFacts,
   isWorkingCandidate,
   partitionCandidates,
   toCandidateEvidence,
-  unanimousDeclaredFailure,
 } from "./candidateEvidence.js";
 import { capabilityIntents } from "@claudexor/gateway";
 import { policyFindings } from "./policyFindings.js";
@@ -67,6 +78,7 @@ import type {
   ModeKind,
   PaidBudget,
   ProcessingPreference,
+  WorkspaceKind,
   CredentialUnusableObservation,
   QuotaAbsence,
   QuotaSnapshot,
@@ -150,7 +162,7 @@ import { planPrompt } from "./plan-prompt.js";
 import { verifiedPlanBrief, withPlanBrief } from "./planBrief.js";
 import { resolveRunInputDefaults } from "./run-input-resolution.js";
 import { beginAnnouncedRun } from "./runEventLog.js";
-import { arbitrationBudgetOptions, decisionBudgetSummary } from "./decisionBudget.js";
+import { arbitrationBudgetOptions } from "./decisionBudget.js";
 import { buildRevisePrompt } from "./revisePrompt.js";
 import {
   type AnnouncedRunContext,
@@ -198,7 +210,7 @@ import {
   type ResolvedRouteContext,
 } from "./routeContext.js";
 import { resolveAutoReviewerPanel, resolveExplicitReviewerPanel } from "./reviewerPanel.js";
-import { ensureWriteModeGitBoundary } from "./git-precondition.js";
+import { ensureClaudeBridgeForRun, ensureWriteModeGitBoundary } from "./git-precondition.js";
 import {
   buildContinuation,
   type ContinuityDisclosureResult,
@@ -263,7 +275,6 @@ import {
   captureRawPatchEnvelope,
   createRevertAnchorFromPatchOrNull,
   createRevertAnchorOrNull,
-  ensureClaudeBridge,
   consumeRawPatchEnvelope,
   snapshotTree,
   type EnsureGitRepositoryResult,
@@ -272,6 +283,7 @@ import {
   blockedDecisionOverride,
   finalVerifyBlocks,
   finalVerifyPatch,
+  finalVerifyFiles,
   verifyAndDeliver,
 } from "@claudexor/delivery";
 import { HarnessGateway } from "@claudexor/gateway";
@@ -289,6 +301,7 @@ import { type CandidateEvidence, arbitrate } from "@claudexor/arbitration";
 import { type SynthesisMode, buildSynthesisPlan, decideSynthesis } from "@claudexor/synthesis";
 import {
   attemptCostEvidence,
+  billingKnowledgeForAuthRoute,
   attemptUsageCostSettlement,
   BudgetLedger,
   isBudgetTerminal,
@@ -537,6 +550,8 @@ export interface RunInput {
    * is the deliverable. Only honored by convergence modes.
    */
   inPlace?: boolean;
+  workspaceKind?: WorkspaceKind;
+  scopePaths?: string[];
   /** External-orchestrator run: every attempt uses a scoped harness HOME even
    * in-place, keeping profile and writable vendor state explicit. This is not
    * an OS boundary. */
@@ -1686,11 +1701,7 @@ export class Orchestrator {
         const authRoute = this.authRouteEvidenceFor(authMode, status?.authSources ?? []);
         const processingCost = processingCostEvidence(
           r.processing,
-          authMode === "local_session"
-            ? "subscription_entitlement"
-            : authMode === "api_key"
-              ? "metered"
-              : "unknown",
+          authRoute ? billingKnowledgeForAuthRoute(authRoute) : "unknown",
           [`harness:${r.adapter.id}`, `profile:${credentialSubjectId ?? "default"}`],
         );
         return {
@@ -1993,11 +2004,23 @@ export class Orchestrator {
     // unlimited while the real run is capped. Rebind the belt's parent-budget
     // env to the RESOLVED budget (resolvePaidBudget output) so sub-run draws are
     // bounded by the same headroom the parent run enforces — one budget owner.
+    const env = { ...input.delegationBelt.env };
+    for (const [key, value] of [
+      [DELEGATION_ENV.processingPreference, input.processingPreference],
+      [DELEGATION_ENV.workspaceKind, input.workspaceKind],
+      [
+        DELEGATION_ENV.scopePaths,
+        input.scopePaths === undefined ? undefined : JSON.stringify(input.scopePaths),
+      ],
+    ]) {
+      if (value === undefined) delete env[key!];
+      else env[key!] = value;
+    }
     return [
       {
         ...input.delegationBelt,
         env: {
-          ...input.delegationBelt.env,
+          ...env,
           [DELEGATION_ENV.parentRunId]: input.delegationParentRunId,
           [DELEGATION_ENV.repoRoot]: input.repoRoot,
           [DELEGATION_ENV.budget]: JSON.stringify(resolvedBudget),
@@ -2355,6 +2378,17 @@ export class Orchestrator {
     const knobs = this.routeSpecKnobs(routed, contract, modelHint, effortHint);
     // Isolated scoped-home sessions are never retained after disposal.
     const inPlaceEnvelope = envelope.worktree_path === envelope.repo_root;
+    const directory = envelope.workspace_kind === "directory";
+    const observedPaths = new Set<string>();
+    let directoryCapture: Awaited<ReturnType<typeof captureDirectoryCandidate>> = {};
+    const captureDirectory = async () =>
+      (directoryCapture = await captureDirectoryCandidate({
+        manager: wsm,
+        envelope,
+        artifactRoot: join(paths.attemptsDir, attemptId),
+        sourceRoot: contract.repo.root,
+        observedPaths: [...observedPaths],
+      }));
     const rawContextPacket = await rawContextForEnvelope(routed.implementationTransport, envelope);
     const sessionFields = runInput
       ? await this.sessionSpecFields(
@@ -2548,6 +2582,7 @@ export class Orchestrator {
             rawPatch = captureRawPatchEnvelope(rawContextPacket !== null, rawPatch, ev);
             if (ev.type === "patch_produced") continue;
             const safeEv = redactHarnessEvent(ev);
+            if (directory) observeDirectoryPaths(observedPaths, safeEv, envelope.worktree_path);
             if (
               dropDeltaPastBudget(
                 safeEv,
@@ -2646,8 +2681,12 @@ export class Orchestrator {
         // #31: the centralized retry gate reads the classified `retryable` verdict.
         const sawRetryable = newTransients.some((f) => f.retryable);
         const sawTypedLimit = telemetry.rateLimits.length > rateLimitStart;
-        const currentDiff = await wsm.diff(envelope);
-        const deliverableEmpty = currentDiff.trim().length === 0 && answer.text().length === 0;
+        if (directory) await captureDirectory();
+        const currentDiff = directory ? "" : await wsm.diff(envelope);
+        const workspaceUnchanged = directory
+          ? directoryCapture.files?.noChanges === true
+          : currentDiff.trim().length === 0;
+        const deliverableEmpty = workspaceUnchanged && answer.text().length === 0;
         // W5.4 + A2 failover: a typed-limit hit OR a structural pre-progress
         // death rebuilds the spec on a NEW session under the next profile.
         if (harnessErrored && runInput && !signal?.aborted) {
@@ -2676,9 +2715,8 @@ export class Orchestrator {
             // prose arriving as mid-stream MESSAGE events (claude org-disabled)
             // is no deliverable; the transient gate keeps RAW deliverableEmpty.
             deliverableEmpty:
-              currentDiff.trim().length === 0 &&
-              acceptedTryOutput(answer, harnessErrored).length === 0,
-            workspaceDiffNonEmpty: currentDiff.trim().length > 0,
+              workspaceUnchanged && acceptedTryOutput(answer, harnessErrored).length === 0,
+            workspaceDiffNonEmpty: !workspaceUnchanged,
             lastLimit: telemetry.rateLimits.at(-1) ?? null,
             emit: (type, payload) => log?.emit(type, payload),
             newSessionId: () => newId("ses"),
@@ -2757,15 +2795,19 @@ export class Orchestrator {
     );
     const redacted = redactSecrets(unwrapped.deliverable);
     const candidateAnswer = redacted.trim().length > 0 ? redacted : undefined;
-    const { diff, refusal: secretDiffRefusal } = await secretDiff.quarantineCandidateWorkspace(
-      wsm,
-      envelope,
-      inPlaceEnvelope,
-      candidateAnswer,
-    );
+    if (directory) await captureDirectory();
+    const { diff, refusal: secretDiffRefusal } = directory
+      ? { diff: "", refusal: directoryCapture.refusal }
+      : await secretDiff.quarantineCandidateWorkspace(
+          wsm,
+          envelope,
+          inPlaceEnvelope,
+          candidateAnswer,
+        );
     harnessErrored = secretDiff.recordSecretDiffRefusal(secretDiffRefusal, errors, harnessErrored);
     const answerText = secretDiffRefusal ? undefined : candidateAnswer;
-    const deliverableEvidence = diff.trim().length > 0 || Boolean(answerText);
+    const deliverableEvidence =
+      diff.trim().length > 0 || Boolean(answerText) || directoryHasOutput(directoryCapture.files);
     // Cancelled attempts skip gates: running a 600s-per-gate suite delays the ack
     // and burns compute on a result nobody will adopt. Diff/attempt.yaml
     // still land, so partial work stays inspectable.
@@ -2846,8 +2888,8 @@ export class Orchestrator {
           worktreePath: envelope.worktree_path,
           artifactRelativeDir,
           diff,
-          persistPatch: secretDiffRefusal === undefined && isMutatingAccess(access),
-          persistProducedMedia: secretDiffRefusal === undefined,
+          persistPatch: !directory && secretDiffRefusal === undefined && isMutatingAccess(access),
+          persistProducedMedia: !directory && secretDiffRefusal === undefined,
           answerText,
           record: {
             attempt_id: attemptId,
@@ -2862,6 +2904,15 @@ export class Orchestrator {
             ...(secretDiffRefusal ? { secret_diff_refusal: secretDiffRefusal } : {}),
             gates: gates.map((g) => ({ id: g.id, status: g.status })),
             branch: envelope.branch_name,
+            ...(directoryCapture.files
+              ? {
+                  files_manifest: directoryCapture.files.manifestPath,
+                  manifest_sha256: directoryCapture.files.manifestSha256,
+                  source_root: contract.repo.root,
+                  execution_root: envelope.worktree_path,
+                  no_changes: directoryCapture.files.noChanges,
+                }
+              : {}),
             // Applied facts, not promises: historical proofs stay readable and
             // current delegated runs state deliberate outer-boundary absence.
             // Built by the SAME shape the failure path writes.
@@ -2886,6 +2937,7 @@ export class Orchestrator {
       harnessId: adapter.id,
       label,
       diff,
+      ...(directoryCapture.files ? { files: directoryCapture.files } : {}),
       answerText,
       reviewCwd: envelope.worktree_path,
       baseSha: envelope.base_sha ?? undefined,
@@ -2926,40 +2978,6 @@ export class Orchestrator {
       supportsInteractive,
       DEFAULT_INTERACTION_TIMEOUT_MS,
     );
-  }
-
-  /**
-   * D-14 layer 3 (AGENTS.md unification, INV-113): the ONE new live-tree write.
-   * When the PROJECT root has `AGENTS.md` and no `CLAUDE.md`, drop a thin
-   * `CLAUDE.md` (`@AGENTS.md` import + Claudexor ownership marker) so a Claude
-   * Code route reads the same instruction file codex/cursor read natively.
-   *
-   * The project-root bridge has its own narrower fence: read-only modes never
-   * reach this run-prep stage and `--in-place` stateful targets are left
-   * untouched. Git admission is independently owned by `runStartRequiresGit`.
-   * The write targets the PROJECT root (`repoRoot`), never a worktree envelope.
-   * The workspace helper adds exclusive-create + no-follow +
-   * idempotency, so a hand-written or symlinked `CLAUDE.md` is never overwritten
-   * and a concurrent/second prep is a no-op. Announced via a typed
-   * `project.claude_bridge.created` event on an actual create only — the git-init
-   * pattern. A bridge is a convenience, not a precondition: any failure is
-   * swallowed so it can never fail an otherwise-valid write run.
-   */
-  private ensureClaudeBridgeForRun(repoRoot: string, inPlace: boolean, log: EventLog): void {
-    if (repoRoot === NO_PROJECT_ROOT || inPlace) return;
-    let result;
-    try {
-      result = ensureClaudeBridge(repoRoot);
-    } catch {
-      return;
-    }
-    if (result.created) {
-      log.emit("project.claude_bridge.created", {
-        project_root: repoRoot,
-        path: "CLAUDE.md",
-        source: "AGENTS.md",
-      });
-    }
   }
 
   private async runRace(
@@ -3009,7 +3027,7 @@ export class Orchestrator {
     // directory, a filesystem root, or one that cannot be classified), which
     // gets a typed refusal BEFORE any mutation (INV-075). For an isolated
     // thread the execution root is already a git worktree: a no-op there.
-    if (mutatingRun) {
+    if (mutatingRun && input.workspaceKind !== "directory") {
       const gitPreconditionError = await ensureWriteModeGitBoundary(
         execRoot,
         log,
@@ -3034,14 +3052,14 @@ export class Orchestrator {
     }
     // Same run-prep stage as the git boundary: if the PROJECT root uses AGENTS.md
     // with no CLAUDE.md, bridge it so a Claude Code candidate reads it (INV-113).
-    if (mutatingRun) {
-      this.ensureClaudeBridgeForRun(input.repoRoot, input.inPlace === true, log);
+    if (mutatingRun && input.workspaceKind !== "directory") {
+      ensureClaudeBridgeForRun(input.repoRoot, input.inPlace === true, log);
     }
     // Pre-turn snapshot of the live tree for in-place runs: the revert restore
     // target (server-owned revertInPlace). A snapshot failure must never fail the
     // run — revert is simply unavailable then.
     let preTurnSha: string | null = null;
-    if (mutatingRun && input.inPlace === true) {
+    if (mutatingRun && input.inPlace === true && input.workspaceKind !== "directory") {
       try {
         preTurnSha = await snapshotTree(execRoot);
       } catch {
@@ -3256,6 +3274,8 @@ export class Orchestrator {
           baseRef: contract.repo.base_ref,
           dirtyPolicy: "snapshot",
           accessProfile: candidateAccess,
+          workspaceKind: input.workspaceKind,
+          scopePaths: input.scopePaths,
           // Direct-workspace singletons run in place. Races and patch-envelope
           // transports stay isolated and adopt through the delivery service.
           inPlace:
@@ -3561,27 +3581,18 @@ export class Orchestrator {
     // Fail-closed terminal: a delegated mutating run whose attempts state
     // neither historical proof nor deliberate absence refuses instead of passing.
     assertDelegatedEvidence(input.delegated === true, candidateAccess, runs);
-    const cancelledCandidates = () =>
-      runs.map((r) => ({
-        attemptId: r.attemptId,
-        harnessId: r.harnessId,
-        // gatesPassed([]) is vacuously true: a successful zero-gate run is a
-        // legitimate green STATUS (never a "gates passed" claim — the label
-        // surfaces render that honestly as n/a).
-        status: gatesPassed(r.gates) && !r.errored ? "green" : "red",
-      }));
-    /** The one cancellation terminal this race can reach, from any of its three
-     * abort checks. Every argument is re-read at call time, exactly as it was
-     * when each check spelled the whole call out for itself. */
     const cancelledRaceResult = () =>
-      cancelledResult(
+      cancelledCandidatesResult({
+        store,
+        paths,
         log,
         runId,
         taskId,
         mode,
-        paths.root,
-        cancelledCandidates(),
-        () =>
+        ledger,
+        runs,
+        signal: input.signal,
+        writeTelemetry: () =>
           this.writeRunTelemetry(
             store,
             paths,
@@ -3592,10 +3603,7 @@ export class Orchestrator {
             candidateRoster(runs),
             null,
           ),
-        ledger.spend(),
-        input.signal,
-        store,
-      );
+      });
 
     // Revert divergence fence for the single-candidate in-place path: the
     // candidate mutated the LIVE tree during execution above, so the post-turn
@@ -3606,6 +3614,7 @@ export class Orchestrator {
     let earlyPostTurnSha: string | null = null;
     if (
       mutatingRun &&
+      input.workspaceKind !== "directory" &&
       input.inPlace &&
       requestedSingleCandidate &&
       runs.every((run) => !run.secretDiffRefusal)
@@ -3626,7 +3635,18 @@ export class Orchestrator {
     if (failedDelegation) {
       const failure = delegateFailure.candidateFailureTerminal(failedDelegation, "race");
       await disposeReviewEnvelopes();
-      if (mutatingRun) {
+      if (mutatingRun && failedDelegation.files) {
+        await publishDirectoryCandidate({
+          files: failedDelegation.files,
+          store,
+          paths,
+          taskId,
+          attemptId: failedDelegation.attemptId,
+          harnessId: failedDelegation.harnessId,
+          facts: makeOutcomeFacts("failed", { noChanges: failedDelegation.files.noChanges }),
+          log,
+        });
+      } else if (mutatingRun && input.workspaceKind !== "directory") {
         await delegateFailure.persistFailedInPlaceWorkProduct({
           ...{ store, log, paths, execRoot, preTurnSha, taskId, mode },
           live: input.inPlace === true && failedDelegation.reviewCwd === execRoot,
@@ -3659,67 +3679,18 @@ export class Orchestrator {
       );
     }
 
-    if (runs.length === 0) {
-      const budgetReason = ledger.terminal();
-      // QA-050: when the zero-candidate cause is a budget refusal, the shared
-      // classifier owns the typed code, the refused route/slot, and actionable
-      // budget remediation (previously an empty nextActions array).
-      const agentBudgetMapping =
-        budgetStopped || budgetReason
-          ? classifyBudgetFailure({ denial: budgetDenial, terminal: budgetReason })
-          : null;
-      const facts = makeOutcomeFacts("failed", {
-        reason:
-          agentBudgetMapping?.reason ?? (budgetStopped ? "budget_exhausted" : "harness_failed"),
-        noChanges: true,
-      });
-      const why = agentBudgetMapping?.safeMessage ?? "no candidates produced";
-      store.writeYaml(join(paths.arbitrationDir, "decision.yaml"), {
-        winner: null,
-        facts,
-        why_winner: why,
-        evidence_facts: ["no candidates were produced"],
-        apply_recommendation: "continue",
-        budget_summary: decisionBudgetSummary(ledger),
-      });
-      store.writeText(
-        join(paths.finalDir, "summary.md"),
-        `# Run ${runId} (${mode})\n\n- Lifecycle: ${facts.lifecycle}${facts.reason ? ` (${facts.reason})` : ""}\n- Phase: ${agentBudgetMapping ? "budget" : "executor"}\n\n${why}\n`,
-      );
-      if (agentBudgetMapping) {
-        writeFailure(store, paths, budgetFailureRecord(agentBudgetMapping, { runDir: paths.root }));
-      } else {
-        writeFailure(store, paths, {
-          phase: "executor",
-          category: "internal",
-          safeMessage: why,
-          runDir: paths.root,
-          nextActions: ["Open diagnostics", "Retry the run"],
-        });
-      }
-      log.emit("output.ready", { kind: "summary", path: "final/summary.md", state: "diagnostic" });
-      log.emit("run.failed", {
-        lifecycle: facts.lifecycle,
-        facts,
-        reason: facts.reason,
-        phase: agentBudgetMapping ? "budget" : "executor",
-        ...(agentBudgetMapping?.harnessId ? { harness_id: agentBudgetMapping.harnessId } : {}),
-        error: why,
-        failure_ref: "final/failure.yaml",
-      });
-      return {
+    if (runs.length === 0)
+      return emptyCandidateResult({
+        ledger,
+        budgetStopped,
+        budgetDenial,
+        mode,
+        store,
+        paths,
+        log,
         runId,
         taskId,
-        mode,
-        lifecycle: facts.lifecycle,
-        facts,
-        winner: null,
-        runDir: paths.root,
-        summary: why,
-        candidates: [],
-        spendUsd: ledger.spend(),
-      };
-    }
+      });
 
     // Reviewers, synthesis, and arbitration only ever see candidates WITH
     // work (a real diff or a completed stream). Attempts that died before
@@ -3729,86 +3700,27 @@ export class Orchestrator {
     const workingRuns = partitionCandidates(runs).working;
     if (workingRuns.length === 0) {
       await disposeReviewEnvelopes();
-      const first = runs[0] as CandidateRun;
-      const phase = first.secretDiffRefusal ? "artifact_security" : (first.infraPhase ?? "harness");
-      const { facts, why: rootCause } = partitionCandidates(runs);
-      store.writeYaml(join(paths.arbitrationDir, "decision.yaml"), {
-        winner: null,
-        facts,
-        why_winner: rootCause,
-        evidence_facts: runs.map(
-          (r) => `${r.attemptId} produced no work: ${r.errors[0] ?? "unknown"}`,
-        ),
-        apply_recommendation: "continue",
-        budget_summary: decisionBudgetSummary(ledger),
-      });
-      this.writeRunTelemetry(
+      return failedCandidatesResult({
         store,
         paths,
-        contract,
+        log,
         runId,
         taskId,
         mode,
-        candidateRoster(runs),
-        null,
-      );
-      store.writeText(
-        join(paths.finalDir, "summary.md"),
-        `# Run ${runId} (${mode})\n\n- Lifecycle: ${facts.lifecycle}\n- Phase: ${phase}\n\n${rootCause}\n`,
-      );
-      const existingEventRefs = runs
-        .map((r) => `attempts/${r.attemptId}/events.jsonl`)
-        .filter((rel) => existsSync(join(paths.root, rel)));
-      // #31: auth guidance only on a classified auth failure; every other
-      // harness cause (timeout, rate limit, crash, config) gets remediation that
-      // fits it, instead of a doomed "Check harness authentication".
-      const harnessCategory = dominantHarnessFailureCategory(first.telemetry.transientFailures);
-      // A run speaks with a candidate's TYPED refusal only when EVERY candidate
-      // died of the same one (candidateEvidence owns that rule); mixed causes
-      // keep the honest harness terminal.
-      const unanimous = unanimousDeclaredFailure(runs);
-      writeFailure(store, paths, {
-        phase,
-        category: unanimous?.category ?? (phase === "workspace" ? "project" : "harness_error"),
-        code: unanimous?.code ?? null,
-        harnessId: first.harnessId,
-        attemptId: first.attemptId,
-        safeMessage: rootCause,
-        rawDetailRef: `attempts/${first.attemptId}/attempt.yaml`,
-        eventRefs: existingEventRefs,
-        runDir: paths.root,
-        resetsAt: unanimous?.resetsAt ?? null,
-        nextActions: first.secretDiffRefusal
-          ? secretDiff.secretDiffNextActions(first.secretDiffRefusal)
-          : phase === "workspace"
-            ? ["Check the project folder", "Open diagnostics", "Retry the run"]
-            : harnessFailureNextActions(harnessCategory),
+        ledger,
+        runs,
+        writeTelemetry: () =>
+          this.writeRunTelemetry(
+            store,
+            paths,
+            contract,
+            runId,
+            taskId,
+            mode,
+            candidateRoster(runs),
+            null,
+          ),
       });
-      log.emit("output.ready", { kind: "summary", path: "final/summary.md", state: "diagnostic" });
-      log.emit("run.failed", {
-        lifecycle: facts.lifecycle,
-        facts,
-        reason: facts.reason,
-        phase,
-        error: rootCause,
-        failure_ref: "final/failure.yaml",
-      });
-      return {
-        runId,
-        taskId,
-        mode,
-        lifecycle: facts.lifecycle,
-        facts,
-        winner: null,
-        runDir: paths.root,
-        summary: rootCause,
-        candidates: runs.map((r) => ({
-          attemptId: r.attemptId,
-          harnessId: r.harnessId,
-          status: "red",
-        })),
-        spendUsd: ledger.spend(),
-      };
     }
 
     // QA-025: only announce that review STARTED when the panel will actually
@@ -3818,7 +3730,9 @@ export class Orchestrator {
     // real verification). Compute the reviewable set first and emit a typed
     // `review.skipped` when nothing is reviewable, so every start has a matching
     // terminal and the no-diff path records `not_run` consistently.
-    const reviewableRuns = workingRuns.filter((r) => r.diff.trim().length > 0);
+    const reviewableRuns = workingRuns.filter((r) =>
+      r.files ? r.files.noChanges !== true : r.diff.trim().length > 0,
+    );
     const configuredFamilies = new Set(reviewers.map((r) => r.providerFamily)).size;
     if (reviewableRuns.length === 0 || reviewers.length === 0) {
       log.emit("review.skipped", {
@@ -3925,6 +3839,8 @@ export class Orchestrator {
             baseRef: contract.repo.base_ref,
             dirtyPolicy: "snapshot",
             accessProfile: candidateAccess,
+            workspaceKind: input.workspaceKind,
+            scopePaths: input.scopePaths,
           });
           const synthHome = this.harnessHomeFor(wsm, envelope, synthRouted, input);
           const run = await this.runCandidateInEnvelope(
@@ -4009,7 +3925,7 @@ export class Orchestrator {
                 taskId,
                 mode,
                 paths.root,
-                cancelledCandidates(),
+                candidateStatuses(runs),
                 () =>
                   this.writeRunTelemetry(
                     store,
@@ -4095,6 +4011,13 @@ export class Orchestrator {
       ? (evidences.find((e) => e.attemptId === winnerRun.attemptId)?.reviewVerified ?? false)
       : evidences.length > 0 && evidences.every((e) => e.reviewVerified);
     let facts: RunOutcomeFacts = result.decision.facts;
+    if (winnerRun?.files)
+      facts = {
+        ...facts,
+        noChanges: winnerRun.files.noChanges,
+        reason:
+          facts.reason === "no_changes" && winnerRun.files.noChanges !== true ? null : facts.reason,
+      };
     // A reviewer NEEDS_HUMAN escalation forces the REVIEW axis to blocked (a
     // needs-decision terminal), unless the decision is already applyable-clean.
     if (needsHuman && facts.lifecycle === "succeeded" && facts.review !== "blocked") {
@@ -4124,17 +4047,14 @@ export class Orchestrator {
       winnerRun &&
       !inPlaceWinner &&
       !deferredRaceVerify &&
-      winnerRun.diff.trim().length > 0 &&
+      (winnerRun.files ? winnerRun.files.noChanges !== true : winnerRun.diff.trim().length > 0) &&
       facts.lifecycle === "succeeded" &&
       facts.review !== "blocked" &&
       !input.signal?.aborted
     ) {
-      finalVerify = await finalVerifyPatch(
-        execRoot,
-        winnerRun,
-        gateSpecsFromContract(contract),
-        log,
-      );
+      finalVerify = winnerRun.files
+        ? await finalVerifyFiles(winnerRun.files, undefined, gateSpecsFromContract(contract), log)
+        : await finalVerifyPatch(execRoot, winnerRun, gateSpecsFromContract(contract), log);
       // Verify errors block like proven failures; accept_risk stays available.
       // A failed fresh verify lands on the CHECKS axis (a needs-decision block).
       finalVerifyFailed = finalVerifyBlocks(finalVerify);
@@ -4182,7 +4102,18 @@ export class Orchestrator {
           answerText: winnerAnswer,
         });
       }
-      if (mutatingRun) {
+      if (mutatingRun && winnerRun.files) {
+        await publishDirectoryCandidate({
+          files: winnerRun.files,
+          store,
+          paths,
+          taskId,
+          attemptId: winnerRun.attemptId,
+          harnessId: winnerRun.harnessId,
+          facts,
+          log,
+        });
+      } else if (mutatingRun) {
         secretDiff.assertNoSecretLikeTokens("final patch diff", winnerRun.diff);
         const patchSha256 = sha256(winnerRun.diff);
         store.writeText(join(paths.finalDir, "patch.diff"), winnerRun.diff);
@@ -4467,21 +4398,13 @@ export class Orchestrator {
       winner: result.decision.winner,
       runDir: paths.root,
       summary: result.decision.why_winner,
-      candidates: runs.map((r) => ({
-        attemptId: r.attemptId,
-        harnessId: r.harnessId,
-        // gatesPassed([]) is vacuously true: a successful zero-gate run is a
-        // legitimate green STATUS (never a "gates passed" claim — the label
-        // surfaces render that honestly as n/a).
-        status: gatesPassed(r.gates) && !r.errored ? "green" : "red",
-      })),
+      candidates: candidateStatuses(runs),
       decisionPath,
       reviewVerified: actualReviewVerified,
       spendUsd: ledger.spend(),
     };
   }
 
-  /** Single-owner telemetry artifact (final/telemetry.yaml); surfaces project it, never recompute. */
   private writeRunTelemetry(
     store: ArtifactStore,
     paths: ReturnType<ArtifactStore["runPaths"]>,
@@ -4512,8 +4435,6 @@ export class Orchestrator {
         this.authPreferenceForHarness(contract.repo.root, harnessId, contract.auth_preference),
     });
   }
-
-  /** Review a set of runs and return their evidence (with finalReviewClean + review_verified caveat). */
 
   /**
    * SINGLE funnel for every reviewer-panel invocation: run it inside a per-review
@@ -4692,7 +4613,7 @@ export class Orchestrator {
       // exclusion — we are inside that branch, so inPlace is false here): bridge
       // an AGENTS.md-only PROJECT root so a Claude Code convergence attempt reads
       // it (INV-113).
-      this.ensureClaudeBridgeForRun(input.repoRoot, false, log);
+      ensureClaudeBridgeForRun(input.repoRoot, false, log);
     }
 
     const reviewDir = join(paths.root, "review-evidence");
@@ -5149,6 +5070,10 @@ export class Orchestrator {
                       envInheritance: envInheritance(this.config(input.repoRoot)),
                       signal: input.signal,
                       onReviewerEvent: (event) => log.emit(event.type, { ...event }),
+                      onUsageCost: (usd) => {
+                        ledger.updateHold(reviewLease!.lease!.lease_id, usd);
+                        return ledger.tier() === "hard";
+                      },
                     })
                   : {
                       findings: [],

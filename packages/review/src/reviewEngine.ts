@@ -386,7 +386,9 @@ export async function reviewCandidate(input: ReviewCandidateInput): Promise<Revi
     ].filter(Boolean);
     throw new Error(`mandatory evidence preflight failed (${parts.join("; ")})`);
   }
-  const postimagePaths = extractDiffPostimagePaths(input.diff);
+  const postimagePaths = input.candidatePaths
+    ? new Set(input.candidatePaths)
+    : extractDiffPostimagePaths(input.diff);
   const candidateInventory = await buildReviewerCandidateInventory(
     input.cwd,
     postimagePaths,

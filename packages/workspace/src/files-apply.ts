@@ -19,7 +19,7 @@ export async function readWorkspaceFilesManifest(
   expectedSha256: string,
 ): Promise<WorkspaceFilesManifest> {
   const text = await readFile(await workspaceFilePath(runRoot, path), "utf8");
-  if (`sha256:${sha256(text)}` !== expectedSha256)
+  if (sha256(text) !== expectedSha256)
     throw new Error("Files manifest digest does not match the work product");
   return WorkspaceFilesManifest.parse(JSON.parse(text));
 }

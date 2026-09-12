@@ -168,6 +168,7 @@ function isOverrideVerifyPending(input: ApplyGateInput): boolean {
 }
 
 export function validateApplyGate(input: ApplyGateInput): string | null {
+  if (input.applyState === "discarded") return "This result was discarded.";
   // An operator risk override is meaningful ONLY on a needs-decision run —
   // review blocked or checks failed (INV-111, Bible §11): the decision
   // endpoint records decisions exclusively for such runs, so any other
@@ -286,6 +287,13 @@ export function deriveApplyEligibility(input: ApplyGateInput): ApplyEligibility 
   // the review outcome for `applied_review_blocked` lives on the outcome banner
   // and the separate Revert affordance, not on this apply verdict.
   const applyState = input.applyState ?? null;
+  if (applyState === "discarded")
+    return {
+      eligible: false,
+      state: "discarded",
+      reason: "This result was discarded.",
+      requiredAction: null,
+    };
   if (applyState === "applied" || applyState === "applied_review_blocked") {
     return {
       eligible: false,

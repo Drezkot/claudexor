@@ -133,7 +133,7 @@ export async function verifyAndDeliverFiles(
           path: entry.path,
           state: await readWorkspaceFile(await workspaceFilePath(targetRoot, entry.path, true)),
         });
-      return `sha256:${sha256(JSON.stringify(entries))}`;
+      return sha256(JSON.stringify(entries));
     };
     const targetPreimageSha = await preimage();
     const finalVerify = await finalVerifyFiles(candidate, options.paths, gates, log);

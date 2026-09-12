@@ -224,7 +224,7 @@ describe("ordinary directory workspaces", () => {
     const captured = await f.manager.captureFiles(env, join(f.root, "run2"), {
       observedPaths: ["unselected.txt"],
     });
-    expect(captured.noChanges).toBe(false);
+    expect(captured.noChanges).toBeNull();
     expect(captured.manifest.entries).toEqual([
       { path: "unselected.txt", before: "unknown", after: null },
     ]);
