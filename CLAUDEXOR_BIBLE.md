@@ -273,6 +273,12 @@ invariant or operator decision before proceeding.
   the shared sensitive-resource boundary, are the candidate plane; the
   sealed/redacted evidence packet is a separate explicit plane. Gitignored
   local state that is absent from the diff never crosses the reviewer boundary.
+  For an explicit directory result, the complete selected file manifest supplies
+  the candidate inventory instead of Git membership. Retained unchanged inputs
+  and observed output bytes remain available, with baseline/output evidence in
+  the explicit packet and the same sensitive-resource boundary. A selected file
+  is not excluded merely because its directory name usually denotes generated
+  output; unselected source siblings are never implicitly copied.
   verify: reviewEngine route-proof,
   candidate-inventory, and ignored-sibling tests; per-reviewer artifact
   checklist.
