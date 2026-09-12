@@ -1,3 +1,4 @@
+import { delegationBeltFor } from "./delegationBelt.js";
 import {
   bindProcessingAdmission,
   updateProcessingStreamHold,
@@ -319,7 +320,6 @@ import {
   readTextSafe,
   appendLine,
   assertNoInlineSecretValues,
-  DELEGATION_ENV,
   hashJson,
   newId,
   noProjectRepoRoot,
@@ -1961,11 +1961,6 @@ export class Orchestrator {
   }
 
   /**
-   * Per-harness settings applied to one route's run spec (model/effort/web
-   * defaults, max_turns, tool lists). Knobs the manifest does not support are
-   * RETURNED as ignored reasons (disclosed by the caller), never silently sent.
-   */
-  /**
    * The HarnessRunSpec fields every TASK-PRODUCING lane shares (primary,
    * candidate, planner, explorer, orchestrate-planner). Extracting the identical
    * block into ONE owner means a new task-producing field lands here once —
@@ -1975,61 +1970,6 @@ export class Orchestrator {
    * execution — owner Quiz-5a); reviewers and the auth smoke build their own
    * specs and never call this.
    */
-  /** The extra MCP servers injected into one agent lane's sandbox. Today only
-   * the delegation belt (D32): present when `--delegate` is on, the daemon built
-   * a belt descriptor, the lane's adapter can inject MCP servers, and the lane is
-   * a WRITING agent intent (the delegator integrates results in its workspace;
-   * read lanes and reviewers have nothing to delegate). */
-  private delegationBeltFor(
-    input: RunInput | undefined,
-    intent: Intent,
-    routed: RoutedAdapter,
-    resolvedBudget: PaidBudget,
-  ): ExtraMcpServer[] {
-    if (
-      !input?.delegate ||
-      !input.delegationBelt ||
-      !input.delegationParentRunId ||
-      !routed.delegationRequirement.effective
-    )
-      return [];
-    // A lane that sandbox-cancels the belt below full access (codex) must NOT
-    // receive a belt it cannot use. Per-lane requirement resolution records the
-    // typed degradation, while a mixed pool keeps the belt on lanes that can
-    // host it.
-    if (routed.mcpInjectionRequiresFullAccess && !isFullAccess(routed.adapterAccess)) return [];
-    const writingIntents: Intent[] = ["implement", "create_from_scratch", "repair"];
-    if (!writingIntents.includes(intent)) return [];
-    // The CLI built the descriptor from the RAW request budget (undefined when
-    // the caller relied on a config/dep default), which would leave the belt
-    // unlimited while the real run is capped. Rebind the belt's parent-budget
-    // env to the RESOLVED budget (resolvePaidBudget output) so sub-run draws are
-    // bounded by the same headroom the parent run enforces — one budget owner.
-    const env = { ...input.delegationBelt.env };
-    for (const [key, value] of [
-      [DELEGATION_ENV.processingPreference, input.processingPreference],
-      [DELEGATION_ENV.workspaceKind, input.workspaceKind],
-      [
-        DELEGATION_ENV.scopePaths,
-        input.scopePaths === undefined ? undefined : JSON.stringify(input.scopePaths),
-      ],
-    ]) {
-      if (value === undefined) delete env[key!];
-      else env[key!] = value;
-    }
-    return [
-      {
-        ...input.delegationBelt,
-        env: {
-          ...env,
-          [DELEGATION_ENV.parentRunId]: input.delegationParentRunId,
-          [DELEGATION_ENV.repoRoot]: input.repoRoot,
-          [DELEGATION_ENV.budget]: JSON.stringify(resolvedBudget),
-        },
-      },
-    ];
-  }
-
   private harnessSpecKnobs(
     contract: ActiveTaskContract,
     knobs: {
@@ -2449,12 +2389,7 @@ export class Orchestrator {
           ? ""
           : join(envelope.worktree_path, artifactRelativeDir, CLAUDEXOR_BROWSER_ARTIFACT_SUBDIR),
       ),
-      extra_mcp_servers: this.delegationBeltFor(
-        runInput,
-        intent,
-        routed,
-        contract.budget.paid_budget,
-      ),
+      extra_mcp_servers: delegationBeltFor(runInput, intent, routed, contract.budget.paid_budget),
       cwd: envelope.worktree_path,
       access: routed.adapterAccess,
       ...this.harnessSpecKnobs(contract, knobs, intent),

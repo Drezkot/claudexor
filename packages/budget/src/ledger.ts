@@ -1,5 +1,6 @@
+import { UNKNOWN_COST } from "./cost-evidence.js";
+export { routeCostEvidence, attemptCostEvidence } from "./cost-evidence.js";
 import type {
-  BillingKnowledge,
   BudgetLease,
   BudgetObservation,
   CostEvidence,
@@ -83,25 +84,14 @@ export interface ReserveResult {
   denied?: "hard_cap" | "estimate_headroom" | "finite_zero" | "unknown_paid_in_flight";
 }
 
-const UNKNOWN_COST: CostEvidence = {
-  knowledge: "unknown",
-  billing: "unknown",
-  source: "route_preflight",
-  provenance: ["route:billing-unknown"],
-  estimatedUsd: null,
-};
-
 /** Stable fingerprint of a prompt for loop detection. */
 export function promptFingerprint(prompt: string): string {
   return sha256(prompt.trim().replace(/\s+/g, " ").toLowerCase());
 }
 
-/**
- * One view over a shared financial authority. The root view reports aggregate
- * family cash/valuation; `scopedToTask` reports only that child's totals while
- * sharing leases, holds, unknown-paid exclusion, and the hard cap. Routing
- * observations, quota snapshots, and prompt-loop counters stay view-local.
- */
+/** Root and task-scoped views share family finances, leases, holds and caps.
+ * Task views expose their own totals; routing, quota and prompt-loop evidence
+ * stay view-local. */
 export class BudgetLedger {
   private readonly observations: BudgetObservation[] = [];
   private readonly quotaSnapshots = new Map<string, QuotaSnapshot>();
@@ -598,43 +588,6 @@ export class BudgetLedger {
   isLoop(fingerprint: string, threshold = 3): boolean {
     return (this.promptCounts.get(fingerprint) ?? 0) >= threshold;
   }
-}
-
-export function routeCostEvidence(input: {
-  billing?: BillingKnowledge;
-  knowledge?: CostKnowledge;
-  source: string;
-  provenance: string[];
-  estimatedUsd?: number | null;
-}): CostEvidence {
-  return CostEvidenceSchema.parse({
-    billing: input.billing ?? "unknown",
-    knowledge: input.knowledge ?? "unknown",
-    source: input.source,
-    provenance: input.provenance,
-    estimatedUsd: input.estimatedUsd ?? null,
-  });
-}
-
-export function attemptCostEvidence(
-  harnessId: string,
-  attemptId: string,
-  estimatedUsd?: number,
-  billing: BillingKnowledge = "unknown",
-  processingCost?: CostEvidence,
-): CostEvidence {
-  if (processingCost)
-    return CostEvidenceSchema.parse({
-      ...processingCost,
-      provenance: [...processingCost.provenance, `attempt:${attemptId}`],
-    });
-  return routeCostEvidence({
-    source: "route-preflight",
-    provenance: [`harness:${harnessId}`, `attempt:${attemptId}`, `billing:${billing}`],
-    billing,
-    knowledge: estimatedUsd === undefined ? "unknown" : "estimated",
-    estimatedUsd: estimatedUsd ?? null,
-  });
 }
 
 export function isBudgetTerminal(reason: string | null): reason is Exclude<BudgetTerminal, null> {

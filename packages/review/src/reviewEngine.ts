@@ -105,13 +105,9 @@ export interface ReviewCandidateInput {
     candidateTree: string;
     packetManifestSha256: string;
   };
-  /** Owner-amended delta scope (INV-125 second amendment, 2026-08-04).
-   * SUBTRACTIVE by design (wave-6 integrity finding): there is NO harness
-   * parameter — the delta applies ONLY to the contract's sol slot (the
-   * cursor lane), the base SHA must match the sealed packet's FINGERPRINTS
-   * delta entries, and DELTA.patch must verify as the exact
-   * deltaBaseSha..candidateSha diff. Sealed-packet mode only; every other
-   * lane always reviews the full context. */
+  /** Subtractive delta for the fixed Cursor/Sol slot in sealed-packet mode
+   * (INV-125). Other lanes retain full context; the base SHA and diff must
+   * match the sealed packet, as checked by assertSealedDeltaScope. */
   deltaScope?: { baseSha: string };
   cwd: string;
   reviewers: ReviewerSpec[];
@@ -171,11 +167,8 @@ function readSealedDeltaEvidence(dir: string): DiffEvidence {
  * delta subject, so a mislabeled attestation cannot be produced upstream. */
 const SOL_DELTA_HARNESS_ID = "cursor";
 
-/** Fail-closed launch-time verification of an owner-amended delta scope
- * (wave-6 integrity finding f-…: the flag's former free parameters could
- * mislabel a signed attestation). The base SHA and delta digest must match
- * the sealed FINGERPRINTS entries, and DELTA.patch must be the exact
- * deltaBaseSha..candidateSha diff of the candidate repository. */
+/** Verify the optional delta against the packet and exact frozen candidate;
+ * the fixed reviewer slot remains outside caller control. */
 function assertSealedDeltaScope(
   input: ReviewCandidateInput,
   baseSha: string,
