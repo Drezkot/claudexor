@@ -32,9 +32,7 @@ export type WebEvidenceStatus = z.infer<typeof WebEvidenceStatus>;
 export const WebEvidenceRecord = z
   .object({
     required: z.boolean().default(false).describe("Explicit stored web requirement."),
-    /** Requested policy for the run. */
     policy: ExternalContextPolicy.default("auto").describe("Requested web policy for the run."),
-    /** Mode actually executed by the harness route (e.g. claude `cached` upgrades to `live`, disclosed). */
     effective_mode: ExternalContextPolicy.default("auto").describe(
       "Policy actually executed by the harness route (disclosed upgrades, e.g. cached to live).",
     ),
@@ -385,11 +383,6 @@ export const AttemptTelemetryRecord = z
     usage_cost: UsageCostSummary.optional(),
     attempt_id: Id.describe("Attempt id."),
     harness_id: Id.describe("Harness that ran the attempt."),
-    /**
-     * Model identity the harness stream actually reported (route evidence).
-     * Null when the stream never disclosed one; surfaces must render that as
-     * unverified, never as a guess.
-     */
     observed_model: z
       .string()
       .nullable()
