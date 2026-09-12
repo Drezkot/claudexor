@@ -6,7 +6,7 @@ import { RunOutcomeFacts } from "./decision.js";
 import { RunDelegationInfo } from "./delegation.js";
 import { CouncilProjection, PlanReadiness } from "./plan.js";
 import { RunFacts } from "./run-facts.js";
-import { AttemptExecutionEvidence } from "./telemetry.js";
+import { AttemptExecutionEvidence } from "./attempt-execution.js";
 
 export const RunDetailProblem = z
   .object({

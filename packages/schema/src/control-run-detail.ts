@@ -7,7 +7,7 @@ import { DecisionRecord } from "./decision.js";
 import { WorkProduct } from "./workproduct.js";
 import { ReviewFinding } from "./review.js";
 import { RunFacts } from "./run-facts.js";
-import { AttemptExecutionEvidence } from "./telemetry.js";
+import { AttemptExecutionEvidence } from "./attempt-execution.js";
 import {
   ControlArtifactInfo,
   ControlBudgetSnapshot,

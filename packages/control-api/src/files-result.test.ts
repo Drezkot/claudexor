@@ -4,7 +4,13 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createHash } from "node:crypto";
 import { stringify, parse } from "yaml";
-import { DecisionRecord, makeOutcomeFacts, type WorkspaceFilesManifest } from "@claudexor/schema";
+import {
+  DecisionRecord,
+  makeOutcomeFacts,
+  TaskContract,
+  SCHEMA_VERSION,
+  type WorkspaceFilesManifest,
+} from "@claudexor/schema";
 import { DaemonControlApiServer } from "./daemon-server.js";
 
 const cleanup: Array<() => Promise<unknown>> = [];
@@ -22,6 +28,21 @@ async function fixture(big = false, isolation: "envelope" | "live" = "envelope")
   await mkdir(source);
   await mkdir(join(run, "final/files/content"), { recursive: true });
   await mkdir(join(run, "arbitration"));
+  await mkdir(join(run, "context"));
+  await writeFile(
+    join(run, "context/task.yaml"),
+    stringify(
+      TaskContract.parse({
+        schema_version: SCHEMA_VERSION,
+        task_id: "task-files",
+        created_at: "2026-09-13T00:00:00Z",
+        repo: { root: source, base_ref: "HEAD" },
+        mode: { kind: "agent" },
+        user_intent: { raw: "Edit files" },
+        review_requested: false,
+      }),
+    ),
+  );
   const old = Buffer.from("baseline\n"),
     output = big ? Buffer.alloc(33 * 1024 * 1024, 0x51) : Buffer.from([0, 255, 12, 99]);
   const file = async (bytes: Buffer) => {

@@ -47,6 +47,7 @@ export * from "./gate.js";
 export * from "./events.js";
 export * from "./deep-scan.js";
 export * from "./telemetry.js";
+export * from "./attempt-execution.js";
 export * from "./config.js";
 export * from "./workspace.js";
 export * from "./files-manifest.js";

@@ -498,18 +498,6 @@ export const AttemptTelemetryRecord = z
   );
 export type AttemptTelemetryRecord = z.infer<typeof AttemptTelemetryRecord>;
 
-export const AttemptExecutionEvidence = z
-  .object({
-    attemptId: Id,
-    harnessId: Id,
-    processing: ProcessingReceipt.optional(),
-    processingCostBasis: ProcessingCostBasis.optional(),
-    usageCost: UsageCostSummary.optional(),
-  })
-  .strict()
-  .describe("Compact projection of existing attempt execution and amount evidence.");
-export type AttemptExecutionEvidence = z.infer<typeof AttemptExecutionEvidence>;
-
 export const RunTelemetry = z
   .object({
     schema_version: SchemaVersion,

@@ -1,10 +1,4 @@
-/**
- * Thread-turn write routes for create/enqueue and retrying a REFUSED turn.
- *
- * Extracted from daemon-server.ts (INV-124 ratchet). The server passes a thin
- * ctx of bound helpers; these functions own the per-thread serialization and
- * the refused-turn honesty rules (persist the refusal ON the turn, INV-093).
- */
+/** Thread-turn creation and refused-turn retry over the existing journal authority. */
 import { createHash } from "node:crypto";
 import type { ServerResponse } from "node:http";
 import {
