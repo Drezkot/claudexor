@@ -182,6 +182,91 @@ describe("raw model operation HTTP surface", () => {
     expect(modelCatalog).toHaveBeenCalledTimes(4);
   });
 
+  it("negotiates account catalogs while keeping the strict legacy model shape unchanged", async () => {
+    const processing = {
+      modes: ["standard", "fast"],
+      nativeModes: [{ mode: "fast", id: "priority" }],
+      defaultNativeMode: "auto",
+      eligible: true,
+      source: "provider",
+      observedAt: "2026-09-12T00:00:00.000Z",
+    };
+    const model = {
+      id: "test-model",
+      label: null,
+      isDefault: true,
+      contextWindow: 1000000,
+      maxContextWindow: 1000000,
+      maxOutputTokens: null,
+      inputModalities: ["text"],
+      reasoningEfforts: [],
+      defaultReasoningEffort: null,
+      supportedOptions: [],
+      processing,
+    };
+    const catalog = {
+      source: "codex",
+      credentialProfileId: "a",
+      accountFingerprint: null,
+      observedAt: "2026-09-12T00:00:00.000Z",
+      provenance: "provider_http",
+      models: [model],
+    };
+    const accountView = {
+      source: "codex",
+      accounts: [{ credentialProfileId: "a", availability: "available", problem: null, catalog }],
+      partial: false,
+    };
+    const modelCatalog = vi.fn(async () => catalog);
+    const modelAccountCatalog = vi.fn(async () => accountView);
+    const source = { id: "codex", label: "Codex", credentialHarness: "codex" };
+    const modelSources = vi.fn(async (view?: "accounts") => ({
+      sources: [
+        view
+          ? {
+              ...source,
+              processingPreferences: ["standard", "fast", "economy"],
+              accountCatalog: true,
+            }
+          : source,
+      ],
+    }));
+    const f = await fixture({ modelCatalog, modelAccountCatalog, modelSources });
+    expect(await (await f.request("/model-sources")).json()).toEqual({ sources: [source] });
+    expect(await (await f.request("/model-sources?view=accounts")).json()).toMatchObject({
+      sources: [{ accountCatalog: true, processingPreferences: ["standard", "fast", "economy"] }],
+    });
+    const legacy = (await (await f.request("/model-sources/codex/models")).json()) as {
+      models: Array<Record<string, unknown>>;
+    };
+    expect(legacy.models[0]).not.toHaveProperty("processing");
+    const modern = await f.request(
+      "/model-sources/codex/models?view=accounts&credentialProfileId=a",
+    );
+    expect(modern.status).toBe(200);
+    expect(await modern.json()).toEqual(accountView);
+    expect(modelAccountCatalog).toHaveBeenCalledExactlyOnceWith("codex", "a");
+    expect(modelCatalog).toHaveBeenCalledTimes(1);
+    for (const query of [
+      "view=unknown",
+      "view=",
+      "view=accounts&view=accounts",
+      "view=accounts&requestedModel=test",
+    ]) {
+      expect((await f.request(`/model-sources/codex/models?${query}`)).status).toBe(400);
+    }
+    for (const query of ["view=unknown", "view=accounts&view=accounts", "extra=true"]) {
+      expect((await f.request(`/model-sources?${query}`)).status).toBe(400);
+    }
+    const descriptor = OPERATION_CATALOG.operations.find(
+      (op) => op.path === "/v2/model-sources/:id/models",
+    );
+    expect(descriptor?.parameters).toContainEqual(
+      expect.objectContaining({ name: "view", enum: ["accounts"] }),
+    );
+    expect(descriptor?.responseSchema).toBe("ControlModelCatalogQueryResponse");
+  });
+
   it("refuses malformed service output and protects all model routes in recovery mode", async () => {
     const invalid = await fixture({ getModelOperation: async () => ({ id: "lying" }) });
     const response = await invalid.request("/model-operations/job-model");

@@ -203,6 +203,122 @@ async function fixture(options: { lazy?: boolean } = {}) {
 }
 
 describe("production model service composition", () => {
+  it("enumerates distinct enabled account inventories without selecting the inference account", async () => {
+    const f = await fixture({ lazy: true });
+    f.catalogModels.a = [model("only-a")];
+    f.catalogModels.b = [
+      {
+        ...model("only-b"),
+        contextWindow: 1000000,
+        processing: {
+          modes: ["standard", "fast"],
+          nativeModes: [{ mode: "fast", id: "priority" }],
+          defaultNativeMode: "auto",
+          eligible: true,
+          source: "fixture",
+          observedAt: "2026-09-12T00:00:00.000Z",
+        },
+      },
+    ];
+    const view = await f.services.routes.modelAccountCatalog("codex");
+    expect(view.partial).toBe(false);
+    expect(
+      view.accounts.map((row) => [
+        row.credentialProfileId,
+        row.catalog?.models[0]?.id,
+        row.catalog?.models[0]?.contextWindow,
+      ]),
+    ).toEqual([
+      ["a", "only-a", 272000],
+      ["b", "only-b", 1000000],
+    ]);
+    expect(view.accounts[1]?.catalog?.models[0]?.processing?.nativeModes).toEqual([
+      { mode: "fast", id: "priority" },
+    ]);
+    expect(
+      view.accounts.every((row) => row.availability === "available" && row.problem === null),
+    ).toBe(true);
+    expect(f.invoke).not.toHaveBeenCalled();
+    f.catalog.mockClear();
+    const pinned = await f.services.routes.modelAccountCatalog("codex", "b");
+    expect(pinned.accounts.map((row) => row.credentialProfileId)).toEqual(["b"]);
+    expect(f.catalog).toHaveBeenCalledTimes(1);
+    f.cfg.credential_profiles[1]!.enabled = false;
+    await expect(f.services.routes.modelAccountCatalog("codex", "b")).rejects.toMatchObject({
+      code: "model_account_unavailable",
+    });
+    expect(
+      (await f.services.routes.modelAccountCatalog("codex")).accounts.map(
+        (row) => row.credentialProfileId,
+      ),
+    ).toEqual(["a"]);
+  });
+
+  it("keeps partial inventory failures separate from missing authentication and preserves observation time", async () => {
+    const f = await fixture({ lazy: true });
+    const observedAt = "2026-09-10T00:00:00.000Z";
+    f.catalog.mockImplementation(async ({ profile }) => {
+      if (profile.profile_id === "b") throw new Error("network failed");
+      return {
+        source: "codex",
+        credentialProfileId: "a",
+        accountFingerprint: "a",
+        observedAt,
+        provenance: "existing_cache",
+        models: [model()],
+      };
+    });
+    const partial = await f.services.routes.modelAccountCatalog("codex");
+    expect(partial.partial).toBe(true);
+    expect(partial.accounts[0]?.catalog).toMatchObject({
+      observedAt,
+      provenance: "existing_cache",
+    });
+    expect(partial.accounts[1]).toMatchObject({
+      credentialProfileId: "b",
+      availability: "unknown",
+      catalog: null,
+      problem: { code: "model_catalog_unavailable" },
+    });
+    expect(f.unusable.live()).toEqual([]);
+    const original = f.probe.getMockImplementation()!;
+    f.probe.mockImplementation(async (profile) =>
+      profile.profile_id === "b"
+        ? { ...(await original(profile)), availability: "unavailable", verification: "failed" }
+        : original(profile),
+    );
+    f.catalog.mockClear();
+    const missing = await f.services.routes.modelAccountCatalog("codex");
+    expect(missing.accounts[1]).toMatchObject({
+      credentialProfileId: "b",
+      availability: "unavailable",
+      catalog: null,
+      problem: { code: "auth_unavailable" },
+    });
+    expect(f.catalog).toHaveBeenCalledTimes(1);
+  });
+
+  it("retains quota-exhausted account catalogs without admitting an inference", async () => {
+    const f = await fixture({ lazy: true });
+    const resetsAt = new Date(Date.now() + 60000).toISOString();
+    f.quota.ingest("codex", {
+      type: "error",
+      ts: new Date().toISOString(),
+      session_id: "quota",
+      credential_profile_id: "b",
+      credential_route: "vendor_native",
+      rate_limit: { resets_at: resetsAt, retry_delay_ms: null },
+    });
+    const view = await f.services.routes.modelAccountCatalog("codex");
+    expect(view.accounts[1]).toMatchObject({
+      availability: "unavailable",
+      problem: { code: "subscription_window_exhausted" },
+      catalog: { credentialProfileId: "b" },
+    });
+    expect(f.catalog).toHaveBeenCalledTimes(2);
+    expect(f.invoke).not.toHaveBeenCalled();
+  });
+
   it("constructs without creating the ResourceStore or probing accounts in recovery", async () => {
     const f = await fixture({ lazy: true });
     expect(f.resources).not.toHaveBeenCalled();

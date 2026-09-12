@@ -1,5 +1,8 @@
 import type { AdapterRegistry } from "@claudexor/core";
-import type { ControlHarnessModelsResponse } from "@claudexor/schema";
+import {
+  ControlHarnessAccountModelsResponse,
+  type ControlHarnessModelsResponse,
+} from "@claudexor/schema";
 import { HarnessGateway } from "@claudexor/gateway";
 import { createAgyAdapter } from "@claudexor/harness-agy";
 import { createClaudeAdapter } from "@claudexor/harness-claude";
@@ -8,6 +11,11 @@ import { createCursorAdapter } from "@claudexor/harness-cursor";
 import { FAKE_KINDS, createFakeHarness } from "@claudexor/harness-fake";
 import { createOpenCodeAdapter } from "@claudexor/harness-opencode";
 import { createRawApiAdapter } from "@claudexor/harness-raw-api";
+import {
+  catalogProfiles,
+  enumerateAccountCatalogs,
+  type AccountCatalogContext,
+} from "./account-catalog.js";
 
 export interface RegistryOptions {
   /** Register the fake-harness suite (so `--harness fake-*` works). Default true. */
@@ -75,7 +83,10 @@ export async function harnessModels(
     const models = await adapter.models({ cwd });
     return {
       harnessId,
-      models: models.map((m) => ({ ...m, routes: m.routes ?? null })),
+      models: models.map(({ processing: _processing, ...model }) => ({
+        ...model,
+        routes: model.routes ?? null,
+      })),
       source: "api",
       verifiedAgainst: null,
     };
@@ -99,4 +110,67 @@ export async function harnessModels(
     source: "manifest",
     verifiedAgainst: manifest.capabilities.known_models_verified_against,
   };
+}
+
+/** Opt-in account inventory. The legacy unscoped CLI/model list above keeps its exact contract. */
+export async function harnessAccountModels(
+  input: AccountCatalogContext & {
+    harnessId: string;
+    cwd: string;
+    credentialProfileId?: string;
+    route?: "local_session" | "api_key";
+    registry?: AdapterRegistry;
+  },
+): Promise<ControlHarnessAccountModelsResponse> {
+  const adapter = (input.registry ?? buildRegistry({ includeFakes: false })).get(input.harnessId);
+  const profiles = catalogProfiles(input, input.harnessId, input.credentialProfileId);
+  const accounts = await enumerateAccountCatalogs({
+    context: input,
+    adapter,
+    profiles,
+    read: async (profile, canReadCatalog) => {
+      if (!adapter) return null;
+      if (canReadCatalog && adapter.models) {
+        const models = await adapter.models({ cwd: input.cwd, credentialProfile: profile });
+        // The legacy array API also returns [] on transport failures; it is
+        // not a receipt proving this account has an empty vendor inventory.
+        if (models.length === 0) return null;
+        return {
+          harnessId: input.harnessId,
+          credentialProfileId: profile.profile_id,
+          models: models.map((model) => ({ ...model, routes: model.routes ?? null })),
+          source: "api" as const,
+          verifiedAgainst: null,
+          // models() may reuse a provider-owned cache and carries no observation receipt.
+          observedAt: null,
+          provenance: "adapter_models",
+        };
+      }
+      const manifest = await adapter.discover();
+      const route =
+        input.route ?? (profile.credential_kind === "api_key" ? "api_key" : "local_session");
+      const known = manifest.capabilities.known_models.filter(
+        (entry) => typeof entry === "string" || entry.routes.includes(route),
+      );
+      if (known.length === 0) return null;
+      return {
+        harnessId: input.harnessId,
+        credentialProfileId: profile.profile_id,
+        models: known.map((entry) =>
+          typeof entry === "string"
+            ? { id: entry, label: null, context_window: null, routes: null }
+            : { id: entry.id, label: null, context_window: null, routes: entry.routes },
+        ),
+        source: "manifest" as const,
+        verifiedAgainst: manifest.capabilities.known_models_verified_against,
+        observedAt: null,
+        provenance: "manifest",
+      };
+    },
+  });
+  return ControlHarnessAccountModelsResponse.parse({
+    harnessId: input.harnessId,
+    accounts,
+    partial: accounts.some((entry) => entry.catalog === null),
+  });
 }
