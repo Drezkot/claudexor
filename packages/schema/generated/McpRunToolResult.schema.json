@@ -4,6 +4,190 @@
     "McpRunToolResult": {
       "type": "object",
       "properties": {
+        "attemptExecution": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "attemptId": {
+                "type": "string",
+                "minLength": 1,
+                "description": "Non-empty identifier string."
+              },
+              "harnessId": {
+                "$ref": "#/definitions/McpRunToolResult/properties/attemptExecution/items/properties/attemptId"
+              },
+              "processing": {
+                "type": "object",
+                "properties": {
+                  "requested": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "enum": [
+                          "standard",
+                          "fast",
+                          "economy"
+                        ],
+                        "description": "Advisory service preference. Fast or Economy may use ordinary Standard service; fallback never introduces Fast. Omission preserves native defaults. Explicit native serviceTier takes precedence."
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "Advisory service preference. Fast or Economy may use ordinary Standard service; fallback never introduces Fast. Omission preserves native defaults. Explicit native serviceTier takes precedence."
+                  },
+                  "submitted": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/definitions/McpRunToolResult/properties/attemptExecution/items/properties/processing/properties/requested/anyOf/0"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "Advisory service preference. Fast or Economy may use ordinary Standard service; fallback never introduces Fast. Omission preserves native defaults. Explicit native serviceTier takes precedence."
+                  },
+                  "submittedNative": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "minLength": 1,
+                        "pattern": "\\S",
+                        "description": "User-supplied string that must contain visible content, not just whitespace."
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "User-supplied string that must contain visible content, not just whitespace."
+                  },
+                  "observed": {
+                    "type": "string",
+                    "enum": [
+                      "standard",
+                      "fast",
+                      "economy",
+                      "mixed",
+                      "unknown"
+                    ]
+                  },
+                  "observedNative": {
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/definitions/McpRunToolResult/properties/attemptExecution/items/properties/processing/properties/submittedNative/anyOf/0"
+                    }
+                  },
+                  "reason": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/definitions/McpRunToolResult/properties/attemptExecution/items/properties/processing/properties/submittedNative/anyOf/0"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "User-supplied string that must contain visible content, not just whitespace."
+                  },
+                  "source": {
+                    "$ref": "#/definitions/McpRunToolResult/properties/attemptExecution/items/properties/processing/properties/submittedNative/anyOf/0"
+                  }
+                },
+                "required": [
+                  "requested",
+                  "submitted",
+                  "submittedNative",
+                  "observed",
+                  "observedNative",
+                  "reason",
+                  "source"
+                ],
+                "additionalProperties": false,
+                "description": "Requested intent, submitted native control, and observed execution are independent facts. A submitted flag never proves observed service; mixed or missing session observations remain explicit."
+              },
+              "processingCostBasis": {
+                "type": "object",
+                "properties": {
+                  "nativeMode": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/definitions/McpRunToolResult/properties/attemptExecution/items/properties/processing/properties/submittedNative/anyOf/0"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "User-supplied string that must contain visible content, not just whitespace."
+                  },
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "included",
+                      "paid_credits",
+                      "cash",
+                      "valuation",
+                      "unknown"
+                    ]
+                  },
+                  "source": {
+                    "$ref": "#/definitions/McpRunToolResult/properties/attemptExecution/items/properties/processing/properties/submittedNative/anyOf/0"
+                  }
+                },
+                "required": [
+                  "nativeMode",
+                  "kind",
+                  "source"
+                ],
+                "additionalProperties": false,
+                "description": "Mode-qualified billing evidence for an existing cost record. Authentication alone does not establish included premium service; credits, cash, and token valuation stay distinct."
+              },
+              "usageCost": {
+                "type": "object",
+                "properties": {
+                  "cashUsd": {
+                    "type": "number",
+                    "minimum": 0
+                  },
+                  "valuationUsd": {
+                    "type": "number",
+                    "minimum": 0
+                  },
+                  "unknownUsd": {
+                    "type": "number",
+                    "minimum": 0
+                  },
+                  "cashKnowledge": {
+                    "type": "string",
+                    "enum": [
+                      "exact",
+                      "estimated",
+                      "unknown"
+                    ],
+                    "description": "Quality of incremental-cash cost evidence for an operation."
+                  },
+                  "valuationKnowledge": {
+                    "$ref": "#/definitions/McpRunToolResult/properties/attemptExecution/items/properties/usageCost/properties/cashKnowledge"
+                  }
+                },
+                "required": [
+                  "cashUsd",
+                  "valuationUsd",
+                  "unknownUsd",
+                  "cashKnowledge",
+                  "valuationKnowledge"
+                ],
+                "additionalProperties": false,
+                "description": "Observed usage components. An amount of unknown meaning is not charged cash; separately proven included service can still establish exact zero incremental cash."
+              }
+            },
+            "required": [
+              "attemptId",
+              "harnessId"
+            ],
+            "additionalProperties": false,
+            "description": "Compact projection of existing attempt execution and amount evidence."
+          }
+        },
         "summary": {
           "type": "string",
           "description": "Human-readable outcome summary (same text as the tool's text content)."
@@ -40,12 +224,10 @@
                   "description": "Schema version of the artifact; bumped on breaking ABI changes."
                 },
                 "run_id": {
-                  "type": "string",
-                  "minLength": 1,
-                  "description": "Non-empty identifier string."
+                  "$ref": "#/definitions/McpRunToolResult/properties/attemptExecution/items/properties/attemptId"
                 },
                 "task_id": {
-                  "$ref": "#/definitions/McpRunToolResult/properties/runFacts/anyOf/0/properties/run_id"
+                  "$ref": "#/definitions/McpRunToolResult/properties/attemptExecution/items/properties/attemptId"
                 },
                 "mode": {
                   "type": "string",
@@ -70,7 +252,10 @@
                       "description": "Terminal lifecycle of the run."
                     },
                     "noChanges": {
-                      "type": "boolean",
+                      "type": [
+                        "boolean",
+                        "null"
+                      ],
                       "default": false,
                       "description": "True when the run finished without changing any files (the ex no_op fact)."
                     },
@@ -231,6 +416,7 @@
                             "report",
                             "plan",
                             "patch",
+                            "files",
                             "structured_output"
                           ]
                         },
@@ -250,7 +436,7 @@
                     "producer_attempt_id": {
                       "anyOf": [
                         {
-                          "$ref": "#/definitions/McpRunToolResult/properties/runFacts/anyOf/0/properties/run_id"
+                          "$ref": "#/definitions/McpRunToolResult/properties/attemptExecution/items/properties/attemptId"
                         },
                         {
                           "type": "null"
@@ -291,6 +477,7 @@
                                 "report",
                                 "plan",
                                 "patch",
+                                "files",
                                 "structured_output",
                                 "diagnostic"
                               ],
@@ -339,7 +526,7 @@
                           "attempt_id": {
                             "anyOf": [
                               {
-                                "$ref": "#/definitions/McpRunToolResult/properties/runFacts/anyOf/0/properties/run_id"
+                                "$ref": "#/definitions/McpRunToolResult/properties/attemptExecution/items/properties/attemptId"
                               },
                               {
                                 "type": "null"
@@ -441,7 +628,7 @@
                     "receipt_attempt_id": {
                       "anyOf": [
                         {
-                          "$ref": "#/definitions/McpRunToolResult/properties/runFacts/anyOf/0/properties/run_id"
+                          "$ref": "#/definitions/McpRunToolResult/properties/attemptExecution/items/properties/attemptId"
                         },
                         {
                           "type": "null"
@@ -470,7 +657,7 @@
                     "blocker_ids": {
                       "type": "array",
                       "items": {
-                        "$ref": "#/definitions/McpRunToolResult/properties/runFacts/anyOf/0/properties/run_id"
+                        "$ref": "#/definitions/McpRunToolResult/properties/attemptExecution/items/properties/attemptId"
                       },
                       "default": [],
                       "description": "Stable ids of accepted evidence-backed blocking findings."

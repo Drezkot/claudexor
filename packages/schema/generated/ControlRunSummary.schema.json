@@ -389,6 +389,15 @@
               "credentialProfileId": {
                 "$ref": "#/definitions/ControlRunSummary/properties/reviewerPanel/items/properties/model",
                 "description": "Per-reviewer credential profile id; explicit pins are strict and never fall back."
+              },
+              "processingPreference": {
+                "type": "string",
+                "enum": [
+                  "standard",
+                  "fast",
+                  "economy"
+                ],
+                "description": "Advisory service preference. Fast or Economy may use ordinary Standard service; fallback never introduces Fast. Omission preserves native defaults. Explicit native serviceTier takes precedence."
               }
             },
             "required": [
@@ -902,6 +911,7 @@
               "type": "string",
               "enum": [
                 "patch",
+                "files",
                 "answer",
                 "plan",
                 "report",
@@ -965,7 +975,8 @@
                 "not_applied",
                 "applied",
                 "applied_review_blocked",
-                "reverted"
+                "reverted",
+                "discarded"
               ],
               "description": "Honest application state of a run's changes: not_applied (no in-place mutation), applied (applied and review clean), applied_review_blocked (applied but review blocked/unconverged), or reverted.",
               "default": "not_applied"
@@ -1020,7 +1031,10 @@
                   "description": "Terminal lifecycle of the run."
                 },
                 "noChanges": {
-                  "type": "boolean",
+                  "type": [
+                    "boolean",
+                    "null"
+                  ],
                   "default": false,
                   "description": "True when the run finished without changing any files (the ex no_op fact)."
                 },

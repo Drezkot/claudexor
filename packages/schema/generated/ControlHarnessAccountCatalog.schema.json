@@ -1,7 +1,7 @@
 {
-  "$ref": "#/definitions/ControlHarnessModelsResponse",
+  "$ref": "#/definitions/ControlHarnessAccountCatalog",
   "definitions": {
-    "ControlHarnessModelsResponse": {
+    "ControlHarnessAccountCatalog": {
       "type": "object",
       "properties": {
         "harnessId": {
@@ -41,7 +41,7 @@
                       "type": "object",
                       "properties": {
                         "mode": {
-                          "$ref": "#/definitions/ControlHarnessModelsResponse/properties/models/items/properties/processing/properties/modes/anyOf/0/items"
+                          "$ref": "#/definitions/ControlHarnessAccountCatalog/properties/models/items/properties/processing/properties/modes/anyOf/0/items"
                         },
                         "id": {
                           "type": "string",
@@ -60,7 +60,7 @@
                   "defaultNativeMode": {
                     "anyOf": [
                       {
-                        "$ref": "#/definitions/ControlHarnessModelsResponse/properties/models/items/properties/processing/properties/nativeModes/items/properties/id"
+                        "$ref": "#/definitions/ControlHarnessAccountCatalog/properties/models/items/properties/processing/properties/nativeModes/items/properties/id"
                       },
                       {
                         "type": "null"
@@ -75,7 +75,7 @@
                     ]
                   },
                   "source": {
-                    "$ref": "#/definitions/ControlHarnessModelsResponse/properties/models/items/properties/processing/properties/nativeModes/items/properties/id"
+                    "$ref": "#/definitions/ControlHarnessAccountCatalog/properties/models/items/properties/processing/properties/nativeModes/items/properties/id"
                   },
                   "observedAt": {
                     "anyOf": [
@@ -172,11 +172,33 @@
           ],
           "default": null,
           "description": "Vendor CLI version the manifest hints were last verified against; null for api/none sources."
+        },
+        "credentialProfileId": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Non-empty identifier string."
+        },
+        "observedAt": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/ControlHarnessAccountCatalog/properties/models/items/properties/processing/properties/observedAt/anyOf/0"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Original account catalog observation, or null for manifest hints whose observation time is unknown."
+        },
+        "provenance": {
+          "$ref": "#/definitions/ControlHarnessAccountCatalog/properties/models/items/properties/processing/properties/nativeModes/items/properties/id"
         }
       },
       "required": [
         "harnessId",
-        "source"
+        "source",
+        "credentialProfileId",
+        "observedAt",
+        "provenance"
       ],
       "additionalProperties": false,
       "description": "Models enumerable for one harness, with honest provenance."

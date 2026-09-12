@@ -373,6 +373,19 @@
                 "capabilities": {
                   "type": "object",
                   "properties": {
+                    "processing_preferences": {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "enum": [
+                          "standard",
+                          "fast",
+                          "economy"
+                        ],
+                        "description": "Advisory service preference. Fast or Economy may use ordinary Standard service; fallback never introduces Fast. Omission preserves native defaults. Explicit native serviceTier takes precedence."
+                      },
+                      "description": "Service preferences translated by this adapter; model/account support is separate."
+                    },
                     "plan": {
                       "type": "boolean",
                       "default": false,

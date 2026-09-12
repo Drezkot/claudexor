@@ -11,7 +11,8 @@
             "rerun_with_feedback",
             "accept_risk",
             "override_needs_human",
-            "revert_run"
+            "revert_run",
+            "discard"
           ],
           "description": "Operator decision on a blocked run: accept_clean_patch (apply it), rerun_with_feedback, accept_risk, override_needs_human, or revert_run (restore the pre-turn snapshot)."
         },

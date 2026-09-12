@@ -230,6 +230,42 @@
         "cost": {
           "type": "object",
           "properties": {
+            "processing": {
+              "type": "object",
+              "properties": {
+                "nativeMode": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/definitions/ModelCallResult/properties/message/anyOf/0/properties/tool_calls/items/properties/function/properties/name"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "description": "User-supplied string that must contain visible content, not just whitespace."
+                },
+                "kind": {
+                  "type": "string",
+                  "enum": [
+                    "included",
+                    "paid_credits",
+                    "cash",
+                    "valuation",
+                    "unknown"
+                  ]
+                },
+                "source": {
+                  "$ref": "#/definitions/ModelCallResult/properties/message/anyOf/0/properties/tool_calls/items/properties/function/properties/name"
+                }
+              },
+              "required": [
+                "nativeMode",
+                "kind",
+                "source"
+              ],
+              "additionalProperties": false,
+              "description": "Mode-qualified billing evidence for an existing cost record. Authentication alone does not establish included premium service; credits, cash, and token valuation stay distinct."
+            },
             "knowledge": {
               "type": "string",
               "enum": [
@@ -323,6 +359,15 @@
               "$ref": "#/definitions/ModelCallResult/properties/message/anyOf/0/properties/tool_calls/items/properties/function/properties/name",
               "description": "User-supplied string that must contain visible content, not just whitespace."
             },
+            "processingPreference": {
+              "type": "string",
+              "enum": [
+                "standard",
+                "fast",
+                "economy"
+              ],
+              "description": "Advisory service preference. Fast or Economy may use ordinary Standard service; fallback never introduces Fast. Omission preserves native defaults. Explicit native serviceTier takes precedence."
+            },
             "parallelToolCalls": {
               "type": "boolean"
             },
@@ -340,6 +385,85 @@
           },
           "additionalProperties": false,
           "description": "Generation options only, not a caller's context/output reserve; unsupported explicit options refuse before inference."
+        },
+        "processing": {
+          "type": "object",
+          "properties": {
+            "requested": {
+              "anyOf": [
+                {
+                  "$ref": "#/definitions/ModelCallResult/properties/appliedOptions/properties/processingPreference"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Advisory service preference. Fast or Economy may use ordinary Standard service; fallback never introduces Fast. Omission preserves native defaults. Explicit native serviceTier takes precedence."
+            },
+            "submitted": {
+              "anyOf": [
+                {
+                  "$ref": "#/definitions/ModelCallResult/properties/appliedOptions/properties/processingPreference"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Advisory service preference. Fast or Economy may use ordinary Standard service; fallback never introduces Fast. Omission preserves native defaults. Explicit native serviceTier takes precedence."
+            },
+            "submittedNative": {
+              "anyOf": [
+                {
+                  "$ref": "#/definitions/ModelCallResult/properties/message/anyOf/0/properties/tool_calls/items/properties/function/properties/name"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "User-supplied string that must contain visible content, not just whitespace."
+            },
+            "observed": {
+              "type": "string",
+              "enum": [
+                "standard",
+                "fast",
+                "economy",
+                "mixed",
+                "unknown"
+              ]
+            },
+            "observedNative": {
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/ModelCallResult/properties/message/anyOf/0/properties/tool_calls/items/properties/function/properties/name"
+              }
+            },
+            "reason": {
+              "anyOf": [
+                {
+                  "$ref": "#/definitions/ModelCallResult/properties/message/anyOf/0/properties/tool_calls/items/properties/function/properties/name"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "User-supplied string that must contain visible content, not just whitespace."
+            },
+            "source": {
+              "$ref": "#/definitions/ModelCallResult/properties/message/anyOf/0/properties/tool_calls/items/properties/function/properties/name"
+            }
+          },
+          "required": [
+            "requested",
+            "submitted",
+            "submittedNative",
+            "observed",
+            "observedNative",
+            "reason",
+            "source"
+          ],
+          "additionalProperties": false,
+          "description": "Requested intent, submitted native control, and observed execution are independent facts. A submitted flag never proves observed service; mixed or missing session observations remain explicit."
         },
         "problem": {
           "anyOf": [

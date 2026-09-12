@@ -201,4 +201,19 @@ describe("complete files result through the ordinary control API", () => {
     const f = await fixture(false, "live");
     expect((await f.request("decision", { action: "discard" })).status).toBe(409);
   });
+  it("replaying a partial delivery receipt cannot resurrect a discarded remainder", async () => {
+    const f = await fixture();
+    const body = { mode: "apply", paths: ["new.txt"] };
+    const first = await (await f.request("apply", body, "subset")).json();
+    expect(first).toMatchObject({ applied: true, appliedPaths: ["new.txt"] });
+    expect(
+      await (await f.request("decision", { action: "discard" }, "discard-rest")).json(),
+    ).toMatchObject({ accepted: true, status: "discarded" });
+    expect(await (await f.request("apply", body, "subset")).json()).toEqual(first);
+    expect(parse(await readFile(join(f.run, "final/delivery_state.yaml"), "utf8"))).toMatchObject({
+      applyState: "discarded",
+      appliedPaths: ["new.txt"],
+    });
+    expect(await readFile(join(f.source, "document.bin"), "utf8")).toBe("baseline\n");
+  });
 });

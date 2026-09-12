@@ -73,7 +73,10 @@
                       "description": "Terminal lifecycle of the run."
                     },
                     "noChanges": {
-                      "type": "boolean",
+                      "type": [
+                        "boolean",
+                        "null"
+                      ],
                       "default": false,
                       "description": "True when the run finished without changing any files (the ex no_op fact)."
                     },
@@ -234,6 +237,7 @@
                             "report",
                             "plan",
                             "patch",
+                            "files",
                             "structured_output"
                           ]
                         },
@@ -294,6 +298,7 @@
                                 "report",
                                 "plan",
                                 "patch",
+                                "files",
                                 "structured_output",
                                 "diagnostic"
                               ],

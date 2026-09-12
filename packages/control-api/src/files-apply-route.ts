@@ -28,8 +28,8 @@ export async function applyFilesResult(
       new Error("Directory results support file application; branch, commit and PR require Git"),
       { status: 400 },
     );
-  const result = await ctx.chainMutation(record, () =>
-    runIdempotentDelivery(ctx.services, {
+  return ctx.chainMutation(record, async () => {
+    const result = await runIdempotentDelivery(ctx.services, {
       params: record.params,
       key,
       operation: "run.apply",
@@ -55,19 +55,22 @@ export async function applyFilesResult(
           (verify) => ctx.gateError(record, "", root, verify),
         );
       },
-    }),
-  );
-  if (result.appliedPaths.length || result.applied)
-    ctx.markFilesApplied?.(record, result.appliedPaths, candidate.manifest);
-  ctx.appendAudit(record, result.applied ? "control.applied" : "control.rejected", {
-    control: "apply",
-    kind: "files",
-    manifest_sha256: candidate.manifestSha256,
-    applied: result.applied,
-    tree_mutated: result.treeMutated,
-    applied_paths: result.appliedPaths,
+    });
+    if (
+      ctx.deliveredApplyState(record) !== "discarded" &&
+      (result.appliedPaths.length || result.applied)
+    )
+      ctx.markFilesApplied?.(record, result.appliedPaths, candidate.manifest);
+    ctx.appendAudit(record, result.applied ? "control.applied" : "control.rejected", {
+      control: "apply",
+      kind: "files",
+      manifest_sha256: candidate.manifestSha256,
+      applied: result.applied,
+      tree_mutated: result.treeMutated,
+      applied_paths: result.appliedPaths,
+    });
+    return ControlDeliveryResponse.parse(result);
   });
-  return ControlDeliveryResponse.parse(result);
 }
 
 export async function checkFilesResult(
