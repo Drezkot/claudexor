@@ -110,10 +110,12 @@ unrecovered non-ok result from an exact injected belt tool likewise hard-fails
 the Agent outcome; the Delegate receipt still says `used:true` because it records
 which path ran, not whether that operation succeeded. An isolated-envelope
 deliverable remains diagnostic and cannot be auto-adopted. If an explicitly
-in-place lane already changed the live tree, the failure first emits a durable
+Git-backed in-place lane already changed the live tree, the failure first emits a durable
 `adopted:true`, `applied_review_blocked` WorkProduct with pre/post snapshots and
 a revert anchor, then emits the failed terminal; this records unavoidable live
-bytes honestly without treating them as reviewed success. A secret-bearing
+bytes honestly without treating them as reviewed success. Direct directory
+effects instead use the [file-result contract](#directory-execution), with no
+unproved revert anchor. A secret-bearing
 in-place diff takes the INV-062 exception before any candidate artifact or Git
 post-snapshot: the engine attempts an exact checked reverse apply from the
   transient diff after scanning immutable binary preimages/postimages and textual
@@ -166,8 +168,10 @@ at every wire boundary.
   are deterministic offline test fixtures (incl. `fake-implement`, which writes a
   real worktree file); they are explicit-`--harness` only and never enter
   auto/reviewer pools.
-- `packages/workspace`: disposable candidates use private shared-clone Git
-  authority while persistent threads materialize git worktrees on their first
+- `packages/workspace`: Git-backed disposable candidates use private shared-clone Git
+  authority; explicit directory workspaces use a selected live folder or a
+  complete copy of the selected input footprint. Git-backed persistent threads
+  materialize git worktrees on their first
   mutating turn (read-only turns reuse one if present); scoped harness homes/
   config dirs for write envelopes and read-only routes via `readOnlyHomeEnv` keep
   relocatable, route-local state outside both the worktree and the operator's
@@ -177,8 +181,9 @@ at every wire boundary.
   refuses rather than starting a harness in the operator's home.
   A selected native Codex route uses its Claudexor-owned file-only profile;
   native Claude also uses a Claudexor-owned config dir and exposes only the
-  narrow host Keychain bridge described in §5. The package also owns diff
-  capture and path-safe disposal.
+  narrow host Keychain bridge described in §5. The package also owns Git diff
+  capture, digest-bound directory manifests and
+  content, per-file application, and path-safe disposal.
 - `packages/review`: deterministic gates, review, revalidation, convergence
   predicate, readiness ledger.
 - `packages/arbitration`, `packages/synthesis`, `packages/budget`: evidence
@@ -189,7 +194,8 @@ at every wire boundary.
 - `packages/context`: scope atlas + lazy ContextPack for read-only modes.
 - `packages/config`: layered config loading (global, project, user-level trust).
 - `packages/secrets`: v2 file-only 0600 secret store and secret resolution.
-- `packages/delivery`: patch check/apply/commit/branch/PR delivery and the
+- `packages/delivery`: patch check/apply/commit/branch/PR delivery, copied-file
+  verification and application, and the
   single-owner apply gate.
 - `packages/artifact-store`, `packages/event-log`: run artifact tree and
   append-only event log writers.
@@ -264,7 +270,7 @@ is the stable project identity used for registration, configuration, trust,
 TaskContract, artifacts, and history. `execution.workspaceRoot` is the
 one-shot absolute existing directory used as the `executionRoot` field on
 `RunInput`, so the
-harness cwd and native Git operations happen only there. Every new mutating
+harness cwd and workspace operations happen only there. Every new mutating
 delegated-live request must supply it and never falls back to `scope.root`.
 Read-only requests may omit it. Exact Retry revalidates a frozen new-shape
 workspace; the bounded legacy no-field replay retains its historical
@@ -535,12 +541,13 @@ shared CLI run loop; prompt bytes never ride their process argv. One-shot stdin
 and a bidirectional session are exclusive owners of the same pipe. Adapters
 without a verified prompt-stdin contract retain their vendor-specific transport.
 
-Disposable candidate envelopes also preserve bounded raster outputs before
+Git-backed candidate envelopes also preserve bounded raster previews before
 cleanup (PNG/JPEG/WebP/GIF, 16 MiB each / 32 MiB total) under the attempt's
 run-artifact tree. The winner's copies materialize at the run root so relative
 markdown screenshot links remain inspectable after the worktree is disposed;
 they remain INTERNAL run evidence until the patch is applied to the project,
-preserving INV-051's two artifact planes.
+preserving INV-051's two artifact planes. These preview limits do not limit the
+complete content of a [directory file result](#directory-execution).
 
 Browser-produced media is written below one envelope-owned child,
 `.claudexor-artifacts/<envelope-id>/`, never into a shared Claudexor-owned
@@ -1055,6 +1062,8 @@ bundle with a reason, `skipped` = single report).
 
 ### Agent
 
+#### Directory execution
+
 Explicit `execution.workspaceKind: directory` keeps the ordinary Agent pipeline
 and its requested strategy. `execution.isolation: live` operates directly in the
 actual execution folder; `envelope` materializes the entire selected `scopePaths`
@@ -1063,19 +1072,38 @@ identity. No directory path initializes Git or creates a mandatory full-tree
 baseline copy. A direct footprint records selected preimage hashes and later
 output bytes; typed observed file changes may add outputs whose preimages are
 unknown. An empty or partial direct observation never proves `noChanges: true`.
+The CLI exposes these fields as `--workspace-kind directory`, repeatable
+`--scope-path <relative-path>`, and `--in-place` for live execution. An omitted
+footprint selects no existing inputs; `--scope-path .` explicitly selects the
+whole folder. A selected path may be absent at preparation and become a new
+output. Selection controls copied inputs and capture coverage, not the native
+harness's filesystem permissions.
 
 Directory work produces a `files` WorkProduct. Its `files.manifest` and
 `meta.manifest_sha256` address a complete file manifest in the existing run
 artifact tree, including source/execution roots, selection, completeness, modes,
-symlinks and full content references. Null preimages mean proven absence;
+symlinks and full content references at `final/files/manifest.json` and
+`final/files/content/<digest>`. Completeness refers to the declared footprint,
+not to an unobserved whole source tree. Null preimages mean proven absence;
 `unknown` cannot authorize overwriting an existing target. Copied inputs remain
 available for fresh verification, and new outputs outside the initial selection
 are retained. The artifact endpoint streams exact manifest-referenced bytes;
 bounded previews are not delivery payloads. Apply uses the existing journal,
-target mutation lease, verifier and per-file preimage checks. A partial selection
-records delivered paths in `delivery_state.yaml` and keeps remaining custody.
+target mutation lease, verifier and per-file preimage checks against the original
+source root. File contents, modes, directory entries and symlink targets retain
+their filesystem meaning; special entries or unsupported filesystem operations
+fail explicitly. Copy delivery supports apply, not Git commit/branch/PR modes.
+A partial selection records `appliedPaths` in `final/delivery_state.yaml` and
+keeps `applyState: not_applied` while changes remain. Only complete delivery
+sets `applyState: applied`.
 Explicit `discard` closes remaining copy delivery without applying or reverting
-anything. Direct effects are already in place and have no promised full rollback.
+anything. A conflict preserves unrelated target edits; if application stops after
+some entries changed, the receipt names the applied paths and retains the rest.
+It is not a whole-tree atomic transaction. Direct effects are already in place
+and have no promised full rollback. Binary, large, GUI-created and file-only
+outputs are evaluated from their recorded files, never from an empty text patch.
+
+#### Git execution
 
 `claudexor agent` defaults to `agent`. It is a one-candidate orchestrator/envelope
 run: the harness works in an isolated workspace, Claudexor captures the git diff,
@@ -1120,15 +1148,19 @@ respected untouched. Both operands are classified on their PHYSICAL
 resolution (realpath of the raw spellings, exactly git's own `-C`
 resolution), so a symlinked spelling of the home cannot slip past the guard
 and a home that fails to resolve physically refuses fail-closed. Ordinary
-non-git roots keep the announced auto-init. If a non-transactional Git step fails after
+non-git roots keep the announced auto-init only when a Git-backed shape was
+selected; explicit directory execution does not take this path. If a
+non-transactional Git step fails after
 repository metadata may have changed, that same event carries `partial:true`,
 the failed stage, and the proven progress before the workspace failure; CLI and
 Control timeline render the incomplete initialization as a warning instead of
 hiding it behind the terminal error.
 
-Supported in-place non-Git shapes remain available: Ask and Plan do not require
-Git there, and the existing live Agent convergence path can use its copied
-baseline. A Git-backed shape instead refuses before a provider starts when the
+Supported non-Git shapes remain available: Ask and Plan do not require
+Git there, and explicit directory Agent execution supports both live and copied
+workspaces. The legacy live Agent convergence path retains its copied baseline
+when directory execution was not selected. A Git-backed shape instead refuses
+before a provider starts when the
 executable is missing, is Apple's developer-tools launcher stub, or fails its
 probe. Direct `/v2/runs` keeps eager admission. A thread turn is persisted first,
 then runs the same preflight in the durable daemon job immediately before
@@ -1217,7 +1249,7 @@ Runs one selected compatible harness read-only with `intent: audit` and writes
 
 ## 7. Control API
 
-### Caller-owned model operations
+### Processing and account catalogs
 
 The optional Processing contract follows the
 [single advisory rule](DEVELOPMENT.md#processing-preference). Model calls carry
@@ -1236,6 +1268,21 @@ account does not erase siblings. Manifest hints and cached observations never
 acquire a new provider timestamp. Explicit profile selection narrows only that
 account. Execution still performs its independent current readiness and model
 admission. Legacy queries retain their strict pre-existing response shape.
+
+The operation descriptor's `view` parameter is the negotiation marker. Raw
+`/v2/model-sources` metadata is enriched only with `view=accounts`, including
+`processingPreferences` and `accountCatalog`; Agent capability rows expose their
+supported contract separately. Account model responses carry `source` or
+`harnessId`, `accounts` and `partial`. Each row keeps `credentialProfileId`,
+`availability`, `problem` and a nullable catalog. A missing catalog sets
+`partial:true`; a quota-blocked account may still have a readable inventory.
+Catalog union is for discovery, not an inference entitlement or a maximum
+capacity assembled from different accounts. A network failure remains unknown,
+not proof of absent authentication. Native array-only inventories have no
+observation receipt and therefore use a null observation time; manifest hints
+remain identified as manifest data.
+
+### Caller-owned model operations
 
 The engine also accepts one raw model generation independently of Agent Runs.
 `ModelAdapter` in core and the model-operation schemas define caller-owned
@@ -1303,6 +1350,18 @@ death are separate facts. A crash after response bytes are published but before
 the command's terminal journal commit retains an unknown outcome; uncommitted
 bytes cannot certify a completed response and are reclaimed as crash residue.
 
+An opted-in advisory request may return `processing_unavailable` with context
+`generationStarted: false`, `processingFallback: "standard"`, and
+`processingRefusal: "capacity" | "unsupported"`. This is restricted to a
+non-success HTTP response: HTTP 429 `resource_unavailable` on submitted Flex,
+or HTTP 400 `unsupported_parameter` for `service_tier` on submitted Fast/Flex.
+An explicit native `serviceTier`
+override never becomes an advisory fallback. The operation still records the
+physical send and `response_received`; the proof concerns generation, not
+dispatch. The caller may create a separate Standard request and reservation.
+No engine retry is introduced, and generic auth/quota failures, timeouts,
+unknown outcomes or failures inside a response stream provide no such proof.
+
 The operation catalog and generated endpoint reference below are the wire SSOT.
 Account Auto reuses the existing compatible pool, preferring the prior suitable
 profile; explicit pin never rotates. Any typed catalog refusal excludes that
@@ -1316,8 +1375,9 @@ Pool refusal is projected from typed per-account causes: an all-quota pool is
 `subscription_window_exhausted`, an all-authentication pool is `auth_required`,
 and a mixed, unknown, empty or disabled pool remains unavailable with its compact
 `poolCause` evidence. The generic `credential_pool_exhausted` code alone does not
-prove quota exhaustion. Catalog polling obeys the same current quota admission
-without starting a generation.
+prove quota exhaustion. Legacy selected-account catalog reads obey the same current quota admission
+without starting a generation. The opt-in account view enumerates enabled
+inventories separately, as described [above](#processing-and-account-catalogs).
 
 Catalog `provenance: "provider_http"` means the adapter read and validated a
 successful upstream HTTP catalog response at `observedAt`. Reusing that catalog
@@ -1978,7 +2038,10 @@ client. It deletes ONLY terminal, unreferenced, non-actionable trees past
 the configured age (`retention.*` in the global config: runs 30d, reviews
 14d, newest N per project always survive): live/blocked records, runs
 referenced by any non-purged thread's lineage, undelivered/applyable
-patches, and trees with no terminal evidence are protected fail-closed. A
+patches or copied-file results, and trees with no terminal evidence are protected
+fail-closed. Partial file delivery retains that protection; explicit discard
+ends pending delivery but does not delete artifacts immediately or bypass other
+retention protections. A
 reclaimed run leaves a tombstone projection behind, so its artifacts answer
 with a typed 410 `run_expired_by_retention` — never a mysterious 404. The
 receipt also carries an advisory `data_root_unrecognized` listing — names of
@@ -2219,7 +2282,8 @@ Corrupt journal state fails closed; operational artifacts cannot reconstruct or
 override lifecycle truth.
 
 Every endpoint is loopback + bearer-token guarded. Apply endpoints read
-`final/patch.diff`; read-only modes without a patch return a real error instead
+`final/patch.diff` for Git work or the digest-bound manifest for copied-file
+work; read-only modes without an applicable result return a real error instead
 of local fake apply state.
 
 `POST /v2/runs/:id/control` is capability-based. The implemented verb is `cancel`:
@@ -2332,6 +2396,10 @@ fence (Bible INV-113); an unlisted mutation path is a release blocker:
    `claudexor apply` both go through the delivery-owned `verifyAndDeliver`:
    the shared apply gate authorizes the run, a fresh verifier checks the exact
    patch, and an unchanged target preimage is required before mutation.
+   Copied directory results use the same delivery owner and target lease with
+   complete manifest-bound content, reproduction on the retained selected baseline,
+   and per-file preimage checks. Partial delivery retains the remaining paths;
+   direct effects and discard do not enter this apply path.
    Replaying apply on an already-delivered run (a fresh invocation with a new
    idempotency key) is a typed idempotent no-op: when the forward patch no
    longer applies but the reverse check proves the tree is already this patch's
@@ -2343,11 +2411,13 @@ fence (Bible INV-113); an unlisted mutation path is a release blocker:
    one-shot surface (`POST /v2/runs` with `execution.isolation: "live"`,
    agent-mode only; `execution.delegated` external-orchestrator runs ride this
    same shape) executes directly in the live project tree. Fences (the same
-   machinery for both): a pre-turn snapshot is taken at turn/run start and a
+   machinery for Git-backed turns): a pre-turn snapshot is taken at turn/run start and a
    post-turn snapshot at turn end (the per-turn diff base, so prior dirty state
    is never attributed to the turn), and the server-owned `revert_run` decision
    uses an external content-addressed pre/post anchor (overlapping later user
-   edits are refused, below).
+   edits are refused, below). Explicit directory execution records its selected
+   footprint and observed effects instead; it does not promise a whole-tree
+   baseline or full rollback.
 3. **Best-of winner adoption** — a best-of-N thread race runs candidates in
    isolated envelopes and applies the winner's patch to the execution tree only
    on a fully verified `success`; `ungated`, `review_not_run`, blocked,
@@ -2371,7 +2441,8 @@ fence (Bible INV-113); an unlisted mutation path is a release blocker:
 5. **Automatic git init** — a NON-GIT project folder is initialized before a
    Git-backed mutating run shape crosses its boundary (`git init`, deterministic
    baseline commit). This includes the first mutating isolated-thread turn and
-   Agent write-envelope paths; read-only and supported non-Git in-place shapes do
+   Git-backed Agent write-envelope paths; explicit directory, read-only and
+   supported non-Git in-place shapes do
    not initialize.
    Fence: the mutation is announced via a typed `project.git.initialized` run
    event — never silent. A partial non-transactional failure emits the same
@@ -2484,7 +2555,8 @@ identity authority. Route proof, findings, and reviewer telemetry record the
 requested/effective profile plus any profile id emitted by the harness, so a
 requested pin cannot be mistaken for observed identity.
 
-Reviewer prompts always review code through the normal patch contract. The
+Reviewer prompts review the selected candidate through its patch or complete
+file-manifest contract. The
 retired standalone Plan-review subject has no runtime or surface representation.
 
 Paid budgets use an explicit tagged contract: `{kind: unlimited}` or
@@ -2512,15 +2584,18 @@ Persisted routing cost averages carry a cost-evidence generation in the existing
 metrics file. Older unclassified costs are read as unknown while duration,
 sample counts and auth routing survive. A new explicitly unpriced attempt
 clears the cost average; auth-only updates preserve compatible observations.
-Mixed review panels settle
-native reviewers to valuation and API-key reviewers to cash independently;
+Mixed review panels classify
+each observed amount separately from its prospective billing basis;
 their aggregate is never blindly charged as cash. Candidate and reviewer
 retries classify EACH usage event by that event/current typed credential
-route; a native→API-key retry cannot hide later metered spend under the first
+route and Processing evidence; a native→API-key retry cannot hide later metered spend under the first
 native route, and an undisclosed route remains cost-unverifiable. A typed auth
 fallback disclosed before the vendor process starts selects the carried route
 but does not create a billable interval; only a real `started` interval can end
-without a receipt and make cash cost permanently unknown. `finite(0)` admits
+without a receipt and make cash cost permanently unknown. Candidate and reviewer
+streams feed the existing lease hold with cash and unknown amounts on potentially
+paid routes. A reviewer cap stops the panel while retaining partial usage;
+unknown ordinary-included amounts do not become paid holds. `finite(0)` admits
 only proven-zero or subscription-entitlement work; a positive finite cap permits
 at most one unknown-cost paid unit in flight. A later exact charge above the cap
 is retained and ends `budget_overshoot`; permanently unknown cost ends
@@ -2845,6 +2920,8 @@ attempts/pNN/council-input.yaml? (Council planner input evidence)
 council/draft-<harness>.md?
 council/membership.yaml?
 attempts/aNN/patch.diff
+final/files/manifest.json?    (directory WorkProduct)
+final/files/content/<digest>?
 reviews/*.yaml
 reviews/*-reviewers/reviewer-progress.jsonl
 reviews/*-reviewers/evidence/DIFF.patch
@@ -2886,6 +2963,18 @@ run's `outcomeFacts`, so a needs_input/incomplete run is non-applyable and the
 outcome-aware CLI exit projection returns non-zero even on a succeeded
 lifecycle.
 Surfaces project it; they never recompute evidence from raw events or model prose.
+
+Attempt `processing`, `processing_cost_basis` and `usage_cost` preserve service
+intent/submission/observation, prospective billing, and observed cash/valuation/
+unknown amounts with independent knowledge. The optional
+`attemptExecution` array on `ControlRunDetail`, also projected by MCP run reads,
+contains `attemptId`, `harnessId`, and optional `processing`,
+`processingCostBasis` and `usageCost` from those existing attempt records.
+`usageCost` carries `cashUsd`, `valuationUsd`, `unknownUsd`, `cashKnowledge`
+and `valuationKnowledge`. `unknownUsd` is a reported amount whose meaning is
+unknown, not an estimate of all unobserved spending; zero components with
+unknown knowledge do not prove zero cost. Clients can consume these facts
+without fetching raw telemetry or reconstructing receipts.
 
 Attempt `usage` and run `usage_totals` optionally include `input_token_usage`:
 complete input `total_tokens`, `cache_read_tokens`, and `cache_write_tokens`, each
@@ -2943,10 +3032,16 @@ in the diff, while excluding unrelated ignored local notes and their siblings.
 The shared sensitive-resource path/content policy remains a final exclusion over
 that inventory. Membership follows host path semantics: a literal backslash in
 a POSIX file name is never normalized into a directory separator. Without a Git
-inventory the candidate plane is limited to diff-touched postimages. The evidence
+inventory the legacy candidate plane is limited to diff-touched postimages.
+Directory results instead supply the complete selected postimage manifest,
+including unchanged selected inputs needed to review the result, through
+`candidatePaths`. A text diff may be empty. The evidence
 directory never inherits either rule: it is copied through its own explicit
 redacted or sealed-packet boundary. Each reviewer artifact records which
 inventory mode was used.
+Reviewer scratch may initialize its own disposable Git metadata for native
+read-only tooling; this never initializes the source directory or changes its
+execution geometry.
 
 Files are the source of truth. UI and terminal output are projections. The
 control API also projects `primaryOutput`, `timeline`, and `budget` from these
@@ -3552,13 +3647,14 @@ code touching one of these areas must honor it or change it explicitly here.
 - Read-only flows never materialize a Git boundary, capture a patch, or emit a
   patch WorkProduct. An isolated thread reuses its worktree only after a mutating
   turn has already materialized it; otherwise it reads the stable project.
-  Git-backed write envelopes initialize per INV-075 and the implemented live
+  Git-backed write envelopes initialize per INV-075. Explicit directory Agent
+  execution uses the [directory contract](#directory-execution); the legacy live
   Agent convergence path keeps its non-Git copied baseline.
   A root equal to the user home directory or a filesystem root — or one that
   cannot be classified — is refused with the typed `git_boundary_root_refused`
   error before any mutation instead of being initialized (INV-075 exception);
-  ordinary non-git roots keep the announced auto-init.
-  If exact capture or reversal cannot be proven for an explicit in-place run,
+  ordinary non-git roots keep the announced auto-init only for Git-backed shapes.
+  If exact capture or reversal cannot be proven for a legacy in-place patch run,
   Claudexor fails closed with a sanitized `manual_cleanup` receipt; it never
   substitutes an empty diff and asks reviewers to trust the live tree.
   Presentation remains capped at 200 kB only after the full text diff has crossed
