@@ -5,6 +5,7 @@ import {
   AuthPreference,
   ExternalContextPolicy,
   Id,
+  IsoTimestamp,
   ModeKind,
   NonBlankString,
   OutputReadyState,
@@ -32,6 +33,8 @@ import { makeControlRunRetrySchemas } from "./control-run-retry.js";
 import { ControlAuthRoute } from "./control-auth-route.js";
 import { DelegatedChildRunIds, RunDelegationInfo } from "./delegation.js";
 import { HARNESS_INACTIVITY_TIMEOUT_DEFAULT_MS, InteractionTimeoutValue } from "./config.js";
+import { ProcessingPreference } from "./processing.js";
+import { AccountCatalogAvailability } from "./model-operation.js";
 export { RunExecution } from "./control-run-execution.js";
 export { ControlTimelineEvent } from "./control-timeline.js";
 export const ControlReviewerPanelEntry = z
@@ -52,6 +55,7 @@ export const ControlReviewerPanelEntry = z
     credentialProfileId: NonBlankString.optional().describe(
       "Per-reviewer credential profile id; explicit pins are strict and never fall back.",
     ),
+    processingPreference: ProcessingPreference.optional(),
   })
   .strict()
   .describe(
@@ -103,6 +107,7 @@ export const ControlRunStartRequest = z
         "Harness-scoped model map (harness id to model id); an entry here wins over the scalar model and over the per-harness settings default.",
       ),
     effort: EffortHint.optional().describe("Requested reasoning effort."),
+    processingPreference: ProcessingPreference.optional(),
     /** Harness-scoped effort map (harness id → effort). Specific beats general:
      * an entry here wins over the scalar `effort` and the per-harness settings
      * default, analogous to `models`. Exact Retry replays the frozen
@@ -1382,6 +1387,32 @@ export const ControlHarnessModelsResponse = z
   })
   .describe("Models enumerable for one harness, with honest provenance.");
 export type ControlHarnessModelsResponse = z.infer<typeof ControlHarnessModelsResponse>;
+
+export const ControlHarnessAccountCatalog = ControlHarnessModelsResponse.extend({
+  credentialProfileId: Id,
+  observedAt: IsoTimestamp.nullable().describe(
+    "Original account catalog observation, or null for manifest hints whose observation time is unknown.",
+  ),
+  provenance: NonBlankString,
+}).strict();
+export type ControlHarnessAccountCatalog = z.infer<typeof ControlHarnessAccountCatalog>;
+export const ControlHarnessAccountModelsResponse = z
+  .object({
+    harnessId: Id,
+    accounts: z.array(
+      AccountCatalogAvailability.extend({ catalog: ControlHarnessAccountCatalog.nullable() }),
+    ),
+    partial: z.boolean(),
+  })
+  .strict();
+export type ControlHarnessAccountModelsResponse = z.infer<
+  typeof ControlHarnessAccountModelsResponse
+>;
+export const ControlHarnessModelsQueryResponse = z.union([
+  ControlHarnessModelsResponse.strict(),
+  ControlHarnessAccountModelsResponse,
+]);
+export type ControlHarnessModelsQueryResponse = z.infer<typeof ControlHarnessModelsQueryResponse>;
 
 export const ControlSettingsSnapshot = z
   .object({
