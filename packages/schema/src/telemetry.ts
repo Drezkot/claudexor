@@ -12,7 +12,7 @@ import {
 import { OutputSchemaDialect } from "./output-schema-dialect.js";
 import { DeepScanSynthesis } from "./deep-scan.js";
 import { ToolKind } from "./tool-ref.js";
-import { AuthMode, RouteRankingRationale } from "./budget.js";
+import { AuthMode, RouteRankingRationale, UsageCostSummary } from "./budget.js";
 import { AuthRouteReason, AuthSourceKind } from "./auth.js";
 import { RequestRequirementResolution } from "./request-requirements.js";
 import { WorkState } from "./work-report.js";
@@ -379,6 +379,7 @@ export type BrowserEvidenceRecord = z.infer<typeof BrowserEvidenceRecord>;
 
 export const AttemptTelemetryRecord = z
   .object({
+    usage_cost: UsageCostSummary.optional(),
     attempt_id: Id.describe("Attempt id."),
     harness_id: Id.describe("Harness that ran the attempt."),
     /**

@@ -38,7 +38,13 @@ export function processingCostEvidence(
   provenance: string[],
 ): CostEvidence | undefined {
   if (!prepared || prepared.receipt.reason === "processing_control_unavailable") return undefined;
-  const billing = processingBillingKnowledge(prepared.costBasis, ordinary);
+  const costBasis =
+    prepared.costBasis.kind === "unknown" &&
+    prepared.receipt.submitted === "standard" &&
+    ordinary === "subscription_entitlement"
+      ? { ...prepared.costBasis, kind: "included" as const }
+      : prepared.costBasis;
+  const billing = processingBillingKnowledge(costBasis, ordinary);
   return {
     billing,
     knowledge:
@@ -46,7 +52,7 @@ export function processingCostEvidence(
     estimatedUsd: null,
     source: prepared.costBasis.source,
     provenance,
-    processing: prepared.costBasis,
+    processing: costBasis,
   };
 }
 

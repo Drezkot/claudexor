@@ -94,6 +94,8 @@ export interface ReviewerSpec {
 export interface ReviewCandidateInput {
   candidateLabel: string;
   diff: string;
+  /** Explicit selected postimage manifest for ordinary-folder review. */
+  candidatePaths?: string[];
   evidenceDir: string;
   artifactsDir?: string;
   evidenceReadOnly?: boolean;
@@ -118,6 +120,8 @@ export interface ReviewCandidateInput {
   env?: Record<string, string>;
   signal?: AbortSignal;
   onReviewerEvent?: (event: ReviewerProgressEvent) => void;
+  /** Cumulative panel cash plus amounts of unknown meaning on potentially paid routes. */
+  onUsageCost?: (panelPaidOrUnknownUsd: number) => boolean;
 }
 
 const DEFAULT_REVIEWER_TIMEOUT_MS = 10 * 60_000;
@@ -324,6 +328,11 @@ export async function reviewCandidate(input: ReviewCandidateInput): Promise<Revi
   );
   const healthyReviewerIndexes = new Set<number>();
   const reviewerSpend = new ReviewerSpendAccumulator(input.reviewers.length);
+  const streamedPaid = Array<number>(input.reviewers.length).fill(0);
+  const budgetAbort = new AbortController();
+  const reviewerSignal = input.signal
+    ? AbortSignal.any([input.signal, budgetAbort.signal])
+    : budgetAbort.signal;
   const reviewerTimeoutMs = input.reviewerTimeoutMs ?? DEFAULT_REVIEWER_TIMEOUT_MS;
   const reviewWaveId =
     input.env?.["CLAUDEXOR_REVIEW_WAVE_ID"] ?? process.env["CLAUDEXOR_REVIEW_WAVE_ID"] ?? null;
@@ -382,6 +391,7 @@ export async function reviewCandidate(input: ReviewCandidateInput): Promise<Revi
     input.cwd,
     postimagePaths,
     input.evidenceReadOnly === true,
+    input.candidatePaths,
   );
   const artifactsBaseDir = input.artifactsDir ?? join(input.evidenceDir, "reviewer-artifacts");
   if (
@@ -570,8 +580,21 @@ export async function reviewCandidate(input: ReviewCandidateInput): Promise<Revi
           : (input.transientRetryPolicy ?? DEFAULT_REVIEWER_TRANSIENT_RETRY_POLICY),
         artifact,
         input.onReviewerEvent,
-        input.signal,
+        reviewerSignal,
         input.evidenceReadOnly === true,
+        (amount) => {
+          streamedPaid[index] = amount;
+          try {
+            if (input.onUsageCost?.(streamedPaid.reduce((sum, value) => sum + value, 0))) {
+              budgetAbort.abort("review_budget_cap");
+              return true;
+            }
+            return false;
+          } catch (error) {
+            budgetAbort.abort("review_budget_observer_failed");
+            throw error;
+          }
+        },
       );
       text = out.text;
       sealedProjectionError = out.sealedProjectionError ?? null;
@@ -776,6 +799,7 @@ async function collectReviewerOutput(
   onReviewerEvent: ReviewCandidateInput["onReviewerEvent"],
   signal?: AbortSignal,
   sealed = false,
+  onUsageCost?: (paidOrUnknownUsd: number) => boolean,
 ): Promise<ReviewerOutput> {
   const controller = new AbortController();
   spec.extra["abortSignal"] = controller.signal;
@@ -819,6 +843,7 @@ async function collectReviewerOutput(
     cancelledBySignal || signal?.aborted === true || controller.signal.aborted;
 
   const consumeOnce = async (nativeTry: number): Promise<ReviewerOutput> => {
+    if (isCancelled()) throw new Error("Reviewer cancelled before dispatch");
     if (runSpec.processing_preference || reviewer.adapter.prepareProcessing) {
       const prepared = await prepareHarnessProcessing(reviewer.adapter, {
         preference: runSpec.processing_preference,
@@ -836,8 +861,9 @@ async function collectReviewerOutput(
         processing_cost_basis: prepared.costBasis,
       };
     }
+    if (isCancelled()) throw new Error("Reviewer cancelled before dispatch");
     currentAuthMode = null;
-    costKnowledge.startAttempt();
+    costKnowledge.startAttempt(runSpec);
     const iter = (reviewer.adapter.review ?? reviewer.adapter.run).call(reviewer.adapter, runSpec);
     currentIter = iter;
     let text = "";
@@ -881,7 +907,7 @@ async function collectReviewerOutput(
         observedAuthModes.add(disclosedAuthMode);
         updateReviewerMetadata(artifact, { auth_modes: [...observedAuthModes] });
       }
-      costKnowledge.observeEvent(currentAuthMode);
+      costKnowledge.observeEvent(currentAuthMode, ev);
       if (!observedAuthMode) {
         observedAuthMode = disclosedAuthMode;
         if (observedAuthMode) updateReviewerMetadata(artifact, { auth_mode: observedAuthMode });
@@ -902,14 +928,15 @@ async function collectReviewerOutput(
       ) {
         costUsd += ev.usage.cost_usd;
         if (ev.usage.estimated) costEstimated = true;
-        costKnowledge.observeUsage(currentAuthMode, ev.usage.estimated === true);
-        if (currentAuthMode === "local_session") {
-          valuationUsd += ev.usage.cost_usd;
-        } else if (currentAuthMode === "api_key") {
-          cashUsd += ev.usage.cost_usd;
-        } else {
-          unknownUsd += ev.usage.cost_usd;
-        }
+        costKnowledge.observeUsage(
+          currentAuthMode,
+          ev.usage.cost_usd,
+          ev.usage.estimated === true,
+          ev,
+        );
+        cashUsd = costKnowledge.totals.cashUsd;
+        valuationUsd = costKnowledge.totals.valuationUsd;
+        unknownUsd = costKnowledge.totals.unknownUsd;
         updateReviewerMetadata(artifact, {
           cost_usd: costUsd,
           cost_estimated: costEstimated,
@@ -917,6 +944,10 @@ async function collectReviewerOutput(
           valuation_usd: valuationUsd,
           unknown_usd: unknownUsd,
         });
+        const paidOrUnknown = cashUsd + costKnowledge.unknownPaidUsd;
+        if (paidOrUnknown > 0 && onUsageCost?.(paidOrUnknown)) {
+          throw new Error("Reviewer stopped at the existing paid budget cap");
+        }
       }
       if (sealed && ev.type === "message" && ev.final === true) {
         sealedMessageEvents.push(persistedEvent);

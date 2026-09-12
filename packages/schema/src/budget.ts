@@ -25,6 +25,20 @@ export const CostEvidence = z
   .describe("Incremental-cash cost knowledge with its source and evidence provenance.");
 export type CostEvidence = z.infer<typeof CostEvidence>;
 
+export const UsageCostSummary = z
+  .object({
+    cashUsd: z.number().nonnegative(),
+    valuationUsd: z.number().nonnegative(),
+    unknownUsd: z.number().nonnegative(),
+    cashKnowledge: CostKnowledge,
+    valuationKnowledge: CostKnowledge,
+  })
+  .strict()
+  .describe(
+    "Observed usage components. An amount of unknown meaning is not charged cash; separately proven included service can still establish exact zero incremental cash.",
+  );
+export type UsageCostSummary = z.infer<typeof UsageCostSummary>;
+
 export const AuthMode = z
   .enum(["local_session", "api_key", "unknown"])
   .describe("Auth mode a route runs under: a native local session, an API key, or unknown.");

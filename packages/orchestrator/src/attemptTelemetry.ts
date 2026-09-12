@@ -666,6 +666,13 @@ export function attemptTelemetryRecord(
   const errors = t.toolErrors.slice(-TELEMETRY_TOOL_ERRORS_MAX);
   const warnings = toolWarnings(t);
   return {
+    usage_cost: {
+      cashUsd: t.usageCost.cashUsd,
+      valuationUsd: t.usageCost.valuationUsd,
+      unknownUsd: t.usageCost.unknownUsd,
+      cashKnowledge: t.usageCost.cashKnowledge ?? "unknown",
+      valuationKnowledge: t.usageCost.valuationKnowledge ?? "unknown",
+    },
     attempt_id: attemptId,
     harness_id: harnessId,
     observed_model: t.observedModel,
