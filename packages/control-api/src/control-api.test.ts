@@ -836,11 +836,17 @@ describe("DaemonControlApiServer", () => {
       ]);
       expect(credentialProfiles?.responseSchema).toBe("ControlCredentialProfilesQueryResponse");
       const models = ops.find((o) => o.path === "/v2/harnesses/:id/models");
-      expect(models?.parameters[0]).toMatchObject({
+      expect(models?.parameters.find((parameter) => parameter.name === "route")).toMatchObject({
         name: "route",
         location: "query",
         enum: ["local_session", "api_key"],
       });
+      expect(models?.parameters.find((parameter) => parameter.name === "view")).toMatchObject({
+        name: "view",
+        location: "query",
+        enum: ["accounts"],
+      });
+      expect(models?.responseSchema).toBe("ControlHarnessModelsQueryResponse");
       const runEvents = ops.find((o) => o.path === "/v2/runs/:id/events");
       expect(runEvents?.parameters.map((p) => `${p.name}:${p.location}`)).toEqual([
         "Last-Event-ID:header",
