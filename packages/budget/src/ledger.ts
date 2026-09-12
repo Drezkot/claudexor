@@ -561,7 +561,13 @@ export function attemptCostEvidence(
   attemptId: string,
   estimatedUsd?: number,
   billing: BillingKnowledge = "unknown",
+  processingCost?: CostEvidence,
 ): CostEvidence {
+  if (processingCost)
+    return CostEvidenceSchema.parse({
+      ...processingCost,
+      provenance: [...processingCost.provenance, `attempt:${attemptId}`],
+    });
   return routeCostEvidence({
     source: "route-preflight",
     provenance: [`harness:${harnessId}`, `attempt:${attemptId}`, `billing:${billing}`],

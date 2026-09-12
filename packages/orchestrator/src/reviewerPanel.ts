@@ -320,6 +320,7 @@ export async function resolveExplicitReviewerPanel(
           requestedModel,
           requestedEffort,
           authPreference,
+          processingPreference: entry.processingPreference,
           ...(deps.resolveReviewerProfile ? { credentialProfile } : {}),
         });
         break;

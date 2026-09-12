@@ -6,6 +6,7 @@ import type {
   ExternalContextPolicy,
   ModeKind,
   PaidBudget,
+  ProcessingPreference,
   ProtectedPathApproval,
   RoutingGoal,
   TestCommandInvocation,
@@ -43,6 +44,7 @@ interface TaskContractBuildInput {
   maxTurns?: number | null;
   models?: Record<string, string>;
   efforts?: Record<string, EffortHint>;
+  processingPreference?: ProcessingPreference;
 }
 
 export interface TaskContractDefaults {
@@ -182,5 +184,6 @@ export function buildTaskContract(
     // verbatim so TaskContract construction cannot re-read a later Settings
     // state or leave pure Auto routing as a drift seam.
     routing_efforts: input.efforts ?? {},
+    processing_preference: input.processingPreference,
   });
 }

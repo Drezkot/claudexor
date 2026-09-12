@@ -22,7 +22,7 @@
  * here would reject a valid cross-profile fallback.
  */
 import type { HarnessAdapter } from "@claudexor/core";
-import { HarnessUnavailableError, validateModel } from "@claudexor/core";
+import { HarnessUnavailableError, validateModel, prepareHarnessProcessing } from "@claudexor/core";
 import {
   knownModelIdsForRoute,
   type CredentialProfile,
@@ -144,6 +144,21 @@ export async function* runModelGovernedRoute(
   routed: ModelGovernedRoute,
   spec: HarnessRunSpec,
 ): AsyncIterable<HarnessEvent> {
+  let nativeModel: string | null = null;
+  if (spec.processing_preference || routed.adapter.prepareProcessing) {
+    const prepared = await prepareHarnessProcessing(routed.adapter, {
+      preference: spec.processing_preference,
+      model: spec.model_hint,
+      effort: spec.effort_hint,
+      credentialProfile: spec.credential_profile,
+      cwd: spec.cwd,
+      env: spec.env,
+      authPreference: spec.auth_preference,
+      allowPaid: spec.processing_allow_paid,
+    });
+    nativeModel = prepared.model;
+    spec = { ...spec, processing: prepared.receipt, processing_cost_basis: prepared.costBasis };
+  }
   const model = spec.model_hint?.trim();
   if (model) {
     const profile = spec.credential_profile ?? null;
@@ -154,6 +169,14 @@ export async function* runModelGovernedRoute(
       profile,
     });
     assertModelsAllowed(routed, [{ role: "model", model }], truth, profile);
+    if (nativeModel && nativeModel !== model) {
+      assertModelsAllowed(
+        routed,
+        [{ role: "native processing model", model: nativeModel }],
+        truth,
+        profile,
+      );
+    }
   }
   yield* routed.adapter.run(spec);
 }

@@ -14,6 +14,7 @@ import {
 } from "@modelcontextprotocol/server/stdio";
 import {
   effortJsonSchema,
+  ProcessingPreference,
   AccessProfile,
   ExternalContextPolicy,
   type ModeKind,
@@ -297,6 +298,12 @@ export function defaultClaudexorTools(runner: RunnerFn): McpTool[] {
         description: "Optional model override for the primary harness.",
       },
       effort: effortJsonSchema("Optional effort override for the primary harness."),
+      processingPreference: {
+        type: "string",
+        enum: ProcessingPreference.options,
+        description:
+          "Advisory Standard/Fast/Economy service preference; keeps model, effort and context unchanged.",
+      },
       web: {
         type: "string",
         enum: ExternalContextPolicy.options,

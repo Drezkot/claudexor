@@ -259,6 +259,7 @@ export function createDaemonAgentRunner(deps: {
         models: p.models,
         effort: p.effort,
         efforts: p.efforts,
+        processingPreference: p.processingPreference,
         tests: Array.isArray(p.tests) ? p.tests : undefined,
         protectedPathApprovals: Array.isArray(p.protectedPathApprovals)
           ? p.protectedPathApprovals

@@ -1,4 +1,8 @@
-import type { HarnessAdapter } from "@claudexor/core";
+import {
+  prepareHarnessProcessing,
+  type HarnessAdapter,
+  type PreparedHarnessProcessing,
+} from "@claudexor/core";
 import { preflightEvidence, type DiffEvidence, writeDiffEvidence } from "@claudexor/context";
 import type {
   AuthPreference,
@@ -8,6 +12,7 @@ import type {
   ProviderFamily,
   ReviewFinding,
   RouteProof,
+  ProcessingPreference,
 } from "@claudexor/schema";
 import { HarnessRunSpec, ReviewFinding as ReviewFindingSchema } from "@claudexor/schema";
 import { execFileSync } from "node:child_process";
@@ -78,6 +83,9 @@ export interface ReviewerSpec {
   providerFamily: ProviderFamily;
   requestedModel?: string | null;
   requestedEffort?: EffortHint | null;
+  processingPreference?: ProcessingPreference;
+  processing?: PreparedHarnessProcessing;
+  processingAllowPaid?: boolean;
   authPreference?: AuthPreference | null;
   /** Exact resolved profile used by this reviewer; null means pool/default. */
   credentialProfile?: CredentialProfile | null;
@@ -497,6 +505,10 @@ export async function reviewCandidate(input: ReviewCandidateInput): Promise<Revi
           : {}),
         model_hint: reviewer.requestedModel ?? null,
         effort_hint: reviewer.requestedEffort ?? null,
+        processing_preference: reviewer.processingPreference,
+        processing: reviewer.processing?.receipt,
+        processing_cost_basis: reviewer.processing?.costBasis,
+        processing_allow_paid: reviewer.processingAllowPaid,
         auth_preference: reviewer.authPreference ?? "auto",
         credential_profile: reviewer.credentialProfile ?? null,
         env_inheritance: input.envInheritance ?? "mirror_native",
@@ -807,6 +819,23 @@ async function collectReviewerOutput(
     cancelledBySignal || signal?.aborted === true || controller.signal.aborted;
 
   const consumeOnce = async (nativeTry: number): Promise<ReviewerOutput> => {
+    if (runSpec.processing_preference || reviewer.adapter.prepareProcessing) {
+      const prepared = await prepareHarnessProcessing(reviewer.adapter, {
+        preference: runSpec.processing_preference,
+        model: runSpec.model_hint,
+        effort: runSpec.effort_hint,
+        cwd: runSpec.cwd,
+        env: runSpec.env,
+        credentialProfile: runSpec.credential_profile,
+        authPreference: runSpec.auth_preference,
+        allowPaid: runSpec.processing_allow_paid,
+      });
+      runSpec = {
+        ...runSpec,
+        processing: prepared.receipt,
+        processing_cost_basis: prepared.costBasis,
+      };
+    }
     currentAuthMode = null;
     costKnowledge.startAttempt();
     const iter = (reviewer.adapter.review ?? reviewer.adapter.run).call(reviewer.adapter, runSpec);

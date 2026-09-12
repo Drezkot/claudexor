@@ -117,7 +117,7 @@ export interface ReducerHome {
 /** Engine-owned dependencies; private route/session machinery stays with the caller. */
 export interface DeepScanReducerDeps {
   newReadOnlyHome: () => ReducerHome;
-  costEvidence: (harnessId: string, attemptId: string) => CostEvidence;
+  costEvidence: (harnessId: string, attemptId: string, routed?: RoutedAdapter) => CostEvidence;
   buildSpec: (
     routed: RoutedAdapter,
     homeEnv: Record<string, string>,
@@ -183,7 +183,7 @@ export async function runDeepScanReducer(
     attemptId,
     intent: "synthesize",
     harnessId: adapter.id,
-    cost: deps.costEvidence(adapter.id, attemptId),
+    cost: deps.costEvidence(adapter.id, attemptId, args.routed),
   });
   if (!lease.granted) {
     log.emit("budget.lease.created", {

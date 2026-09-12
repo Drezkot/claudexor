@@ -1,4 +1,5 @@
 import { join } from "node:path";
+import { reviewerProcessingCost } from "./processing-routing.js";
 import type { ArtifactStore, RunPaths } from "@claudexor/artifact-store";
 import type { BudgetLedger } from "@claudexor/budget";
 import { reviewUsageCostSettlement, attemptCostEvidence } from "@claudexor/budget";
@@ -183,7 +184,13 @@ export async function reviewCandidateRuns(
               attemptId: run.attemptId,
               intent: "review",
               harnessId: "review-panel",
-              cost: attemptCostEvidence("review-panel", run.attemptId, reservationEstimateUsd),
+              cost: attemptCostEvidence(
+                "review-panel",
+                run.attemptId,
+                reservationEstimateUsd,
+                "unknown",
+                reviewerProcessingCost(reviewers),
+              ),
             })
           : undefined;
       const result =

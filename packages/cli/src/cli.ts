@@ -13,6 +13,7 @@ import {
   AccessProfile,
   EFFORT_HINT_HELP,
   EffortHint,
+  ProcessingPreference,
   ExternalContextPolicy,
   type ProtectedPathApproval,
   type ControlReviewerPanelEntry,
@@ -318,6 +319,7 @@ async function orchestrate(
   let resolvedWebPolicy: ReturnType<typeof webPolicy> = undefined;
   let resolvedAccess: ReturnType<typeof accessProfile> = undefined;
   let resolvedEffort: EffortHint | undefined;
+  let processingPreference: ProcessingPreference | undefined;
   let paidBudget: PaidBudget | undefined;
   let nFlag: number | undefined;
   let attemptsFlag: number | undefined;
@@ -346,6 +348,9 @@ async function orchestrate(
     resolvedWebPolicy = webPolicy(args);
     resolvedAccess = accessProfile(args);
     resolvedEffort = effortHint(args);
+    const processing = flagStr(args, "processing");
+    processingPreference =
+      processing === undefined ? undefined : ProcessingPreference.parse(processing);
     resolvedHarnesses = harnessList(args);
     resolvedPrimaryHarness = flagStr(args, "primary-harness");
     resolvedModel = flagStr(args, "model");
@@ -407,6 +412,7 @@ async function orchestrate(
       primaryHarness: resolvedPrimaryHarness,
       model: resolvedModel,
       effort: resolvedEffort,
+      processingPreference,
       review,
       reviewerPanel: resolvedReviewerPanel,
       reviewerModels: resolvedReviewerModels,
@@ -461,6 +467,7 @@ async function orchestrate(
     resolvedWebPolicy,
     resolvedAccess,
     resolvedEffort,
+    processingPreference,
     resolvedSynthesis,
     resolvedHarnesses,
     resolvedPrimaryHarness,
@@ -494,6 +501,7 @@ interface DaemonRunParams {
   resolvedWebPolicy: ReturnType<typeof webPolicy>;
   resolvedAccess: ReturnType<typeof accessProfile>;
   resolvedEffort: EffortHint | undefined;
+  processingPreference: ProcessingPreference | undefined;
   resolvedSynthesis: ReturnType<typeof synthesisMode>;
   resolvedHarnesses: string[] | undefined;
   resolvedPrimaryHarness: string | undefined;
@@ -617,6 +625,7 @@ async function daemonRun(
     ...(p.resolvedWebPolicy ? { web: p.resolvedWebPolicy } : {}),
     ...(p.resolvedModel ? { model: p.resolvedModel } : {}),
     ...(p.resolvedEffort ? { effort: p.resolvedEffort } : {}),
+    ...(p.processingPreference ? { processingPreference: p.processingPreference } : {}),
     ...(p.review !== undefined ? { review: p.review } : {}),
     ...(p.reviewerPanel ? { reviewerPanel: p.reviewerPanel } : {}),
     ...(p.reviewerModels ? { reviewerModels: p.reviewerModels } : {}),

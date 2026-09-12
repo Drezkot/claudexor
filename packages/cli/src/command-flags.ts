@@ -30,6 +30,7 @@ export const COMMON_RUN_FLAGS: readonly string[] = [
   "web",
   "model",
   "effort",
+  "processing",
   "portfolio",
   "routing-goal",
   "profile",
@@ -208,6 +209,11 @@ export const CLI_FLAGS: readonly CliFlagSpec[] = [
   valueFlag("web", "<mode>", "External web/search policy: off|auto|cached|live"),
   valueFlag("model", "<id>", "Model hint forwarded to the selected harness route"),
   valueFlag("effort", "<level>", `Reasoning effort hint: ${EFFORT_HINT_HELP}`),
+  valueFlag(
+    "processing",
+    "<standard|fast|economy>",
+    "Advisory processing preference; fallback never introduces Fast.",
+  ),
   valueFlag(
     "primary-harness",
     "<id>",

@@ -1,4 +1,5 @@
 import { join } from "node:path";
+import { processingCostEvidence } from "./processing-routing.js";
 import type { ArtifactStore, RunPaths } from "@claudexor/artifact-store";
 import { attemptCostEvidence, type BudgetLedger } from "@claudexor/budget";
 import {
@@ -123,6 +124,7 @@ export async function runPlannerAttempt(
       attemptId,
       args.reservationEstimateUsd,
       deps.billingKnowledge(input, adapter.id),
+      processingCostEvidence(routed.processing, "unknown", [`harness:${adapter.id}`]),
     ),
   });
   if (!lease.granted) {

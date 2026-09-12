@@ -139,6 +139,7 @@ export function mcpSurfaceRunner(options: McpSurfaceRunnerOptions = {}) {
           : {}),
       ...(p?.model ? { model: String(p.model) } : {}),
       ...(p?.effort ? { effort: String(p.effort) } : {}),
+      ...(p?.processingPreference ? { processingPreference: p.processingPreference } : {}),
       ...(typeof p?.review === "boolean" ? { review: p.review } : {}),
       ...(Array.isArray(p?.reviewerPanel) ? { reviewerPanel: p.reviewerPanel } : {}),
       ...(p?.reviewerModels && typeof p.reviewerModels === "object"

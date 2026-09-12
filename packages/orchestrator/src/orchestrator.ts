@@ -66,6 +66,7 @@ import type {
   InteractionRequest,
   ModeKind,
   PaidBudget,
+  ProcessingPreference,
   CredentialUnusableObservation,
   QuotaAbsence,
   QuotaSnapshot,
@@ -114,7 +115,18 @@ import {
   estimateEffectiveAuthRoute,
 } from "@claudexor/schema";
 import { globalConfigDir, loadConfig } from "@claudexor/config";
-import type { AdapterRegistry, HarnessAdapter, InteractionChannel } from "@claudexor/core";
+import type {
+  AdapterRegistry,
+  HarnessAdapter,
+  InteractionChannel,
+  PreparedHarnessProcessing,
+} from "@claudexor/core";
+import {
+  prepareRoutedProcessing,
+  processingCostEvidence,
+  prepareReviewerProcessing,
+  reviewerProcessingCost,
+} from "./processing-routing.js";
 import {
   acceptedTryOutput,
   AccessProfileIncompatibleError,
@@ -453,6 +465,7 @@ export interface RunInput {
   models?: Record<string, string>;
   /** Optional reasoning-effort hint forwarded to harnesses that support it. */
   effort?: EffortHint;
+  processingPreference?: ProcessingPreference;
   /** Harness-scoped effort map (harness id → effort). Specific beats general: an
    * entry wins over the scalar `effort` and the per-harness settings default,
    * analogous to `models`. Exact Retry replays the frozen per-lane efforts here
@@ -603,6 +616,8 @@ interface HarnessRouteSettings {
 
 /** A routed candidate adapter plus its manifest capabilities and user settings. */
 export interface RoutedAdapter {
+  processing?: PreparedHarnessProcessing;
+  processingAllowPaid?: boolean;
   adapter: HarnessAdapter;
   adapterAccess: AccessProfile;
   webSupport: WebPolicySupport;
@@ -845,7 +860,16 @@ export class Orchestrator {
     try {
       // Auto-panel dropped knobs (reviewerEfforts) → ignored-settings channel (QA-070):
       const warn = (d: string) => void log.emit("review.preflight", { ignored_settings: [d] });
-      return { reviewers: await this.resolveReviewers(input.repoRoot, input.authPreference, warn) };
+      const config = this.config(input.repoRoot).global;
+      const reviewers = await this.resolveReviewers(input.repoRoot, input.authPreference, warn);
+      return {
+        reviewers: await prepareReviewerProcessing(
+          reviewers,
+          input,
+          config,
+          input.paidBudget ?? this.deps.paidBudget ?? config.budget.paid_budget_per_run,
+        ),
+      };
     } catch (err) {
       const message = safeErrorMessage(err);
       store.writeText(
@@ -1584,6 +1608,15 @@ export class Orchestrator {
     await assertRouteModelsAllowed(out, input.models, this.execRootOf(input), (id) =>
       routeContext ? (routeContext.envForHarness?.(id) ?? routeContext.env) : undefined,
     );
+    const processingConfig = this.config(input.repoRoot).global;
+    await prepareRoutedProcessing(
+      out,
+      input,
+      this.execRootOf(input),
+      processingConfig,
+      input.paidBudget ?? this.deps.paidBudget ?? processingConfig.budget.paid_budget_per_run,
+      (id) => (routeContext ? (routeContext.envForHarness?.(id) ?? routeContext.env) : undefined),
+    );
     return out;
   }
 
@@ -1651,6 +1684,15 @@ export class Orchestrator {
         // reading as unknown/paid. Absent (unknown route) falls back to the
         // metric-derived billingKnowledge below.
         const authRoute = this.authRouteEvidenceFor(authMode, status?.authSources ?? []);
+        const processingCost = processingCostEvidence(
+          r.processing,
+          authMode === "local_session"
+            ? "subscription_entitlement"
+            : authMode === "api_key"
+              ? "metered"
+              : "unknown",
+          [`harness:${r.adapter.id}`, `profile:${credentialSubjectId ?? "default"}`],
+        );
         return {
           harnessId: r.adapter.id,
           available: true,
@@ -1661,7 +1703,12 @@ export class Orchestrator {
             config.harnesses[r.adapter.id]?.effort ??
             undefined,
           billingKnowledge: authMode === "api_key" ? "metered" : "unknown",
-          incrementalCostUsd: authMode === "api_key" ? (metric?.avg_cost_usd ?? null) : null,
+          costEvidence: processingCost,
+          incrementalCostUsd: processingCost
+            ? processingCost.estimatedUsd
+            : authMode === "api_key"
+              ? (metric?.avg_cost_usd ?? null)
+              : null,
           credentialRoute:
             r.quotaAdmission.route ??
             (authMode === "api_key"
@@ -1968,6 +2015,8 @@ export class Orchestrator {
       model: string | null;
       effort: EffortHint | null;
       maxTurns: number | null;
+      processing?: PreparedHarnessProcessing;
+      processingAllowPaid?: boolean;
     },
     intent: Intent,
   ): Pick<
@@ -1976,6 +2025,10 @@ export class Orchestrator {
     | "tool_permission_policy"
     | "model_hint"
     | "effort_hint"
+    | "processing_preference"
+    | "processing"
+    | "processing_cost_basis"
+    | "processing_allow_paid"
     | "max_turns"
     | "instructions"
     | "output_schema"
@@ -1989,6 +2042,10 @@ export class Orchestrator {
       },
       model_hint: knobs.model,
       effort_hint: knobs.effort,
+      processing_preference: contract.processing_preference,
+      processing: knobs.processing?.receipt,
+      processing_cost_basis: knobs.processing?.costBasis,
+      processing_allow_paid: knobs.processingAllowPaid,
       max_turns: knobs.maxTurns,
       ...(intent === "synthesize" ? {} : { instructions: contract.instructions }),
       // The user's answer contract rides every answer-producing lane INCLUDING
@@ -2052,6 +2109,8 @@ export class Orchestrator {
   ): {
     model: string | null;
     effort: EffortHint | null;
+    processing?: PreparedHarnessProcessing;
+    processingAllowPaid?: boolean;
     webPolicy: ExternalContextPolicy;
     maxTurns: number | null;
     toolsAllow: string[];
@@ -2107,6 +2166,8 @@ export class Orchestrator {
     return {
       model,
       effort,
+      processing: routed.processing,
+      processingAllowPaid: routed.processingAllowPaid,
       webPolicy,
       maxTurns,
       toolsAllow,
@@ -3087,6 +3148,7 @@ export class Orchestrator {
           attemptId,
           this.reservationEstimateUsd(input, i > 0),
           this.routeBillingKnowledge(input, routed.adapter.id),
+          processingCostEvidence(routed.processing, "unknown", [`harness:${routed.adapter.id}`]),
         ),
       });
       log.emit("budget.lease.created", {
@@ -3310,6 +3372,9 @@ export class Orchestrator {
                 contAttemptId,
                 this.estimateUsdFloor(input.repoRoot),
                 this.routeBillingKnowledge(input, adapter.id),
+                processingCostEvidence(slot.routed.processing, "unknown", [
+                  `harness:${adapter.id}`,
+                ]),
               ),
             });
             if (contLease.granted) {
@@ -3830,6 +3895,9 @@ export class Orchestrator {
           "synth",
           this.reservationEstimateUsd(input),
           this.routeBillingKnowledge(input, synthRouted.adapter.id),
+          processingCostEvidence(synthRouted.processing, "unknown", [
+            `harness:${synthRouted.adapter.id}`,
+          ]),
         ),
       });
       if (lease.granted) {
@@ -4836,6 +4904,7 @@ export class Orchestrator {
             attemptId,
             this.reservationEstimateUsd(input),
             this.routeBillingKnowledge(input, adapter.id),
+            processingCostEvidence(routed.processing, "unknown", [`harness:${adapter.id}`]),
           ),
         });
         if (!lease.granted) {
@@ -5063,6 +5132,8 @@ export class Orchestrator {
                         "review-panel",
                         attemptId,
                         this.reservationEstimateUsd(input),
+                        "unknown",
+                        reviewerProcessingCost(reviewers),
                       ),
                     })
                   : null;
@@ -6141,7 +6212,7 @@ export class Orchestrator {
   ): DeepScanReducerDeps {
     return {
       newReadOnlyHome: () => resolveReadOnlyRouteContext(this.execRootOf(input)),
-      costEvidence: (harnessId, attemptId) =>
+      costEvidence: (harnessId, attemptId, routed) =>
         // The reducer admits under a finite estimate floor (mirror of the n>1
         // scout reserve) so a subscription route is not refused for lacking a
         // cash quote.
@@ -6150,6 +6221,7 @@ export class Orchestrator {
           attemptId,
           this.estimateUsdFloor(input.repoRoot),
           this.routeBillingKnowledge(input, harnessId),
+          processingCostEvidence(routed?.processing, "unknown", [`harness:${harnessId}`]),
         ),
       buildSpec: async (routed, homeEnv, prompt, attemptId) => {
         const knobs = this.routeSpecKnobs(routed, contract, undefined, input.effort);
@@ -6417,6 +6489,7 @@ export class Orchestrator {
           attemptId,
           this.reservationEstimateUsd(input, opts.deepScan && idx > 0),
           this.routeBillingKnowledge(input, adapter.id),
+          processingCostEvidence(routed.processing, "unknown", [`harness:${adapter.id}`]),
         ),
       });
       if (!lease.granted) {

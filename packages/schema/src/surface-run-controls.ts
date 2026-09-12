@@ -1,5 +1,6 @@
 import { AccessProfile, ExternalContextPolicy, ModeKind, ProviderFamily } from "./primitives.js";
 import { EffortHint } from "./harness.js";
+import { ProcessingPreference } from "./processing.js";
 import { TestCommandInvocation } from "./task.js";
 import { PaidBudget } from "./budget.js";
 import { runStartStrategyViolations } from "./run-strategy.js";
@@ -16,6 +17,12 @@ import { runStartStrategyViolations } from "./run-strategy.js";
  * per-tool race `n` minimum, prompt/cwd requirements).
  */
 export function validateSurfaceRunControls(obj: Record<string, unknown>): string | null {
+  if (
+    obj.processingPreference !== undefined &&
+    !ProcessingPreference.safeParse(obj.processingPreference).success
+  ) {
+    return "processingPreference must be standard, fast, or economy";
+  }
   if (obj.review !== undefined && typeof obj.review !== "boolean") {
     return "review must be a boolean";
   }
@@ -71,7 +78,13 @@ export function validateSurfaceRunControls(obj: Record<string, unknown>): string
     for (const entry of obj.reviewerPanel) {
       if (!isPlainRecord(entry)) return "reviewerPanel entries must be objects";
       const keys = Object.keys(entry);
-      const allowed = new Set(["harness", "model", "effort", "credentialProfileId"]);
+      const allowed = new Set([
+        "harness",
+        "model",
+        "effort",
+        "credentialProfileId",
+        "processingPreference",
+      ]);
       for (const key of keys) if (!allowed.has(key)) return `unknown reviewerPanel field: ${key}`;
       if (typeof entry.harness !== "string" || entry.harness.trim() === "") {
         return "reviewerPanel[].harness must be a non-empty string";
@@ -93,6 +106,12 @@ export function validateSurfaceRunControls(obj: Record<string, unknown>): string
         "reviewerPanel[].credentialProfileId",
       );
       if (profileError) return profileError;
+      if (
+        entry.processingPreference !== undefined &&
+        !ProcessingPreference.safeParse(entry.processingPreference).success
+      ) {
+        return "reviewerPanel[].processingPreference must be standard, fast, or economy";
+      }
     }
   }
   const modelsError = validateFamilyStringMap(obj.reviewerModels, "reviewerModels");
