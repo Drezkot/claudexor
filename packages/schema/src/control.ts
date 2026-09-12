@@ -782,6 +782,12 @@ export type ControlEvidenceIntegrity = z.infer<typeof ControlEvidenceIntegrity>;
 
 export const ControlBudgetSnapshot = z
   .object({
+    cashKnowledge: z
+      .enum(["exact", "estimated", "unknown"])
+      .optional()
+      .describe(
+        "Cash certainty from the ledger; explicit unknown keeps spendUsd null independently of valuation.",
+      ),
     paidBudget: PaidBudget.default({ kind: "unlimited" }),
     spendUsd: z
       .number()

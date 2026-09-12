@@ -27,6 +27,7 @@ import { boundedArtifactText, outputReadyState, primaryOutput } from "./primary-
 import {
   budgetValuationFromEvents,
   cashEstimatedFromLedgerEvent,
+  cashKnowledgeFromEvents,
   normalizeLegacyBudgetComponents,
 } from "./budget-valuation.js";
 import {
@@ -2801,6 +2802,9 @@ function budgetSnapshot(
     }
     if (observationEstimated && lastCash === null) estimated = true;
   }
+  const cashKnowledge = cashKnowledgeFromEvents(evs);
+  if (cashKnowledge === "unknown") spendUsd = null;
+  if (cashKnowledge !== undefined) estimated = cashKnowledge !== "exact";
   const remainingUsd =
     paidBudget.kind === "finite" && spendUsd !== null
       ? Math.max(0, paidBudget.maxUsd - spendUsd)
@@ -2810,6 +2814,7 @@ function budgetSnapshot(
   // projected spend must never present as clean when its evidence was not.
   const evidence = integrity ? evidenceLevel(integrity) : "complete";
   return ControlBudgetSnapshot.parse({
+    cashKnowledge,
     paidBudget,
     spendUsd,
     valuationUsd,
