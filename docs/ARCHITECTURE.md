@@ -1284,6 +1284,13 @@ remain identified as manifest data.
 
 ### Caller-owned model operations
 
+Live model enumeration is qualified by the adapter's declared credential routes.
+A declared producer is used only on a known supported route; otherwise existing
+manifest truth applies. Codex account enumeration is native-session-specific,
+so API-key and unscoped legacy queries retain their manifest source instead of
+borrowing a subscription catalog. A failed supported live inventory remains
+unverifiable; it never falls back to a convenient manifest to admit a model.
+
 The engine also accepts one raw model generation independently of Agent Runs.
 `ModelAdapter` in core and the model-operation schemas define caller-owned
 messages, function tools, tool choice, generation options, account selection,
