@@ -109,6 +109,55 @@ function setup(
   };
 }
 
+describe("processing on the physical Codex model request", () => {
+  it("translates an advertised Fast preference but reports the provider's Standard fallback", async () => {
+    const fixture = setup((init) => {
+      expect(JSON.parse(String(init?.body)).service_tier).toBe("priority");
+      return terminal();
+    });
+    fixture.fetcher.mockResolvedValueOnce(
+      Response.json({
+        models: catalog.models.map((model) => ({ ...model, service_tiers: [{ id: "priority" }] })),
+      }),
+    );
+    fixture.request.options.processingPreference = "fast";
+    const result = await fixture.adapter.invoke(fixture.request, fixture.context);
+    expect(result.processing).toMatchObject({
+      requested: "fast",
+      submitted: "fast",
+      observed: "standard",
+    });
+    expect(result.cost.processing?.kind).toBe("unknown");
+  });
+  it("retains exact native override over Standard and does not retry unknown transport", async () => {
+    const fixture = setup((init) => {
+      expect(JSON.parse(String(init?.body)).service_tier).toBe("priority");
+      throw new Error("unknown after send");
+    });
+    fixture.request.options.processingPreference = "standard";
+    fixture.request.options.serviceTier = "priority";
+    const result = await fixture.adapter.invoke(fixture.request, fixture.context);
+    expect(result.processing).toMatchObject({
+      requested: "standard",
+      submitted: "fast",
+      observed: "unknown",
+      reason: "native_explicit",
+    });
+    expect(result.outcome).toBe("unknown");
+    expect(fixture.fetcher.mock.calls.filter(([, init]) => init?.method === "POST")).toHaveLength(
+      1,
+    );
+  });
+  it("keeps old serviceTier-only clients on the strict legacy response shape", async () => {
+    const fixture = setup();
+    fixture.request.options.serviceTier = "priority";
+    const result = await fixture.adapter.invoke(fixture.request, fixture.context);
+    expect(result).not.toHaveProperty("processing");
+    expect(result.cost).not.toHaveProperty("processing");
+    expect(ModelCallResult.omit({ processing: true }).strict().parse(result)).toEqual(result);
+  });
+});
+
 describe("exact-profile Codex model catalog", () => {
   it("does not borrow CLI compaction, effective percentages, aliases, or hardcoded defaults", async () => {
     const fixture = setup();

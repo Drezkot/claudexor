@@ -1,3 +1,10 @@
+import { claudeMcpArgs } from "./mcp-args.js";
+import {
+  prepareClaudeSessionProcessing,
+  claudeProcessingArgs,
+  applyClaudeRunProcessing,
+  claudeProcessingObserver,
+} from "./processing.js";
 import type {
   AccessProfile,
   AuthSourceReadiness,
@@ -16,7 +23,6 @@ import {
 import type { DoctorSpec, HarnessAdapter, InteractionChannel } from "@claudexor/core";
 import {
   abortSignalFromSpec,
-  browserMcpCommand,
   HarnessUnavailableError,
   interactionChannelFromSpec,
   needsScopedHomeKeychainBridge,
@@ -289,6 +295,7 @@ export function createClaudeAdapter(deps: Partial<ClaudeRuntimeDeps> = {}): Harn
   return {
     id: "claude",
     capabilityProfile: CLAUDE_CAPABILITY_PROFILE,
+    prepareProcessing: prepareClaudeSessionProcessing,
     async discover(): Promise<HarnessManifest> {
       const version = await runtime.detectVersion();
       if (version === null) {
@@ -319,6 +326,7 @@ export function createClaudeAdapter(deps: Partial<ClaudeRuntimeDeps> = {}): Harn
         adapter_version: CLAUDEXOR_VERSION,
         provider_family: "anthropic",
         capabilities: {
+          processing_preferences: ["standard", "fast", "economy"],
           plan: true,
           implement: true,
           create_from_scratch: true,
@@ -656,6 +664,7 @@ export function claudeArgsForSpec(
         ...permissionArgs(spec.access),
       ];
   if (spec.model_hint) args.push("--model", spec.model_hint);
+  args.push(...claudeProcessingArgs(spec));
   // W-C4 live deltas (engine-gated to single-candidate lanes; parser tags payload.delta).
   if (spec.stream_deltas) args.push("--include-partial-messages");
   // Resolve against what the INSTALLED CLI advertises: an advertised level goes
@@ -762,34 +771,6 @@ function toolPermissionSets(spec: HarnessRunSpec): { allow: Set<string>; deny: S
   // are injected regardless of web policy (unlike the browser).
   for (const server of spec.extra_mcp_servers ?? []) allow.add(`mcp__${server.name}`);
   return { allow, deny };
-}
-
-/**
- * Inject engine-owned MCP servers via `--mcp-config` inline JSON (no disk
- * write — fits the scoped HOME and works under `--bare`): the Playwright
- * browser MCP and every `extra_mcp_servers` entry (the delegation belt, etc.)
- * merged into one `mcpServers` map. The browser rides `external_context_policy`
- * (live egress, dropped under `off`); extra servers are engine-owned local
- * processes, not web egress, so they inject regardless of web policy. Empty
- * when nothing is to be injected.
- */
-function claudeMcpArgs(spec: HarnessRunSpec): string[] {
-  const mcpServers: Record<
-    string,
-    { command: string; args: string[]; env?: Record<string, string> }
-  > = {};
-  if (spec.browser && spec.external_context_policy !== "off") {
-    mcpServers["browser"] = browserMcpCommand(spec.browser);
-  }
-  for (const server of spec.extra_mcp_servers ?? []) {
-    mcpServers[server.name] = {
-      command: server.command,
-      args: server.args,
-      ...(Object.keys(server.env).length > 0 ? { env: server.env } : {}),
-    };
-  }
-  if (Object.keys(mcpServers).length === 0) return [];
-  return ["--mcp-config", JSON.stringify({ mcpServers })];
 }
 
 async function* runClaude(
@@ -919,6 +900,8 @@ async function* runClaude(
   const useSubscription = route === "subscription";
   // Probe the installed effort ladder through the shared memoized help capture.
   const effort = await claudeRunEffortResolution(spec, runtime, abortSignalFromSpec(spec));
+  spec = applyClaudeRunProcessing(spec, nativeEnv.CLAUDE_CONFIG_DIR, useSubscription);
+  const processing = spec.processing;
   const args = claudeArgsForSpec(spec, interactive, useSubscription, effort.advertised);
   if (effort.disclosure) yield effort.disclosure;
   // Scrub all provider secrets, then re-add only this route's credential.
@@ -935,6 +918,8 @@ async function* runClaude(
     ? ("vendor_native" as const)
     : ("managed_api_key" as const);
   const credentialSource = useSubscription ? subscriptionSource! : ("api_key_env" as const);
+  const observeProcessing =
+    processing && claudeProcessingObserver(processing, spec.processing_cost_basis!);
   const baseParser = createClaudeParser({
     deniedTools: toolPermissionSets(spec).deny,
     requiredMcpServers: (spec.extra_mcp_servers ?? [])
@@ -949,7 +934,8 @@ async function* runClaude(
     label: "claude",
     redact: redactSecrets,
     parseEvent: (obj, sessionId) => {
-      const out = baseParser(obj, sessionId);
+      const parsed = baseParser(obj, sessionId);
+      const out = observeProcessing ? observeProcessing(obj, parsed, sessionId) : parsed;
       if (out) {
         for (const ev of out) {
           // The auth route is fixed before spawn. Carry it on every event so

@@ -1,4 +1,9 @@
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+  codexProcessingMethods,
+  codexProcessingArgs,
+  applyCodexRunProcessing,
+} from "./processing-session.js";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 export { createCodexModelAdapter } from "./model.js";
 import { codexTranscriptModel, codexTranscriptRateLimits } from "./transcript.js";
 import { resolveSecret } from "@claudexor/secrets";
@@ -27,7 +32,8 @@ import {
   type CodexEffortProbe,
 } from "./effort-probe.js";
 import { codexRunEffortResolution } from "./effort-gate.js";
-import { tomlBasicString } from "./toml.js";
+export { codexConfigHasNodeRepl } from "./toml.js";
+import { codexConfigHasNodeRepl, tomlBasicString } from "./toml.js";
 import { CODEX_VENDOR_CLI_VERSION } from "./vendor-cli-version.js";
 export { CODEX_EFFORT_SNAPSHOT, clearCodexEffortCache, unionEffortLevels } from "./effort-probe.js";
 export { CODEX_VENDOR_CLI_VERSION };
@@ -210,23 +216,6 @@ export function codexBrowserArgs(
   return args;
 }
 
-/**
- * True only when the config codex WILL load (the scoped `CODEX_HOME` if set,
- * else `~/.codex`) actually defines `[mcp_servers.node_repl]`. We only ever
- * disable node_repl when it already exists — a `-c mcp_servers.node_repl.*`
- * override against a config that has NO node_repl creates a partial entry with
- * no transport and codex refuses to load it ("invalid transport in
- * mcp_servers.node_repl"), which broke every scoped-home / api_key / MCP run.
- */
-export function codexConfigHasNodeRepl(codexHome: string | null | undefined): boolean {
-  const cfg = join(codexHome || defaultNativeCodexHome(), "config.toml");
-  try {
-    return existsSync(cfg) && readFileSync(cfg, "utf8").includes("[mcp_servers.node_repl]");
-  } catch {
-    return false;
-  }
-}
-
 export function codexExecArgs(
   spec: Pick<
     HarnessRunSpec,
@@ -238,6 +227,9 @@ export function codexExecArgs(
     | "instructions"
     | "attachments"
     | "browser"
+    | "processing"
+    | "processing_preference"
+    | "processing_allow_paid"
   > & {
     resume_session_id?: string | null;
     extra_mcp_servers?: HarnessRunSpec["extra_mcp_servers"];
@@ -261,6 +253,7 @@ export function codexExecArgs(
   // sandboxing must ride as `-c sandbox_mode="..."` config overrides there.
   // Effort is resolved against what THIS MODEL advertises, not a harness-wide
   // ladder: gpt-5.6-sol takes `ultra`, gpt-5.4 stops at `xhigh`.
+  const processingArgs = codexProcessingArgs(spec, opts.effortCatalog);
   const effort = codexEffortFor(
     opts.effortCatalog ?? CODEX_EFFORT_SNAPSHOT,
     spec.model_hint,
@@ -272,6 +265,7 @@ export function codexExecArgs(
       "resume",
       spec.resume_session_id,
       "--json",
+      ...processingArgs,
       ...CODEX_FILE_AUTH_ARGS,
       ...CODEX_PROJECT_DOC_FALLBACK_ARGS,
       ...sandboxConfigArgs(spec.access),
@@ -298,7 +292,13 @@ export function codexExecArgs(
     args.push("-");
     return args;
   }
-  const args = ["exec", "--json", ...CODEX_FILE_AUTH_ARGS, ...CODEX_PROJECT_DOC_FALLBACK_ARGS];
+  const args = [
+    "exec",
+    "--json",
+    ...processingArgs,
+    ...CODEX_FILE_AUTH_ARGS,
+    ...CODEX_PROJECT_DOC_FALLBACK_ARGS,
+  ];
   args.push(...sandboxArgs(spec.access), "--skip-git-repo-check");
   if (opts.outputSchemaPath) args.push("--output-schema", opts.outputSchemaPath);
   if (spec.model_hint) args.push("-m", spec.model_hint);
@@ -374,6 +374,7 @@ export function createCodexAdapter(deps: Partial<CodexRuntimeDeps> = {}): Harnes
   return {
     id: "codex",
     capabilityProfile: CODEX_CAPABILITY_PROFILE,
+    ...codexProcessingMethods(runtime, codexNativeEnv),
 
     async discover(): Promise<HarnessManifest> {
       const version = await runtime.detectVersion();
@@ -400,6 +401,7 @@ export function createCodexAdapter(deps: Partial<CodexRuntimeDeps> = {}): Harnes
         adapter_version: CLAUDEXOR_VERSION,
         provider_family: "openai",
         capabilities: {
+          processing_preferences: ["standard", "fast", "economy"],
           plan: true,
           implement: true,
           create_from_scratch: true,
@@ -745,6 +747,13 @@ async function* runCodex(
   // catalog may drop it or clamp it onto the routed model's ceiling.
   const effort = await codexRunEffortResolution(spec, runtime, env, abortSignalFromSpec(spec));
   if (effort.disclosure) yield effort.disclosure;
+  spec = applyCodexRunProcessing(
+    spec,
+    effort.catalog,
+    env["CODEX_HOME"],
+    authRoute === "subscription",
+  );
+  const processing = spec.processing;
   const args = codexExecArgs(spec, {
     suppressNodeRepl: codexConfigHasNodeRepl(env["CODEX_HOME"]),
     outputSchemaPath,
@@ -787,6 +796,10 @@ async function* runCodex(
         const out = parseCodexEvent(obj, sessionId, parseState);
         if (out === null) return null;
         for (const ev of out) {
+          if (processing) {
+            ev.processing = processing;
+            ev.processing_cost_basis = spec.processing_cost_basis;
+          }
           // Do NOT fabricate observed_model from the request hint: route proof
           // exists to catch silent fallback, so an unobserved model must stay
           // unobserved. Record the requested model for diagnostics only.
@@ -827,7 +840,7 @@ async function* runCodex(
             const { native_session_id: _dropped, ...rest } = ev.payload as Record<string, unknown>;
             ev.payload = { ...rest, resume_disabled: "ephemeral_codex_home" };
           }
-          if (ev.type === "usage" && ev.usage && ev.usage.cost_usd === undefined) {
+          if (ev.type === "usage" && ev.usage && ev.usage.cost_usd === undefined && !processing) {
             const est = estimateCodexCostUsd(model, ev.usage);
             if (est !== undefined) {
               ev.usage.cost_usd = est;
