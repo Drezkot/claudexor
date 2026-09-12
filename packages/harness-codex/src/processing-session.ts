@@ -23,8 +23,9 @@ export function codexProcessingMethods(
     async models(input?: HarnessModelSpec) {
       try {
         if (
-          input?.credentialProfile &&
-          input.credentialProfile.credential_kind !== "config_dir_login"
+          input?.credentialProfile
+            ? input.credentialProfile.credential_kind !== "config_dir_login"
+            : input?.authPreference === "api_key"
         )
           return [];
         const home = input?.credentialProfile

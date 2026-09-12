@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import type { HarnessAdapter } from "@claudexor/core";
-import { HarnessRunSpec, type CredentialProfile } from "@claudexor/schema";
+import { HarnessRunSpec, CredentialProfile } from "@claudexor/schema";
 import {
   assertRouteModelsAllowed,
   runModelGovernedRoute,
@@ -261,5 +261,63 @@ describe("profile-less auto is answered as auto, never rewritten", () => {
     await assertRouteModelsAllowed([routed], undefined, "/repo");
 
     expect(seen).toEqual([{ cwd: "/repo" }]);
+  });
+});
+
+describe("route-scoped live model producer", () => {
+  it("admits the API-key manifest model at preflight and actual spawn without borrowing native inventory", async () => {
+    const profile = CredentialProfile.parse({
+      profile_id: "api-key",
+      harness_id: "generic",
+      display_name: "API",
+      credential_kind: "api_key",
+      secret_ref: "openai:api",
+    });
+    const models = vi.fn(async () => []);
+    const run = vi.fn((_spec: HarnessRunSpec) =>
+      (async function* () {
+        yield* [];
+      })(),
+    );
+    const routed: ModelGovernedRoute = {
+      adapter: { id: "generic", models, run } as unknown as HarnessAdapter,
+      knownModels: [{ id: "api-model", routes: ["api_key"] }],
+      modelInventoryRoutes: ["local_session"],
+      authRouteEstimate: "local_session",
+      quotaAdmission: { profile },
+      settings: { defaultModel: "api-model", fallbackModel: null },
+    };
+    await assertRouteModelsAllowed([routed], undefined, "/repo");
+    const spec = HarnessRunSpec.parse({
+      session_id: "api-model",
+      intent: "audit",
+      prompt: "test",
+      cwd: "/repo",
+      credential_profile: profile,
+      model_hint: "api-model",
+    });
+    for await (const _event of runModelGovernedRoute(routed, spec)) {
+      /* consume */
+    }
+    expect(models).not.toHaveBeenCalled();
+    expect(run).toHaveBeenCalledWith(spec);
+    await expect(
+      assertRouteModelsAllowed([routed], { generic: "native-model" }, "/repo"),
+    ).rejects.toThrow(/truth source: manifest, route: api_key/);
+    const nativeProfile = CredentialProfile.parse({
+      ...profile,
+      credential_kind: "config_dir_login",
+      secret_ref: null,
+      isolation_locator: "/profiles/native",
+    });
+    const native = {
+      ...routed,
+      knownModels: ["api-model"],
+      quotaAdmission: { profile: nativeProfile },
+    };
+    await expect(assertRouteModelsAllowed([native], undefined, "/repo")).rejects.toThrow(
+      /truth source: api.*cannot verify models/,
+    );
+    expect(models).toHaveBeenCalledWith({ cwd: "/repo", credentialProfile: nativeProfile });
   });
 });

@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { mkdtempSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -152,5 +152,31 @@ describe("Codex processing preserves exact native intent", () => {
     ]);
     expect(catalog?.processing?.one.modes).toEqual(["standard", "fast"]);
     expect(catalog?.processing?.two.modes).toEqual(["standard"]);
+  });
+});
+
+describe("Codex inventory route isolation", () => {
+  it("declares native-only inventory and never reads native auth for an API-key query", async () => {
+    const probeEfforts = vi.fn(async () => null);
+    const adapter = createCodexAdapter({
+      detectVersion: async () => "0.0.0-fixture",
+      hasApiKey: () => true,
+      probeLogin: async () => ({ authed: false, method: "logged_out", probeError: null }),
+      probeEfforts,
+    });
+    const manifest = await adapter.discover();
+    expect(manifest.capabilities.model_inventory_routes).toEqual(["local_session"]);
+    expect(manifest.capabilities.known_models).toContain("gpt-6-astra");
+    probeEfforts.mockClear();
+    const profile = CredentialProfile.parse({
+      profile_id: "managed-api",
+      harness_id: "codex",
+      display_name: "API",
+      credential_kind: "api_key",
+      secret_ref: "openai:fixture-api",
+    });
+    expect(await adapter.models?.({ cwd: "/repo", credentialProfile: profile })).toEqual([]);
+    expect(await adapter.models?.({ cwd: "/repo", authPreference: "api_key" })).toEqual([]);
+    expect(probeEfforts).not.toHaveBeenCalled();
   });
 });

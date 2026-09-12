@@ -1,4 +1,8 @@
-import type { AdapterRegistry } from "@claudexor/core";
+import {
+  hasModelInventoryForRoute,
+  type AdapterRegistry,
+  type HarnessAdapter,
+} from "@claudexor/core";
 import {
   ControlHarnessAccountModelsResponse,
   type ControlHarnessModelsResponse,
@@ -77,10 +81,18 @@ export async function harnessModels(
   if (!adapter) {
     return { harnessId, models: [], source: "none", verifiedAgainst: null };
   }
-  if (typeof adapter.models === "function") {
+  const manifest = await adapter.discover();
+  if (
+    hasModelInventoryForRoute(adapter, manifest.capabilities.model_inventory_routes, route ?? null)
+  ) {
     // A live enumeration already reflects the credentials it ran under; the
     // route filter applies to manifest annotations only.
-    const models = await adapter.models({ cwd });
+    const models = await adapter.models({
+      cwd,
+      ...(route
+        ? { authPreference: route === "api_key" ? ("api_key" as const) : ("subscription" as const) }
+        : {}),
+    });
     return {
       harnessId,
       models: models.map(({ processing: _processing, ...model }) => ({
@@ -91,7 +103,6 @@ export async function harnessModels(
       verifiedAgainst: null,
     };
   }
-  const manifest = await adapter.discover();
   const known = manifest.capabilities.known_models.filter((entry) =>
     // Route filter (one matcher shape with the governance gate): a bare string
     // is every-route; an annotated entry must include the requested route.
@@ -124,13 +135,20 @@ export async function harnessAccountModels(
 ): Promise<ControlHarnessAccountModelsResponse> {
   const adapter = (input.registry ?? buildRegistry({ includeFakes: false })).get(input.harnessId);
   const profiles = catalogProfiles(input, input.harnessId, input.credentialProfileId);
+  // Discovery is host-level capability data, shared by this request's rows.
+  let manifestPromise: ReturnType<HarnessAdapter["discover"]> | undefined;
   const accounts = await enumerateAccountCatalogs({
     context: input,
     adapter,
     profiles,
     read: async (profile, canReadCatalog) => {
       if (!adapter) return null;
-      if (canReadCatalog && adapter.models) {
+      const manifest = await (manifestPromise ??= adapter.discover());
+      const route = profile.credential_kind === "api_key" ? "api_key" : "local_session";
+      if (
+        canReadCatalog &&
+        hasModelInventoryForRoute(adapter, manifest.capabilities.model_inventory_routes, route)
+      ) {
         const models = await adapter.models({ cwd: input.cwd, credentialProfile: profile });
         // The legacy array API also returns [] on transport failures; it is
         // not a receipt proving this account has an empty vendor inventory.
@@ -146,9 +164,6 @@ export async function harnessAccountModels(
           provenance: "adapter_models",
         };
       }
-      const manifest = await adapter.discover();
-      const route =
-        input.route ?? (profile.credential_kind === "api_key" ? "api_key" : "local_session");
       const known = manifest.capabilities.known_models.filter(
         (entry) => typeof entry === "string" || entry.routes.includes(route),
       );

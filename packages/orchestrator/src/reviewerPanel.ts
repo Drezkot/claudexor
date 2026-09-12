@@ -25,7 +25,7 @@ import {
   knownModelIdsForRoute,
 } from "@claudexor/schema";
 import type { HarnessAdapter } from "@claudexor/core";
-import { HarnessUnavailableError, validateModel } from "@claudexor/core";
+import { HarnessUnavailableError, hasModelInventoryForRoute, validateModel } from "@claudexor/core";
 import { WorkspaceManager } from "@claudexor/workspace";
 import type { ReviewerSpec } from "@claudexor/review";
 import { safeErrorMessage } from "./runSupport.js";
@@ -252,18 +252,18 @@ export async function resolveExplicitReviewerPanel(
           );
         }
         if (requestedModel) {
-          if (typeof adapter.models !== "function") {
+          const route = credentialProfile
+            ? credentialProfileAuthRoute(credentialProfile)
+            : estimateEffectiveAuthRoute(authPreference, status.authSources);
+          if (
+            !hasModelInventoryForRoute(adapter, manifest.capabilities.model_inventory_routes, route)
+          ) {
             // STRICT: the manifest list is the truth source here; an empty
             // list means the harness cannot verify models and the explicit
             // model is refused (validateModel phrases both refusals).
             const check = validateModel(
               requestedModel,
-              knownModelIdsForRoute(
-                manifest.capabilities.known_models,
-                credentialProfile
-                  ? credentialProfileAuthRoute(credentialProfile)
-                  : estimateEffectiveAuthRoute(authPreference, status.authSources),
-              ),
+              knownModelIdsForRoute(manifest.capabilities.known_models, route),
               "manifest",
             );
             if (check.status !== "ok") {
@@ -433,32 +433,33 @@ export async function resolveAutoReviewerPanel(
         // explicit panel — a doomed reviewer model is refused here, never
         // forwarded to die as an opaque native error mid-review.
         if (requestedModel) {
-          const inventory =
-            typeof adapter.models === "function"
-              ? await readAutoModelInventory(adapter, {
-                  cwd,
-                  env: reviewHome.env,
-                  authPreference,
-                  ...(credentialProfile ? { credentialProfile } : {}),
-                })
-              : (() => {
-                  const ids = knownModelIdsForRoute(
-                    m.capabilities.known_models,
-                    credentialProfile
-                      ? credentialProfileAuthRoute(credentialProfile)
-                      : estimateEffectiveAuthRoute(authPreference, report.auth_sources),
-                  );
-                  return ids.length > 0
-                    ? {
-                        status: "available" as const,
-                        ids: new Set(ids),
-                        source: "manifest" as const,
-                      }
-                    : {
-                        status: "unknown" as const,
-                        reason: "manifest model inventory unavailable",
-                      };
-                })();
+          const route = credentialProfile
+            ? credentialProfileAuthRoute(credentialProfile)
+            : estimateEffectiveAuthRoute(authPreference, report.auth_sources);
+          const inventory = hasModelInventoryForRoute(
+            adapter,
+            m.capabilities.model_inventory_routes,
+            route,
+          )
+            ? await readAutoModelInventory(adapter, {
+                cwd,
+                env: reviewHome.env,
+                authPreference,
+                ...(credentialProfile ? { credentialProfile } : {}),
+              })
+            : (() => {
+                const ids = knownModelIdsForRoute(m.capabilities.known_models, route);
+                return ids.length > 0
+                  ? {
+                      status: "available" as const,
+                      ids: new Set(ids),
+                      source: "manifest" as const,
+                    }
+                  : {
+                      status: "unknown" as const,
+                      reason: "manifest model inventory unavailable",
+                    };
+              })();
           if (inventory.status === "unknown") {
             discloseAutoSkip(deps, adapter.id, inventory.reason);
             continue familyLoop;

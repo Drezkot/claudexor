@@ -227,9 +227,16 @@ export const HarnessCapabilities = z
       .describe(
         "Vendor CLI version the effort ladders were last verified against; null = never verified / not applicable.",
       ),
+    model_inventory_routes: z
+      .array(z.enum(["local_session", "api_key"]))
+      .min(1)
+      .optional()
+      .describe(
+        "Credential routes supported by the adapter's live models() producer; omitted preserves all-route support. Other routes use manifest known_models, never another account's live inventory.",
+      ),
     /**
      * Known model ids/aliases this harness accepts — the manifest-declared model
-     * truth source used when the adapter has no live `models()` inventory.
+     * truth source when no live `models()` producer applies to the credential route.
      * STRICT: an explicit model outside the active truth source is refused
      * at settings-write, run preflight, and reviewer resolution; a harness with
      * NO truth source (no `models()` and an empty list) refuses every explicit

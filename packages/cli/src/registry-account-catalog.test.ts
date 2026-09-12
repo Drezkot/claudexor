@@ -141,3 +141,46 @@ describe("account-scoped harness model inventory", () => {
     expect(f.models).not.toHaveBeenCalled();
   });
 });
+
+it("uses API-key manifest provenance while native accounts retain their own live inventory", async () => {
+  const f = fixture();
+  const manifest = await f.adapter.discover();
+  manifest.capabilities.model_inventory_routes = ["local_session"];
+  manifest.capabilities.known_models = [
+    { id: "native-hint", routes: ["local_session"] },
+    { id: "api-hint", routes: ["api_key"] },
+  ];
+  manifest.capabilities.known_models_verified_against = "fixture-2";
+  const discover = vi.fn(async () => manifest);
+  f.adapter.discover = discover;
+  f.input.config.credential_profiles[1] = CredentialProfile.parse({
+    ...f.input.config.credential_profiles[1],
+    credential_kind: "api_key",
+    isolation_locator: null,
+    secret_ref: "openai:api",
+  });
+  const response = await harnessAccountModels(f.input);
+  expect(response.partial).toBe(false);
+  expect(discover).toHaveBeenCalledTimes(1);
+  expect(response.accounts[0].catalog).toMatchObject({
+    source: "api",
+    provenance: "adapter_models",
+    models: [{ id: "model-a" }],
+  });
+  expect(response.accounts[1].catalog).toMatchObject({
+    source: "manifest",
+    provenance: "manifest",
+    observedAt: null,
+    verifiedAgainst: "fixture-2",
+    models: [{ id: "api-hint", routes: ["api_key"] }],
+  });
+  expect(f.models).toHaveBeenCalledTimes(1);
+  expect(f.models.mock.calls[0][0]?.credentialProfile?.profile_id).toBe("a");
+  f.models.mockResolvedValue([]);
+  const failed = await harnessAccountModels(f.input);
+  expect(failed.accounts[0]).toMatchObject({
+    catalog: null,
+    problem: { code: "model_catalog_unavailable" },
+  });
+  expect(failed.accounts[1].catalog?.source).toBe("manifest");
+});

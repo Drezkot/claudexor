@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { validateModel } from "./model.js";
+import { hasModelInventoryForRoute, validateModel } from "./model.js";
 
 describe("validateModel (strict model-truth validation)", () => {
   const known = ["sonnet", "opus", "claude-opus-4-8"];
@@ -47,5 +47,16 @@ describe("validateModel (strict model-truth validation)", () => {
     const r = validateModel("nope", big, "api");
     expect(r.status).toBe("rejected");
     expect(r.message).toContain("(120 total)");
+  });
+});
+
+describe("model inventory credential routes", () => {
+  it("keeps legacy enumeration and queries scoped producers only on their declared routes", () => {
+    const adapter = { models: async () => [] };
+    expect(hasModelInventoryForRoute(adapter, undefined, "api_key")).toBe(true);
+    expect(hasModelInventoryForRoute(adapter, ["local_session"], null)).toBe(false);
+    expect(hasModelInventoryForRoute(adapter, ["local_session"], "local_session")).toBe(true);
+    expect(hasModelInventoryForRoute(adapter, ["local_session"], "api_key")).toBe(false);
+    expect(hasModelInventoryForRoute({}, ["local_session"], "local_session")).toBe(false);
   });
 });

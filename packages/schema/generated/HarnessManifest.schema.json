@@ -519,6 +519,18 @@
               "default": null,
               "description": "Vendor CLI version the effort ladders were last verified against; null = never verified / not applicable."
             },
+            "model_inventory_routes": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "local_session",
+                  "api_key"
+                ]
+              },
+              "minItems": 1,
+              "description": "Credential routes supported by the adapter's live models() producer; omitted preserves all-route support. Other routes use manifest known_models, never another account's live inventory."
+            },
             "known_models": {
               "type": "array",
               "items": {

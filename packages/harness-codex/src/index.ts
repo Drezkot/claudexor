@@ -402,6 +402,7 @@ export function createCodexAdapter(deps: Partial<CodexRuntimeDeps> = {}): Harnes
         provider_family: "openai",
         capabilities: {
           processing_preferences: ["standard", "fast", "economy"],
+          model_inventory_routes: ["local_session"],
           plan: true,
           implement: true,
           create_from_scratch: true,

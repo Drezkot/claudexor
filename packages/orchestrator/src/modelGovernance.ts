@@ -25,12 +25,14 @@ import type { HarnessAdapter } from "@claudexor/core";
 import {
   HarnessUnavailableError,
   validateModel,
+  hasModelInventoryForRoute,
   prepareHarnessProcessing,
   admitPreparedProcessing,
 } from "@claudexor/core";
 import {
   knownModelIdsForRoute,
   type CredentialProfile,
+  type HarnessCapabilities,
   type HarnessEvent,
   type HarnessRunSpec,
   type KnownModelEntry,
@@ -40,6 +42,7 @@ export interface ModelGovernedRoute {
   adapter: HarnessAdapter;
   /** Manifest model truth source (used when the adapter has no live models()). */
   knownModels: readonly KnownModelEntry[];
+  modelInventoryRoutes?: Readonly<HarnessCapabilities["model_inventory_routes"]>;
   /** Pre-spawn credential-route estimate: route-annotated manifest models are
    * filtered by it, and stay EXCLUDED when it is null (fail-closed — a
    * route-scoped model never passes the gate on an undecidable route). */
@@ -77,7 +80,7 @@ async function modelTruthForRoute(
   },
 ): Promise<ModelTruth> {
   const route = authRouteForProfile(query.profile, routed.authRouteEstimate);
-  if (typeof routed.adapter.models === "function") {
+  if (hasModelInventoryForRoute(routed.adapter, routed.modelInventoryRoutes, route)) {
     const inventory = await routed.adapter.models({
       cwd: query.cwd,
       ...(query.env ? { env: query.env } : {}),
