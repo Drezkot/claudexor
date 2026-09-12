@@ -16,7 +16,7 @@ export async function prepareHarnessProcessing(
     : {
         model: spec.model,
         receipt: {
-          requested: spec.preference,
+          requested: spec.preference ?? null,
           submitted: null,
           submittedNative: null,
           observed: "unknown" as const,

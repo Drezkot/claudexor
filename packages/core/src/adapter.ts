@@ -51,9 +51,11 @@ export interface HarnessModelSpec extends DoctorSpec {
 }
 
 export interface HarnessProcessingSpec extends HarnessModelSpec {
-  preference: ProcessingPreference;
+  preference?: ProcessingPreference;
   model: string | null;
   effort: string | null;
+  /** Existing monetary policy; false requests ordinary fallback before paid work. */
+  allowPaid?: boolean;
 }
 
 export interface PreparedHarnessProcessing {

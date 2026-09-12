@@ -539,6 +539,7 @@ export const HarnessRunSpec = z
       "Prepared native service choice for this exact attempt.",
     ),
     processing_cost_basis: ProcessingCostBasis.optional(),
+    processing_allow_paid: z.boolean().optional(),
     session_id: Id.describe("Session id this run belongs to."),
     intent: Intent,
     prompt: z.string().describe("Prompt text delivered to the harness."),
