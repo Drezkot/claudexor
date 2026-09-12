@@ -124,6 +124,8 @@ interface ReviewRunsInput {
   taskId?: string;
   signal?: AbortSignal;
   reservationEstimateUsd?: number;
+  /** Convergence verifies its full candidate even when a repair made no change. */
+  reviewUnchanged?: boolean;
 }
 interface ReviewRunsDeps {
   prepareReviewEvidenceDir: (source: string, cwd: string) => string;
@@ -181,7 +183,9 @@ export async function reviewCandidateRuns(
       // spend a reviewer panel on "(empty diff)" (a trivial greeting in agent mode used to
       // cost two reviewers). It still flows through policy gates and arbitration
       // (so a failing test gate or no_op outcome is unchanged), just unreviewed.
-      const hasDiff = run.files ? run.files.noChanges !== true : run.diff.trim().length > 0;
+      const hasDiff =
+        input.reviewUnchanged ||
+        (run.files ? run.files.noChanges !== true : run.diff.trim().length > 0);
       // Reviewer panels spend real money: reserve before, settle the observed cost.
       const reviewLease =
         hasDiff && reviewers.length > 0

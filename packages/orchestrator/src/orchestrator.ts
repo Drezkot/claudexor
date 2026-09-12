@@ -28,6 +28,7 @@ import { processAttemptUsage } from "./attemptUsage.js";
 import {
   captureDirectoryCandidate,
   directoryHasOutput,
+  directoryCandidateStable,
   observeDirectoryPaths,
   publishDirectoryCandidate,
 } from "./directoryCandidate.js";
@@ -50,7 +51,6 @@ import {
   toCandidateEvidence,
 } from "./candidateEvidence.js";
 import { capabilityIntents } from "@claudexor/gateway";
-import { policyFindings } from "./policyFindings.js";
 import {
   reviewCandidateRuns,
   resolveEngineReview,
@@ -137,7 +137,6 @@ import {
   prepareRoutedProcessing,
   processingCostEvidence,
   prepareReviewerProcessing,
-  reviewerProcessingCost,
 } from "./processing-routing.js";
 import {
   acceptedTryOutput,
@@ -294,7 +293,6 @@ import {
   failureSignature,
   gatesPassed,
   reviewCandidate,
-  revalidateFindings,
   runGates,
 } from "@claudexor/review";
 import { type CandidateEvidence, arbitrate } from "@claudexor/arbitration";
@@ -311,7 +309,6 @@ import {
   loadHarnessMetrics,
   promptFingerprint,
   rankHarnesses,
-  reviewUsageCostSettlement,
 } from "@claudexor/budget";
 import {
   readTextSafe,
@@ -325,7 +322,6 @@ import {
   safeInvoke,
   sha256,
   userConfigDir,
-  writeText,
 } from "@claudexor/util";
 
 export interface OrchestratorDeps {
@@ -1547,6 +1543,15 @@ export class Orchestrator {
     }
     for (const { routed, error } of quotaRefusals)
       dropLane(routed.adapter.id, "credential", safeErrorMessage(error));
+    const processingConfig = this.config(input.repoRoot).global;
+    await prepareRoutedProcessing(
+      quotaPreparedPool,
+      input,
+      this.execRootOf(input),
+      processingConfig,
+      input.paidBudget ?? this.deps.paidBudget ?? processingConfig.budget.paid_budget_per_run,
+      (id) => (routeContext ? (routeContext.envForHarness?.(id) ?? routeContext.env) : undefined),
+    );
     const ordered = this.orderPool(quotaPreparedPool, input, intent, statusById, ledger, runId);
     if (ordered.length === 0) {
       if (primaryQuotaRefusal) throw primaryQuotaRefusal.error;
@@ -1622,15 +1627,6 @@ export class Orchestrator {
     // Strict pre-run model gate (INV-104) — see modelGovernance.ts.
     await assertRouteModelsAllowed(out, input.models, this.execRootOf(input), (id) =>
       routeContext ? (routeContext.envForHarness?.(id) ?? routeContext.env) : undefined,
-    );
-    const processingConfig = this.config(input.repoRoot).global;
-    await prepareRoutedProcessing(
-      out,
-      input,
-      this.execRootOf(input),
-      processingConfig,
-      input.paidBudget ?? this.deps.paidBudget ?? processingConfig.budget.paid_budget_per_run,
-      (id) => (routeContext ? (routeContext.envForHarness?.(id) ?? routeContext.env) : undefined),
     );
     return out;
   }
@@ -2373,13 +2369,13 @@ export class Orchestrator {
      * default): a silent fallback here would spawn a delegated attempt on the
      * operator's real home while the record still claimed scoped state. */
     harnessHome: ScopedHarnessHome,
+    observedPaths = new Set<string>(),
   ): Promise<CandidateRun> {
     const adapter = routed.adapter;
     const knobs = this.routeSpecKnobs(routed, contract, modelHint, effortHint);
     // Isolated scoped-home sessions are never retained after disposal.
     const inPlaceEnvelope = envelope.worktree_path === envelope.repo_root;
     const directory = envelope.workspace_kind === "directory";
-    const observedPaths = new Set<string>();
     let directoryCapture: Awaited<ReturnType<typeof captureDirectoryCandidate>> = {};
     const captureDirectory = async () =>
       (directoryCapture = await captureDirectoryCandidate({
@@ -4470,6 +4466,7 @@ export class Orchestrator {
     taskId?: string,
     signal?: AbortSignal,
     reservationEstimateUsd?: number,
+    reviewUnchanged = false,
   ): Promise<CandidateEvidence[]> {
     return reviewCandidateRuns(
       {
@@ -4486,6 +4483,7 @@ export class Orchestrator {
         taskId,
         signal,
         reservationEstimateUsd,
+        reviewUnchanged,
       },
       {
         prepareReviewEvidenceDir: this.prepareReviewEvidenceDir.bind(this),
@@ -4584,9 +4582,9 @@ export class Orchestrator {
     const readiness = new ReadinessLedger();
     store.writeYaml(join(paths.contextDir, "task.yaml"), contract);
 
-    // Live (in-place) isolation deliberately tolerates non-git stateful
-    // environments; only envelope isolation needs the git boundary.
-    if (!input.inPlace) {
+    // Legacy Git envelopes need their boundary; explicit directory execution
+    // keeps the requested strategy without initializing the selected folder.
+    if (!input.inPlace && input.workspaceKind !== "directory") {
       const gitPreconditionError = await ensureWriteModeGitBoundary(
         execRoot,
         log,
@@ -4763,13 +4761,14 @@ export class Orchestrator {
       telemetry: AttemptTelemetry;
     }[] = [];
     let lastDiffStable = true;
+    const observedPaths = new Set<string>();
 
     try {
       // The contract's ENGINE-COMPUTED effective profile drives the envelope and
       // every attempt spec (parity with runRace); telemetry must never claim an
       // access level the envelope did not actually run with.
       const convergenceAccess = contract.access.effective_profile;
-      if (input.inPlace === true) {
+      if (input.inPlace === true && input.workspaceKind !== "directory") {
         try {
           preTurnSha = await snapshotTree(execRoot);
         } catch {
@@ -4783,6 +4782,8 @@ export class Orchestrator {
         dirtyPolicy: "snapshot",
         inPlace: input.inPlace ?? false,
         accessProfile: convergenceAccess,
+        workspaceKind: input.workspaceKind,
+        scopePaths: input.scopePaths,
       });
       for (;;) {
         if (input.signal?.aborted) break;
@@ -4886,6 +4887,7 @@ export class Orchestrator {
             undefined,
             undefined,
             harnessHome,
+            observedPaths,
           );
           ledger.settle(
             lease.lease?.lease_id ?? "",
@@ -4959,6 +4961,17 @@ export class Orchestrator {
               knobs.model,
             ),
           };
+          if (envelope.workspace_kind === "directory") {
+            const captured = await captureDirectoryCandidate({
+              manager: wsm,
+              envelope,
+              artifactRoot: join(paths.attemptsDir, attemptId),
+              sourceRoot: contract.repo.root,
+              observedPaths: [...observedPaths],
+            });
+            run.files = captured.files;
+            run.secretDiffRefusal = captured.refusal;
+          }
         }
         lastRun = run;
         // Fail-closed twin of the candidate lane's gate: this loop terminalizes
@@ -4969,13 +4982,26 @@ export class Orchestrator {
         if (input.signal?.aborted) break;
         if (delegateFailure.candidateFailureKind(run)) {
           const failure = delegateFailure.candidateFailureTerminal(run, "convergence");
-          await delegateFailure.persistFailedInPlaceWorkProduct({
-            ...{ store, log, paths, execRoot, preTurnSha, taskId, mode },
-            live: input.inPlace === true,
-            run,
-            kind: input.create === true ? "new_repo" : "patch",
-            attempts: attempt,
-          });
+          if (run.files) {
+            await publishDirectoryCandidate({
+              files: run.files,
+              store,
+              paths,
+              taskId,
+              attemptId,
+              harnessId: run.harnessId,
+              facts: makeOutcomeFacts("failed", { noChanges: run.files.noChanges }),
+              log,
+            });
+          } else if (input.workspaceKind !== "directory") {
+            await delegateFailure.persistFailedInPlaceWorkProduct({
+              ...{ store, log, paths, execRoot, preTurnSha, taskId, mode },
+              live: input.inPlace === true,
+              run,
+              kind: input.create === true ? "new_repo" : "patch",
+              attempts: attempt,
+            });
+          }
           this.writeRunTelemetry(
             store,
             paths,
@@ -4999,6 +5025,29 @@ export class Orchestrator {
             failure.metadata,
           );
         }
+        if (input.workspaceKind === "directory" && run.secretDiffRefusal) {
+          return failedCandidatesResult({
+            ledger,
+            mode,
+            store,
+            paths,
+            log,
+            runId,
+            taskId,
+            runs: [run],
+            writeTelemetry: () =>
+              this.writeRunTelemetry(
+                store,
+                paths,
+                contract,
+                runId,
+                taskId,
+                mode,
+                attemptTelemetries,
+                null,
+              ),
+          });
+        }
         // D-16 r8: interrupted (errored===false) would CONVERGE a partial diff
         // as clean — break BEFORE review; a harness error still gate-retries.
         if (run.outcomeClass === "interrupted") {
@@ -5008,7 +5057,7 @@ export class Orchestrator {
         // Post-mutation fence for in-place: snapshot the live tree NOW (after the
         // harness mutated it, before this attempt's review). The last attempt's
         // value is the revert target persisted into work_product.yaml.
-        if (input.inPlace === true) {
+        if (input.inPlace === true && input.workspaceKind !== "directory") {
           try {
             lastPostTurnSha = await snapshotTree(execRoot);
           } catch {
@@ -5029,191 +5078,56 @@ export class Orchestrator {
               log.emit("review.skipped", { reason: "not_requested", attempt_id: attemptId });
               return evaluateUnreviewedConvergence(evidence, contract);
             }
-            const candidateReviewCwd = run.reviewCwd ?? input.repoRoot;
-            const candidateReviewEvidenceDir = this.prepareReviewEvidenceDir(
+            const [evidence] = await this.reviewRuns(
+              [run],
+              reviewers,
+              reviewVerified,
               reviewDir,
-              candidateReviewCwd,
+              input.repoRoot,
+              contract,
+              store,
+              paths,
+              log,
+              ledger,
+              taskId,
+              input.signal,
+              this.reservationEstimateUsd(input),
+              true,
             );
-            try {
-              writeText(
-                join(candidateReviewEvidenceDir, "TESTS.txt"),
-                renderTestsEvidence(contract, run.gates).trim() + "\n",
-              );
-              // Reviewer panels spend real money in convergence too: reserve before,
-              // settle the observed cost, and surface it as a budget observation
-              // (parity with the race path's reviewRuns metering).
-              const reviewLease =
-                reviewers.length > 0
-                  ? ledger.reserve({
-                      taskId,
-                      attemptId,
-                      intent: "review",
-                      harnessId: "review-panel",
-                      cost: attemptCostEvidence(
-                        "review-panel",
-                        attemptId,
-                        this.reservationEstimateUsd(input),
-                        "unknown",
-                        reviewerProcessingCost(reviewers),
-                      ),
-                    })
-                  : null;
-              const reviewResult =
-                reviewers.length > 0 && (reviewLease?.granted ?? false)
-                  ? await this.reviewScoped({
-                      candidateLabel: `Attempt ${attempt}`,
-                      diff: run.diff,
-                      evidenceDir: candidateReviewEvidenceDir,
-                      artifactsDir: join(paths.reviewsDir, `${attemptId}-reviewers`),
-                      cwd: candidateReviewCwd,
-                      reviewers,
-                      envInheritance: envInheritance(this.config(input.repoRoot)),
-                      signal: input.signal,
-                      onReviewerEvent: (event) => log.emit(event.type, { ...event }),
-                      onUsageCost: (usd) => {
-                        ledger.updateHold(reviewLease!.lease!.lease_id, usd);
-                        return ledger.tier() === "hard";
-                      },
-                    })
-                  : {
-                      findings: [],
-                      routeProofs: [],
-                      reviewerRequests: [],
-                      crossFamilyHealthy: false,
-                      healthyProviders: [],
-                      crossFamilyVerified: false,
-                      distinctProviders: [],
-                      reviewSpendUsd: 0,
-                      reviewSpendEstimated: false,
-                      reviewCashUsd: 0,
-                      reviewCashKnowledge: "unknown" as const,
-                      reviewValuationUsd: 0,
-                      reviewValuationKnowledge: "unknown" as const,
-                      reviewUnknownUsd: 0,
-                    };
-              if (reviewLease?.granted) {
-                ledger.settle(
-                  reviewLease.lease?.lease_id ?? "",
-                  reviewUsageCostSettlement(
-                    reviewResult.reviewCashUsd,
-                    reviewResult.reviewValuationUsd,
-                    {
-                      cash: reviewResult.reviewCashKnowledge,
-                      valuation: reviewResult.reviewValuationKnowledge,
-                    },
-                    [`attempt:${attemptId}`, "review:panel"],
-                    reviewResult.reviewUnknownUsd,
-                  ),
-                );
-                if ((reviewResult.reviewSpendUsd ?? 0) > 0) {
-                  log.emit("budget.observation", {
-                    harness_id: "review-panel",
-                    attempt_id: attemptId,
-                    kind: "spend",
-                    usd: reviewResult.reviewSpendUsd,
-                    cash_usd: reviewResult.reviewCashUsd,
-                    valuation_usd: reviewResult.reviewValuationUsd,
-                    unknown_usd: reviewResult.reviewUnknownUsd,
-                    estimated: reviewResult.reviewSpendEstimated === true,
-                  });
-                }
-              } else if (reviewLease && !reviewLease.granted) {
-                log.emit("budget.lease.created", {
-                  granted: false,
-                  reason: reviewLease.reason,
-                  attempt_id: attemptId,
-                  harness_id: "review-panel",
-                });
-              }
-              actualReviewVerified =
-                reviewVerified &&
-                reviewResult.crossFamilyHealthy &&
-                reviewResult.crossFamilyVerified;
-              const revalidated = await revalidateFindings(reviewResult.findings, {
-                candidateRoot: candidateReviewCwd,
-                evidenceDir: candidateReviewEvidenceDir,
-              });
-              // Typed policy gate (risk + protected paths) merges with reviewer findings.
-              const policy = policyFindings(
-                run,
-                actualReviewVerified,
-                contract.constraints.protected_paths,
-                contract.constraints.auto_protected_paths,
-                contract.constraints.protected_path_approvals,
-                contract.constraints.deny_paths,
-              );
-              const allFindings = [...policy.findings, ...revalidated];
-              lastFindings = allFindings;
-              const inconclusive = allFindings.some(
-                (f) =>
-                  f.severity === "INSUFFICIENT_EVIDENCE" || f.status === "insufficient_evidence",
-              );
-              const finalReviewClean =
-                reviewResult.crossFamilyHealthy &&
-                reviewResult.crossFamilyVerified &&
-                !inconclusive &&
-                !allFindings.some((f) => isBlocking(f));
-              store.writeYaml(join(paths.reviewsDir, `${attemptId}.yaml`), {
-                attempt_id: attemptId,
-                review_verified: actualReviewVerified,
-                final_review_clean: finalReviewClean,
-                cross_family_healthy: reviewResult.crossFamilyHealthy,
-                cross_family_verified: reviewResult.crossFamilyVerified,
-                healthy_providers: reviewResult.healthyProviders,
-                verified_providers: reviewResult.distinctProviders,
-                reviewer_requests: reviewResult.reviewerRequests,
-                risk: policy.risk,
-                findings: allFindings,
-                route_proofs: reviewResult.routeProofs,
-              });
-              lastFinalReviewClean = finalReviewClean;
-
-              // Measure diff stability instead of asserting it: the tree must not have
-              // changed between the candidate diff capture and the end of review.
-              const postReviewDiff = await wsm.diff(envelope);
-              const diffStableAfterReview = sha256(postReviewDiff) === sha256(run.diff);
-              lastDiffStable = diffStableAfterReview;
-
-              const evaluated = evaluateConvergence({
-                predicate: contract.convergence,
-                gates: run.errored
-                  ? [
-                      ...run.gates,
-                      {
-                        id: "harness",
-                        command: "harness",
-                        exit_code: 1,
-                        status: "failed",
-                        duration_ms: 0,
-                        required: true,
-                        stdout_tail: null,
-                        stderr_tail: null,
-                        output_truncated: false,
-                      },
-                    ]
-                  : run.gates,
-                findings: allFindings,
-                finalReviewClean,
-                diffStableAfterReview,
-              });
-              log.emit("finding.revalidated", {
-                attempt_id: attemptId,
-                converged: evaluated.converged,
-                reasons: evaluated.reasons,
-                diff_stable_after_review: diffStableAfterReview,
-              });
-              return evaluated;
-            } finally {
-              this.recordReviewEvidenceCleanup(
-                store,
-                join(paths.reviewsDir, `${attemptId}-evidence-cleanup.yaml`),
-                attemptId,
-                candidateReviewEvidenceDir,
-                candidateReviewCwd,
-              );
-            }
+            if (!evidence) throw new Error("Convergence review produced no evidence");
+            lastFindings = evidence.findings;
+            lastFinalReviewClean = evidence.finalReviewClean;
+            actualReviewVerified = evidence.reviewVerified ?? false;
+            lastDiffStable = run.files
+              ? await directoryCandidateStable(wsm, envelope, run.files)
+              : sha256(await wsm.diff(envelope)) === sha256(run.diff);
+            const evaluated = evaluateConvergence({
+              predicate: contract.convergence,
+              gates: evidence.gates,
+              findings: evidence.findings,
+              finalReviewClean: evidence.finalReviewClean,
+              diffStableAfterReview: lastDiffStable,
+            });
+            log.emit("finding.revalidated", {
+              attempt_id: attemptId,
+              converged: evaluated.converged,
+              reasons: evaluated.reasons,
+              diff_stable_after_review: lastDiffStable,
+            });
+            return evaluated;
           })();
         } catch (err) {
+          if (run.files)
+            await publishDirectoryCandidate({
+              files: run.files,
+              store,
+              paths,
+              taskId,
+              attemptId,
+              harnessId: run.harnessId,
+              facts: makeOutcomeFacts("failed", { noChanges: run.files.noChanges }),
+              log,
+            });
           return failTerminally(
             log,
             store,
@@ -5233,12 +5147,16 @@ export class Orchestrator {
         }
 
         const requiredGateFailing = run.gates.length > 0 && !gatesPassed(run.gates);
-        const diffHash = sha256(run.diff);
-        if (requiredGateFailing && diffHash === lastFailingGateDiffHash) {
+        const diffHash = run.files
+          ? run.files.manifestSha256
+          : input.workspaceKind === "directory"
+            ? null
+            : sha256(run.diff);
+        if (requiredGateFailing && diffHash !== null && diffHash === lastFailingGateDiffHash) {
           sameFailingGateDiffs += 1;
         } else {
           sameFailingGateDiffs = requiredGateFailing ? 1 : 0;
-          lastFailingGateDiffHash = requiredGateFailing ? diffHash : "";
+          lastFailingGateDiffHash = requiredGateFailing ? (diffHash ?? "") : "";
         }
         if (sameFailingGateDiffs >= 2) {
           stuckNoProgress = true;
@@ -5255,7 +5173,10 @@ export class Orchestrator {
           break;
         }
 
-        const sig = failureSignature(conv.reasons);
+        const sig = failureSignature([
+          ...conv.reasons,
+          ...(run.files ? [`files_manifest:${run.files.manifestSha256}`] : []),
+        ]);
         readiness.recordRound(sig, conv.reasons.join("; "));
         if (sig !== lastSig) {
           triedSinceProgress = new Set();
@@ -5356,6 +5277,13 @@ export class Orchestrator {
         facts = decision.facts;
       }
     }
+    if (lastRun?.files)
+      facts = {
+        ...facts,
+        noChanges: lastRun.files.noChanges,
+        reason:
+          facts.reason === "no_changes" && lastRun.files.noChanges !== true ? null : facts.reason,
+      };
     // A budget terminal turns a succeeded lifecycle into a failed one (D8).
     const convBudgetTerminal = ledger.terminal();
     if (facts.lifecycle === "succeeded" && convBudgetTerminal) {
@@ -5380,17 +5308,14 @@ export class Orchestrator {
     if (
       input.inPlace !== true &&
       lastRun &&
-      lastRun.diff.trim().length > 0 &&
+      (lastRun.files ? lastRun.files.noChanges !== true : lastRun.diff.trim().length > 0) &&
       facts.lifecycle === "succeeded" &&
       facts.review !== "blocked" &&
       !input.signal?.aborted
     ) {
-      convFinalVerify = await finalVerifyPatch(
-        execRoot,
-        lastRun,
-        gateSpecsFromContract(contract),
-        log,
-      );
+      convFinalVerify = lastRun.files
+        ? await finalVerifyFiles(lastRun.files, undefined, gateSpecsFromContract(contract), log)
+        : await finalVerifyPatch(execRoot, lastRun, gateSpecsFromContract(contract), log);
       if (finalVerifyBlocks(convFinalVerify))
         facts = { ...facts, checks: "failed", reason: "checks_failed" };
     }
@@ -5419,54 +5344,72 @@ export class Orchestrator {
     );
 
     // Deliver the converged/last work to final/ so `apply` and `inspect` can
-    // use it. D-16 r8: an INTERRUPTED envelope run delivers no applyable
-    // work_product (its partial patch.diff stays diagnostic via attempts/);
-    // in-place keeps the product so the honest Revert offer survives.
-    if (lastRun && (!interrupted || input.inPlace === true)) {
-      secretDiff.assertNoSecretLikeTokens("final patch diff", lastRun.diff);
-      const patchSha256 = sha256(lastRun.diff);
-      store.writeText(join(paths.finalDir, "patch.diff"), lastRun.diff);
-      // Honest apply-state (parity with runRace single-candidate in-place): a
-      // convergence run with inPlace mutated the live tree directly across its
-      // attempts, so it is "applied" even when review blocked (Revert offered).
-      const convHasDiff = lastRun.diff.trim().length > 0;
+    // use it. Directory results retain complete partial files with their actual
+    // lifecycle; direct effects are already applied and promise no rollback.
+    // D-16 r8 keeps interrupted Git-envelope patches diagnostic in attempts/,
+    // while in-place Git work retains its existing Revert evidence.
+    if (lastRun && (lastRun.files || !interrupted || input.inPlace === true)) {
       const convAdoptable =
         facts.lifecycle === "succeeded" &&
         reviewAllowsApply(facts) &&
         facts.checks !== "failed" &&
         !workStateVetoes(facts);
-      const convAdopted: boolean | null = input.inPlace === true && convHasDiff ? true : null;
-      const convApplyState: "not_applied" | "applied" | "applied_review_blocked" | "reverted" =
-        convAdopted === true
-          ? convAdoptable
-            ? "applied"
-            : "applied_review_blocked"
-          : "not_applied";
-      const revertAnchorId =
-        convAdopted === true
-          ? await createRevertAnchorOrNull(execRoot, preTurnSha, lastPostTurnSha)
-          : null;
-      store.writeYaml(join(paths.finalDir, "work_product.yaml"), {
-        id: newId("wp"),
-        kind: "patch",
-        source_task_id: taskId,
-        producer_attempt_id: lastRun.attemptId,
-        meta: {
-          harness_id: lastRun.harnessId,
-          result_kind: "patch",
-          mode,
-          attempts: attempt,
-          lifecycle: facts.lifecycle,
-          outcome_facts: facts,
-          review_verified: actualReviewVerified,
-          patch_sha256: patchSha256,
-          adopted: convAdopted,
-          apply_state: convApplyState,
-          pre_turn_sha: convAdopted === true ? preTurnSha : null,
-          post_turn_sha: convAdopted === true ? lastPostTurnSha : null,
-          revert_anchor_id: revertAnchorId,
-        },
-      });
+      if (lastRun.files) {
+        await publishDirectoryCandidate({
+          files: lastRun.files,
+          store,
+          paths,
+          taskId,
+          attemptId: lastRun.attemptId,
+          harnessId: lastRun.harnessId,
+          facts,
+          log,
+        });
+        if (lastRun.answerText) {
+          store.writeText(join(paths.finalDir, "answer.md"), lastRun.answerText);
+          log.emit("output.ready", { kind: "answer", path: "final/answer.md" });
+        }
+      } else {
+        secretDiff.assertNoSecretLikeTokens("final patch diff", lastRun.diff);
+        const patchSha256 = sha256(lastRun.diff);
+        store.writeText(join(paths.finalDir, "patch.diff"), lastRun.diff);
+        // Honest apply-state (parity with runRace single-candidate in-place): a
+        // convergence run with inPlace mutated the live tree directly across its
+        // attempts, so it is "applied" even when review blocked (Revert offered).
+        const convHasDiff = lastRun.diff.trim().length > 0;
+        const convAdopted: boolean | null = input.inPlace === true && convHasDiff ? true : null;
+        const convApplyState: "not_applied" | "applied" | "applied_review_blocked" | "reverted" =
+          convAdopted === true
+            ? convAdoptable
+              ? "applied"
+              : "applied_review_blocked"
+            : "not_applied";
+        const revertAnchorId =
+          convAdopted === true
+            ? await createRevertAnchorOrNull(execRoot, preTurnSha, lastPostTurnSha)
+            : null;
+        store.writeYaml(join(paths.finalDir, "work_product.yaml"), {
+          id: newId("wp"),
+          kind: "patch",
+          source_task_id: taskId,
+          producer_attempt_id: lastRun.attemptId,
+          meta: {
+            harness_id: lastRun.harnessId,
+            result_kind: "patch",
+            mode,
+            attempts: attempt,
+            lifecycle: facts.lifecycle,
+            outcome_facts: facts,
+            review_verified: actualReviewVerified,
+            patch_sha256: patchSha256,
+            adopted: convAdopted,
+            apply_state: convApplyState,
+            pre_turn_sha: convAdopted === true ? preTurnSha : null,
+            post_turn_sha: convAdopted === true ? lastPostTurnSha : null,
+            revert_anchor_id: revertAnchorId,
+          },
+        });
+      }
       store.writeText(
         join(paths.finalDir, "summary.md"),
         `# Run ${runId} (${mode})\n\n- Lifecycle: ${facts.lifecycle}${facts.reason ? ` (${facts.reason})` : ""}\n- Attempts: ${attempt}\n- Winner: ${lastRun.attemptId}\n- Review verified (cross-family): ${actualReviewVerified}\n- Apply recommendation: ${decision?.apply_recommendation ?? "inspect"}${stuckNoProgressReason ? `\n- No-progress reason: ${stuckNoProgressReason}` : ""}\n`,
@@ -5538,7 +5481,7 @@ export class Orchestrator {
       // summary + output.ready (only patch/work_product are withheld) — the
       // ARCHITECTURE event contract guarantees output.ready precedes the
       // terminal in every mode.
-      if (!lastRun || (interrupted && input.inPlace !== true)) {
+      if (!lastRun || (interrupted && input.inPlace !== true && !lastRun.files)) {
         store.writeText(
           join(paths.finalDir, "summary.md"),
           `# Run ${runId} (${mode})\n\n- Lifecycle: ${facts.lifecycle}${facts.reason ? ` (${facts.reason})` : ""}\n- Attempts: ${attempt}\n`,
@@ -5552,7 +5495,7 @@ export class Orchestrator {
     }
 
     // work_product.emitted only when a product was actually written (r9).
-    if (lastRun && (!interrupted || input.inPlace === true)) {
+    if (lastRun && (lastRun.files || !interrupted || input.inPlace === true)) {
       log.emit("work_product.emitted", { winner: lastRun.attemptId });
     }
     if (!convIsFailureTerminal) {

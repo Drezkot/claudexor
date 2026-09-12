@@ -97,9 +97,14 @@ function readResult(root: string, runDir: string) {
 }
 
 describe("ordinary directory Agent execution", () => {
-  it.each([true, false])(
-    "produces full file output with inPlace=%s and ordinary review-off",
-    async (inPlace) => {
+  it.each([
+    { inPlace: true },
+    { inPlace: false },
+    { inPlace: true, attempts: 3 },
+    { inPlace: false, attempts: 3 },
+  ])(
+    "produces full file output with inPlace=$inPlace, attempts=$attempts and review-off",
+    async ({ inPlace, attempts }) => {
       const root = fixture();
       const bytes = Buffer.alloc(34 * 1024 * 1024, 0x01);
       const author = writer(bytes);
@@ -113,6 +118,8 @@ describe("ordinary directory Agent execution", () => {
         workspaceKind: "directory",
         scopePaths: ["input.txt"],
         inPlace,
+        attempts,
+        review: false,
       });
       expect(result.facts).toMatchObject({
         lifecycle: "succeeded",
@@ -209,136 +216,147 @@ describe("ordinary directory Agent execution", () => {
     },
   );
 
-  it("requested review sees the full selected candidate and binary outputs despite an empty patch", async () => {
-    const root = fixture();
-    const author = writer(Buffer.from([0, 255, 2]));
-    const originalRun = author.adapter.run;
-    author.adapter.run = async function* (spec) {
-      for await (const event of originalRun(spec)) {
-        if (event.type === "completed") {
-          mkdirSync(join(spec.cwd, "dist"));
-          writeFileSync(join(spec.cwd, "dist/generated.bin"), Buffer.from([7, 0, 255]));
-          yield {
-            type: "file_change",
-            ts: event.ts,
-            session_id: spec.session_id,
-            payload: { path: "dist/generated.bin" },
-          };
+  it.each([{}, { attempts: 3 }, { untilClean: true }])(
+    "requested review sees the full selected candidate and binary outputs with strategy %j",
+    async (strategy) => {
+      const root = fixture();
+      const author = writer(Buffer.from([0, 255, 2]));
+      const originalRun = author.adapter.run;
+      author.adapter.run = async function* (spec) {
+        for await (const event of originalRun(spec)) {
+          if (event.type === "completed") {
+            mkdirSync(join(spec.cwd, "dist"));
+            writeFileSync(join(spec.cwd, "dist/generated.bin"), Buffer.from([7, 0, 255]));
+            yield {
+              type: "file_change",
+              ts: event.ts,
+              session_id: spec.session_id,
+              payload: { path: "dist/generated.bin" },
+            };
+          }
+          yield event;
         }
-        yield event;
-      }
-    };
-    const reviewed: string[] = [];
-    const reviewer = (id: string, providerFamily: "openai" | "anthropic"): ReviewerSpec => ({
-      providerFamily,
-      requestedModel: `${id}-model`,
-      adapter: {
-        id,
-        async discover() {
-          return HarnessManifest.parse({
-            id,
-            display_name: id,
-            kind: "local_cli",
-            provider_family: providerFamily,
-            access_profiles_supported: ["readonly"],
-            capabilities: { review: true, known_models: [`${id}-model`] },
-          });
-        },
-        async doctor() {
-          return ConformanceReport.parse({
-            harness_id: id,
-            status: "ok",
-            enabled_intents: ["review"],
-          });
-        },
-        async *run(spec) {
-          const ts = new Date().toISOString();
-          reviewed.push(id);
-          expect(readFileSync(join(spec.cwd, "input.txt"), "utf8")).toBe("selected source\r\n");
-          expect(readFileSync(join(spec.cwd, "output.bin"))).toEqual(Buffer.from([0, 255, 2]));
-          expect(readFileSync(join(spec.cwd, "dist/generated.bin"))).toEqual(
-            Buffer.from([7, 0, 255]),
-          );
-          expect(existsSync(join(spec.cwd, "outside.txt"))).toBe(false);
-          expect(spec.prompt).toContain("FILES.json");
-          const evidenceRoot = join(spec.cwd, ".claudexor-review-evidence");
-          const fullManifest = WorkspaceFilesManifest.parse(
-            JSON.parse(readFileSync(join(evidenceRoot, "FILES.json"), "utf8")),
-          );
-          const baseline = fullManifest.entries.find((entry) => entry.path === "input.txt")?.before;
-          if (!baseline || baseline === "unknown" || baseline.kind !== "file")
-            throw new Error("missing selected baseline");
-          expect(readFileSync(join(evidenceRoot, baseline.artifactPath!), "utf8")).toBe(
-            "selected source\r\n",
-          );
-          yield {
-            type: "started",
-            ts,
-            session_id: spec.session_id,
-            observed_model: `${id}-model`,
-            credential_route: "managed_api_key",
-          };
-          yield { type: "message", ts, session_id: spec.session_id, text: "```json\n[]\n```" };
-          yield {
-            type: "usage",
-            ts,
-            session_id: spec.session_id,
-            credential_route: "managed_api_key",
-            usage: { cost_usd: 0.001 },
-          };
-          yield { type: "completed", ts, session_id: spec.session_id };
-        },
-      },
-    });
-    const reviewers = [reviewer("review-a", "openai"), reviewer("review-b", "anthropic")];
-    const result = await new Orchestrator({
-      registry: new Map([[author.adapter.id, author.adapter]]),
-      reviewers,
-    }).run({
-      repoRoot: root,
-      workspaceKind: "directory",
-      scopePaths: ["input.txt"],
-      prompt: "Write and review binary output",
-      harnesses: [author.adapter.id],
-      review: true,
-    });
-    expect(result.facts).toMatchObject({
-      lifecycle: "succeeded",
-      review: "approved",
-      noChanges: false,
-    });
-    expect(reviewed.sort()).toEqual(["review-a", "review-b"]);
-    expect(existsSync(join(root, ".git"))).toBe(false);
-  });
-
-  it("keeps direct changes unknown when no footprint was inspected", async () => {
-    const root = fixture();
-    const author = writer(Buffer.from([1]));
-    author.adapter.run = async function* (spec) {
-      const ts = new Date().toISOString();
-      yield { type: "started", ts, session_id: spec.session_id };
-      yield {
-        type: "message",
-        ts,
-        session_id: spec.session_id,
-        text: "The external action is complete.",
-        final: true,
       };
-      yield { type: "completed", ts, session_id: spec.session_id };
-    };
-    const result = await new Orchestrator({
-      registry: new Map([[author.adapter.id, author.adapter]]),
-    }).run({
-      repoRoot: root,
-      workspaceKind: "directory",
-      inPlace: true,
-      prompt: "Do the task",
-      harnesses: [author.adapter.id],
-    });
-    expect(result.facts).toMatchObject({ lifecycle: "succeeded", noChanges: null });
-    expect(readResult(root, result.runDir).facts.outcome.noChanges).toBeNull();
-    expect(existsSync(join(root, ".git"))).toBe(false);
-  });
+      const reviewed: string[] = [];
+      const reviewer = (id: string, providerFamily: "openai" | "anthropic"): ReviewerSpec => ({
+        providerFamily,
+        requestedModel: `${id}-model`,
+        adapter: {
+          id,
+          async discover() {
+            return HarnessManifest.parse({
+              id,
+              display_name: id,
+              kind: "local_cli",
+              provider_family: providerFamily,
+              access_profiles_supported: ["readonly"],
+              capabilities: { review: true, known_models: [`${id}-model`] },
+            });
+          },
+          async doctor() {
+            return ConformanceReport.parse({
+              harness_id: id,
+              status: "ok",
+              enabled_intents: ["review"],
+            });
+          },
+          async *run(spec) {
+            const ts = new Date().toISOString();
+            reviewed.push(id);
+            expect(readFileSync(join(spec.cwd, "input.txt"), "utf8")).toBe("selected source\r\n");
+            expect(readFileSync(join(spec.cwd, "output.bin"))).toEqual(Buffer.from([0, 255, 2]));
+            expect(readFileSync(join(spec.cwd, "dist/generated.bin"))).toEqual(
+              Buffer.from([7, 0, 255]),
+            );
+            expect(existsSync(join(spec.cwd, "outside.txt"))).toBe(false);
+            expect(spec.prompt).toContain("FILES.json");
+            const evidenceRoot = join(spec.cwd, ".claudexor-review-evidence");
+            const fullManifest = WorkspaceFilesManifest.parse(
+              JSON.parse(readFileSync(join(evidenceRoot, "FILES.json"), "utf8")),
+            );
+            const baseline = fullManifest.entries.find(
+              (entry) => entry.path === "input.txt",
+            )?.before;
+            if (!baseline || baseline === "unknown" || baseline.kind !== "file")
+              throw new Error("missing selected baseline");
+            expect(readFileSync(join(evidenceRoot, baseline.artifactPath!), "utf8")).toBe(
+              "selected source\r\n",
+            );
+            yield {
+              type: "started",
+              ts,
+              session_id: spec.session_id,
+              observed_model: `${id}-model`,
+              credential_route: "managed_api_key",
+            };
+            yield { type: "message", ts, session_id: spec.session_id, text: "```json\n[]\n```" };
+            yield {
+              type: "usage",
+              ts,
+              session_id: spec.session_id,
+              credential_route: "managed_api_key",
+              usage: { cost_usd: 0.001 },
+            };
+            yield { type: "completed", ts, session_id: spec.session_id };
+          },
+        },
+      });
+      const reviewers = [reviewer("review-a", "openai"), reviewer("review-b", "anthropic")];
+      const result = await new Orchestrator({
+        registry: new Map([[author.adapter.id, author.adapter]]),
+        reviewers,
+      }).run({
+        repoRoot: root,
+        workspaceKind: "directory",
+        scopePaths: ["input.txt"],
+        prompt: "Write and review binary output",
+        harnesses: [author.adapter.id],
+        review: true,
+        ...strategy,
+      });
+      expect(result.facts).toMatchObject({
+        lifecycle: "succeeded",
+        review: "approved",
+        noChanges: false,
+      });
+      expect(reviewed.sort()).toEqual(["review-a", "review-b"]);
+      expect(existsSync(join(root, ".git"))).toBe(false);
+    },
+  );
+
+  it.each([undefined, 3])(
+    "keeps direct changes unknown with attempts=%s and no footprint",
+    async (attempts) => {
+      const root = fixture();
+      const author = writer(Buffer.from([1]));
+      author.adapter.run = async function* (spec) {
+        const ts = new Date().toISOString();
+        yield { type: "started", ts, session_id: spec.session_id };
+        yield {
+          type: "message",
+          ts,
+          session_id: spec.session_id,
+          text: "The external action is complete.",
+          final: true,
+        };
+        yield { type: "completed", ts, session_id: spec.session_id };
+      };
+      const result = await new Orchestrator({
+        registry: new Map([[author.adapter.id, author.adapter]]),
+      }).run({
+        repoRoot: root,
+        workspaceKind: "directory",
+        inPlace: true,
+        prompt: "Do the task",
+        attempts,
+        review: false,
+        harnesses: [author.adapter.id],
+      });
+      expect(result.facts).toMatchObject({ lifecycle: "succeeded", noChanges: null });
+      expect(readResult(root, result.runDir).facts.outcome.noChanges).toBeNull();
+      expect(existsSync(join(root, ".git"))).toBe(false);
+    },
+  );
 
   it("retains failed partial file work without retrying its physical effect", async () => {
     const root = fixture();
@@ -409,18 +427,123 @@ describe("ordinary directory Agent execution", () => {
     );
   });
 
-  it("retains a cancelled direct operation's already-written bytes without reapplying or retrying", async () => {
-    const root = fixture();
-    const author = writer(Buffer.from([0, 255]));
-    const signal = new AbortController();
-    const originalRun = author.adapter.run;
-    author.adapter.run = async function* (spec) {
-      for await (const event of originalRun(spec)) {
-        yield event;
-        if (event.type === "file_change") {
-          signal.abort();
-          break;
+  it.each([undefined, 3])(
+    "retains cancelled direct output without replay, attempts=%s",
+    async (attempts) => {
+      const root = fixture();
+      const author = writer(Buffer.from([0, 255]));
+      const signal = new AbortController();
+      const originalRun = author.adapter.run;
+      author.adapter.run = async function* (spec) {
+        for await (const event of originalRun(spec)) {
+          yield event;
+          if (event.type === "file_change") {
+            signal.abort();
+            break;
+          }
         }
+      };
+      const result = await new Orchestrator({
+        registry: new Map([[author.adapter.id, author.adapter]]),
+      }).run({
+        repoRoot: root,
+        workspaceKind: "directory",
+        inPlace: true,
+        scopePaths: ["output.bin"],
+        signal: signal.signal,
+        attempts,
+        review: false,
+        prompt: "Produce output",
+        harnesses: [author.adapter.id],
+      });
+      expect(result.facts.lifecycle).toBe("cancelled");
+      expect(author.calls).toHaveLength(1);
+      expect(readResult(root, result.runDir).product.meta.apply_state).toBe("applied");
+      expect(readFileSync(join(root, "output.bin"))).toEqual(Buffer.from([0, 255]));
+    },
+  );
+  it.each([true, false])(
+    "keeps earlier file output across repair attempts, direct=%s",
+    async (inPlace) => {
+      const root = fixture();
+      const author = writer(Buffer.from([0, 255]));
+      let round = 0;
+      author.adapter.run = async function* (spec) {
+        author.calls.push(spec.cwd);
+        const ts = new Date().toISOString();
+        yield { type: "started", ts, session_id: spec.session_id };
+        round += 1;
+        const path = round === 1 ? "first.bin" : "second.bin";
+        writeFileSync(join(spec.cwd, path), Buffer.from([0, round, 255]));
+        yield { type: "file_change", ts, session_id: spec.session_id, payload: { path } };
+        yield {
+          type: "message",
+          ts,
+          session_id: spec.session_id,
+          text: "Prepared output.",
+          final: true,
+        };
+        yield { type: "completed", ts, session_id: spec.session_id };
+      };
+      const result = await new Orchestrator({
+        registry: new Map([[author.adapter.id, author.adapter]]),
+      }).run({
+        repoRoot: root,
+        workspaceKind: "directory",
+        scopePaths: ["input.txt"],
+        inPlace,
+        prompt: "Produce two binary outputs",
+        harnesses: [author.adapter.id],
+        attempts: 3,
+        review: false,
+        tests: [
+          {
+            program: process.execPath,
+            args: ["-e", "process.exit(require('node:fs').existsSync('second.bin') ? 0 : 1)"],
+            envAllowlist: [],
+          },
+        ],
+      });
+      expect(result.facts).toMatchObject({ lifecycle: "succeeded", checks: "passed" });
+      expect(author.calls).toHaveLength(2);
+      expect(new Set(author.calls).size).toBe(1);
+      expect(existsSync(join(root, ".git"))).toBe(false);
+      const { product, manifest } = readResult(root, result.runDir);
+      for (const [path, number] of [
+        ["first.bin", 1],
+        ["second.bin", 2],
+      ] as const) {
+        const state = manifest.entries.find((entry) => entry.path === path)?.after;
+        if (state?.kind !== "file") throw new Error("missing completed output");
+        expect(readFileSync(join(result.runDir, state.artifactPath!))).toEqual(
+          Buffer.from([0, number, 255]),
+        );
+      }
+      if (!inPlace) {
+        expect(existsSync(join(root, "first.bin"))).toBe(false);
+        expect(
+          await verifyAndDeliverFiles(root, {
+            manifest,
+            manifestSha256: String(product.meta.manifest_sha256),
+            artifactRoot: result.runDir,
+          }),
+        ).toMatchObject({ applied: true });
+      }
+      expect(readFileSync(join(root, "first.bin"))).toEqual(Buffer.from([0, 1, 255]));
+      expect(product.meta).not.toHaveProperty("revert_anchor_id");
+    },
+  );
+  it("measures repair progress from changed binary content instead of the empty patch", async () => {
+    const root = fixture();
+    const author = writer(Buffer.from([0]));
+    const originalRun = author.adapter.run;
+    let round = 0;
+    author.adapter.run = async function* (spec) {
+      round += 1;
+      for await (const event of originalRun(spec)) {
+        if (event.type === "file_change")
+          writeFileSync(join(spec.cwd, "output.bin"), Buffer.from([round, 0, 255]));
+        yield event;
       }
     };
     const result = await new Orchestrator({
@@ -429,14 +552,24 @@ describe("ordinary directory Agent execution", () => {
       repoRoot: root,
       workspaceKind: "directory",
       inPlace: true,
-      scopePaths: ["output.bin"],
-      signal: signal.signal,
-      prompt: "Produce output",
+      prompt: "Repair the binary output",
       harnesses: [author.adapter.id],
+      attempts: 3,
+      review: false,
+      tests: [
+        {
+          program: process.execPath,
+          args: [
+            "-e",
+            "process.exit(require('node:fs').readFileSync('output.bin')[0] === 3 ? 0 : 1)",
+          ],
+          envAllowlist: [],
+        },
+      ],
     });
-    expect(result.facts.lifecycle).toBe("cancelled");
-    expect(author.calls).toHaveLength(1);
-    expect(readResult(root, result.runDir).product.meta.apply_state).toBe("applied");
-    expect(readFileSync(join(root, "output.bin"))).toEqual(Buffer.from([0, 255]));
+    expect(result.facts).toMatchObject({ lifecycle: "succeeded", checks: "passed" });
+    expect(author.calls).toHaveLength(3);
+    expect(readFileSync(join(root, "output.bin"))).toEqual(Buffer.from([3, 0, 255]));
+    expect(readResult(root, result.runDir).facts.deliverable.kind).toBe("files");
   });
 });

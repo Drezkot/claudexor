@@ -134,6 +134,27 @@ export async function prepareDirectoryReview(
   return { cwd, paths, dispose: () => rm(cwd, { recursive: true, force: true }) };
 }
 
+/** Recheck the same captured footprint after review, keeping its sealed bytes intact. */
+export async function directoryCandidateStable(
+  manager: WorkspaceManager,
+  envelope: WorkspaceEnvelope,
+  files: DirectoryCandidate,
+): Promise<boolean> {
+  const artifactRoot = join(files.artifactRoot, "review-verification");
+  try {
+    const current = await captureDirectoryCandidate({
+      manager,
+      envelope,
+      artifactRoot,
+      sourceRoot: files.manifest.sourceRoot,
+      observedPaths: files.manifest.entries.map((entry) => entry.path),
+    });
+    return current.files?.manifestSha256 === files.manifestSha256;
+  } finally {
+    await rm(artifactRoot, { recursive: true, force: true });
+  }
+}
+
 export async function publishDirectoryCandidate(input: {
   files: DirectoryCandidate;
   store: ArtifactStore;
