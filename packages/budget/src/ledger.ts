@@ -94,7 +94,13 @@ export function promptFingerprint(prompt: string): string {
  * stay view-local. */
 export class BudgetLedger {
   markPhysicalDispatchStarted(leaseId: string): void {
-    this.financial.physicalDispatchStarted.add(leaseId);
+    const lease = this.financial.leases.get(leaseId);
+    if (
+      lease &&
+      lease.cost?.billing !== "proven_zero" &&
+      lease.cost?.billing !== "subscription_entitlement"
+    )
+      this.financial.physicalDispatchStarted.add(leaseId);
   }
   private readonly observations: BudgetObservation[] = [];
   private readonly quotaSnapshots = new Map<string, QuotaSnapshot>();
