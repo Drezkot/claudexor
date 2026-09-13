@@ -39,6 +39,26 @@ describe("processing cost before ranking and reserve", () => {
     };
     expect(processingCostEvidence(legacy, "subscription_entitlement", ["legacy"])).toBeUndefined();
   });
+  it("keeps an explicit but unclassified native tier unknown", () => {
+    const explicit: PreparedHarnessProcessing = {
+      model: "exact-model",
+      receipt: {
+        requested: null,
+        submitted: null,
+        submittedNative: "scale",
+        observed: "unknown",
+        observedNative: [],
+        reason: "native_explicit",
+        source: "fixture",
+      },
+      costBasis: { nativeMode: "scale", kind: "unknown", source: "fixture" },
+    };
+    expect(
+      processingCostEvidence(explicit, "subscription_entitlement", ["explicit"]),
+    ).toMatchObject({
+      billing: "unknown",
+    });
+  });
 
   it("premium mode outranks auth-only free inference without inventing an estimate", () => {
     const cost = processingCostEvidence(
