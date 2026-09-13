@@ -43,9 +43,11 @@ function ordinaryIncluded(
   )
     return true;
   if (
-    processing?.submitted === "standard" &&
-    !(processing.submitted === null && processing.reason === "native_explicit") &&
-    !processing.reason?.startsWith("paid_processing_") &&
+    (processing?.submitted === "standard" ||
+      (processing?.requested === null &&
+        processing.submitted === null &&
+        processing.reason !== "native_explicit" &&
+        !processing.reason?.startsWith("paid_processing_"))) &&
     (billing === undefined || billing.kind === "unknown")
   )
     return true;

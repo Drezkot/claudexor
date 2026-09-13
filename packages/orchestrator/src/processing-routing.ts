@@ -40,8 +40,9 @@ export function processingCostEvidence(
   if (
     !prepared ||
     prepared.receipt.reason === "processing_control_unavailable" ||
-    (prepared.receipt.submitted === "standard" &&
-      !(prepared.receipt.submitted === null && prepared.receipt.reason === "native_explicit") &&
+    (prepared.receipt.requested === null &&
+      prepared.receipt.submitted === null &&
+      prepared.receipt.reason !== "native_explicit" &&
       !prepared.receipt.reason?.startsWith("paid_processing_"))
   )
     return undefined;
