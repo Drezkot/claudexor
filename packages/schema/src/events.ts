@@ -1,5 +1,5 @@
 import { z } from "zod/v3";
-import { FallbackReason, Id } from "./primitives.js";
+import { FallbackReason, Id, ModeKind } from "./primitives.js";
 import { AuthMode } from "./budget.js";
 import { CredentialUnusableObservation } from "./credential-profile.js";
 
@@ -38,6 +38,32 @@ export const ThreadHeadPing = z
       "the authoritative thread summary instead of trusting event content.",
   );
 export type ThreadHeadPing = z.infer<typeof ThreadHeadPing>;
+
+/**
+ * Payload of the JOURNALED copy of a `run.created` event. The per-run
+ * `events.jsonl` keeps the prompt text; the owning global/project journal
+ * partition stores the prompt's digest and byte length instead, so the durable
+ * stream never carries a prompt body (the accepted command already holds it).
+ */
+export const JournaledRunCreatedPayload = z
+  .object({
+    mode: ModeKind,
+    prompt_sha256: z
+      .string()
+      .regex(/^[0-9a-f]{64}$/)
+      .describe("sha256 hex digest of the redacted prompt text."),
+    prompt_bytes: z
+      .number()
+      .int()
+      .nonnegative()
+      .describe("UTF-8 byte length of the redacted prompt text."),
+  })
+  .passthrough()
+  .describe(
+    "Journaled `run.created` payload: the prompt text is replaced by its sha256 digest and byte " +
+      "length in the global/project journal partition; the per-run event log keeps the prompt.",
+  );
+export type JournaledRunCreatedPayload = z.infer<typeof JournaledRunCreatedPayload>;
 
 export const RunEventType = z
   .enum([

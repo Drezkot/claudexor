@@ -687,6 +687,62 @@ describe("ProjectPartitions", () => {
     f.partitions.close();
     f.manager.close();
   });
+
+  it("journals only lifecycle-significant run events and strips the run.created prompt (D1/D2)", () => {
+    const f = fixture();
+    const params = {};
+    const prompt = "Summarize the release notes.";
+    const base = { ts: "2026-01-01T00:00:00.000Z", run_id: "run-j", task_id: "task-j" };
+    const created = f.partitions.recordRunEvent(params, {
+      ...base,
+      seq: 1,
+      type: "run.created",
+      payload: { mode: "ask", prompt },
+    });
+    // The producer's own event keeps the prompt for events.jsonl / the bus.
+    expect(created.payload).toMatchObject({ mode: "ask" });
+    expect(created.payload).not.toHaveProperty("prompt");
+    const delta = { ...base, seq: 2, type: "harness.event" as const, payload: { text: "tok" } };
+    expect(f.partitions.recordRunEvent(params, delta)).toBe(delta);
+    f.partitions.recordRunEvent(params, {
+      ...base,
+      seq: 3,
+      type: "run.completed",
+      payload: { lifecycle: "succeeded" },
+    });
+    const journaled = f.manager
+      .events()
+      .filter((event) => event.type === "run.event")
+      .map((event) => event.payload as { type: string; payload: Record<string, unknown> });
+    expect(journaled.map((event) => event.type)).toEqual(["run.created", "run.completed"]);
+    expect(journaled[0]?.payload).toEqual({
+      mode: "ask",
+      prompt_sha256: expect.stringMatching(/^[0-9a-f]{64}$/),
+      prompt_bytes: Buffer.byteLength(prompt, "utf8"),
+    });
+    f.partitions.close();
+    f.manager.close();
+  });
+
+  it("never fails the producer for a filtered event, even when no partition could take it", () => {
+    const f = fixture();
+    const unregistered = { scope: { kind: "project", root: join(f.root, "nowhere") } };
+    const delta = {
+      ts: "2026-01-01T00:00:00.000Z",
+      run_id: "run-x",
+      task_id: "task-x",
+      seq: 1,
+      type: "harness.event" as const,
+      payload: {},
+    };
+    expect(f.partitions.recordRunEvent(unregistered, delta)).toBe(delta);
+    // A journaled type on the same unroutable request still fails loudly.
+    expect(() =>
+      f.partitions.recordRunEvent(unregistered, { ...delta, type: "run.completed" }),
+    ).toThrow(/project root does not exist|project is not registered/);
+    f.partitions.close();
+    f.manager.close();
+  });
 });
 
 function fixtureAt(root: string, requestMaintenance?: (journal: DurableJournal) => void) {

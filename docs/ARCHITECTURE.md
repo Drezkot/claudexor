@@ -1805,15 +1805,24 @@ while its complete assistant flush remains a complete message.
 
 Every `RunEvent` carries a monotonic per-run `seq` stamped by the engine's
 EventLog at emit time (control-api audit appends continue the same sequence).
-In the daemon composition root, each emitted event is also appended to its
-owning global/project journal partition before live bus publication; scoped
-journal streams therefore replay run progress after restart. A journal sink
-failure fails the producer/run instead of being swallowed as a live-only gap.
+In the daemon composition root, the lifecycle-significant events — `run.created`
+(journaled with the prompt's sha256 digest and byte length in place of the
+prompt text), `interaction.requested`, `interaction.answered`,
+`interaction.timeout`, `output.ready` and the terminal
+`run.completed|run.failed|run.blocked` — are also appended to the run's owning
+global/project journal partition before live bus publication. Per-token
+`harness.event` deltas and every other progress event reach only the per-run
+`events.jsonl` and the in-process bus, so scoped journal streams replay the run
+LIFECYCLE after restart, never token-level progress. A journal sink failure for a
+journaled event fails the producer/run instead of being swallowed as a live-only
+gap; an event outside the journaled set is never a sink failure.
 `GET /v2/runs/:id` returns the snapshot together with `lastSeq` — the highest seq
 already reflected in that snapshot — so a client subscribes to
 `GET /v2/runs/:id/events` with `Last-Event-ID: <lastSeq>` and applies deltas with
-no gaps and no duplicates. The per-run stream replays from the rebuildable run
-artifact projection `events.jsonl` (old pre-seq fixture lines fall back to
+no gaps and no duplicates. The per-run stream replays from the run's
+`events.jsonl` — the one complete per-run event record; the journal partition
+holds only the lifecycle subset above, so it can restore a run's terminal tail
+but never rebuild the full stream — (old pre-seq fixture lines fall back to
 line-number ids) and is
 push-driven by the daemon's in-process run-event bus, with a file-tail poll as
 fallback; `output.ready` is guaranteed to precede the terminal
