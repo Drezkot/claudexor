@@ -118,6 +118,10 @@ export interface NormalPlaneDuties {
    * write — and is crash-recoverable via its own phase file (an incomplete
    * harness refuses runs typed until the next start finishes it). */
   migrateAccounts(): void;
+  /** Command history retention (age/cap and the retained-params byte budget)
+   * over the just-activated registry; a heavy install must not carry its
+   * oldest prompts until the next terminal happens to prune them. */
+  pruneCommandHistory(): void;
   startSetup(): Promise<void>;
   quarantineGhosts(): void;
   scheduleRetention(): void;
@@ -161,6 +165,7 @@ export function createStartupAdmissionRuntime(input: {
       );
     }
     input.normalPlane.migrateAccounts();
+    input.normalPlane.pruneCommandHistory();
     await input.normalPlane.startSetup();
     input.normalPlane.quarantineGhosts();
     input.normalPlane.scheduleRetention();

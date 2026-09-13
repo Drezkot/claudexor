@@ -52,6 +52,7 @@ function runtimeFixture(initialBlocked: string[]) {
     startSetup: vi.fn(async () => {}),
     quarantineGhosts: vi.fn(),
     scheduleRetention: vi.fn(),
+    pruneCommandHistory: vi.fn(),
     armJournalMaintenance: vi.fn(),
   };
   const runtime = createStartupAdmissionRuntime({

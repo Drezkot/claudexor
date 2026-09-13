@@ -65,7 +65,6 @@ import { runStopIfRequested } from "./runtime-replacement-stop.js";
 import { createDaemonAgentRunner } from "./daemon-agent-runner.js";
 import { createModelServices } from "./model-services.js";
 import { isModelOperation } from "@claudexor/schema";
-const NO_PROJECT_ROOT = noProjectRepoRoot();
 
 export async function main(): Promise<void> {
   // Probe and identity-proven stop must run before any durable startup.
@@ -225,7 +224,7 @@ export async function main(): Promise<void> {
     bindDelegationDaemon(server);
 
     const authReadiness = new AuthReadinessService(buildGateway({ includeFakes: false }), {
-      cwd: NO_PROJECT_ROOT,
+      cwd: noProjectRepoRoot(),
     });
     const setupBinding = new SetupLifecycleBinding(setupStoreSlot, (store) =>
       createSetupJobManager({
@@ -316,6 +315,7 @@ export async function main(): Promise<void> {
             logPath: logPath(),
             shuttingDown: () => shutdownRuntime!.requested(),
           }),
+        pruneCommandHistory: () => server.pruneHistory(),
         armJournalMaintenance: () => journalMaintenance.arm(),
       },
     });

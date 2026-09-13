@@ -1583,7 +1583,13 @@ Endpoint semantics beyond the inventory:
   have a run, have no recorded refusal, or still have an active job (409).
 - Run-level `POST /v2/runs/:id/retry` is Exact Retry for any settled run: it
   creates a new command/turn, links `retryOf`, reuses the immutable original
-  request, and performs fresh normalization/preflight. `GET
+  request, and performs fresh normalization/preflight. Retained terminal
+  product commands are bounded twice — by the age/cap rule (the newest 500 and
+  anything younger than 30 days survive) and by a code constant on their
+  serialized params (256 MiB, pruned oldest first regardless of age;
+  needs-decision runs and model receipts are exempt) — applied at normal
+  admission and after every terminal, so on a heavy install Exact Retry of the
+  oldest, largest prompts can end before the 30-day window. `GET
   /v2/runs/:id/run-again` instead returns an editable draft and explicitly
   lists server-owned fields omitted from that draft. The CLI projects these as
   `claudexor retry` and `claudexor run-again`. Durable idempotent replay is

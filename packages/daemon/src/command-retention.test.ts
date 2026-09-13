@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { JobRecord } from "./server.js";
-import { prunableCommandIds } from "./command-retention.js";
+import { MAX_RETAINED_COMMAND_PARAMS_BYTES, prunableCommandIds } from "./command-retention.js";
 
 function rec(over: Partial<JobRecord> & { id: string }): JobRecord {
   return {
@@ -100,5 +100,54 @@ describe("prunableCommandIds retention (A6)", () => {
     });
     const prunable = prunableCommandIds([checksFailed, cleanOld, cleanOld2], 1, HOUR, now);
     expect(prunable).not.toContain("checks-failed");
+  });
+});
+
+describe("prunableCommandIds retained params byte budget (journal sprint D3)", () => {
+  const now = Date.parse("2026-07-10T00:00:00.000Z");
+  const sized = (id: string, day: number, chars: number, over: Partial<JobRecord> = {}) =>
+    rec({
+      id,
+      createdAt: `2026-07-0${day}T00:00:00.000Z`,
+      finishedAt: `2026-07-0${day}T00:00:00.000Z`,
+      params: { prompt: "x".repeat(chars) },
+      ...over,
+    });
+
+  it("prunes the oldest terminal product commands past the budget regardless of age", () => {
+    // Each record serializes to 60 + 13 chars; three exceed a 160-char budget.
+    const records = [sized("old", 1, 60), sized("mid", 2, 60), sized("new", 3, 60)];
+    // Age/cap rule alone keeps everything (huge cap, huge retention)...
+    expect(prunableCommandIds(records, 500, 365 * 24 * HOUR, now)).toEqual([]);
+    // ...but the byte budget forgets oldest-first until the rest fits.
+    expect(prunableCommandIds(records, 500, 365 * 24 * HOUR, now, 160)).toEqual(["old"]);
+    expect(prunableCommandIds(records, 500, 365 * 24 * HOUR, now, 80)).toEqual(["old", "mid"]);
+  });
+
+  it("never byte-prunes a needs-decision run and never counts model receipts", () => {
+    const blocked = sized("blocked", 1, 60, {
+      result: { lifecycle: "succeeded", facts: { review: "blocked", checks: "passed" } },
+    });
+    const model = sized("model", 1, 4000, {
+      params: {
+        kind: "model",
+        request: { resourceId: "r", sha256: `sha256:${"a".repeat(64)}`, sizeBytes: 1 },
+      },
+    });
+    const live = sized("live", 1, 4000, { state: "running", finishedAt: undefined });
+    const records = [blocked, model, live, sized("mid", 2, 60), sized("new", 3, 60)];
+    expect(prunableCommandIds(records, 500, 365 * 24 * HOUR, now, 160)).toEqual(["mid"]);
+  });
+
+  it("combines with the age/cap rule and reports each id once", () => {
+    const records = [sized("old", 1, 60), sized("mid", 2, 60), sized("new", 3, 60)];
+    expect(prunableCommandIds(records, 1, HOUR, now, 80)).toEqual(["old", "mid"]);
+  });
+
+  it("holds three 100 MiB params under the real 256 MiB budget by forgetting the oldest", () => {
+    const chunk = 100 * 1024 * 1024;
+    const records = [sized("old", 1, chunk), sized("mid", 2, chunk), sized("new", 3, chunk)];
+    expect(MAX_RETAINED_COMMAND_PARAMS_BYTES).toBe(256 * 1024 * 1024);
+    expect(prunableCommandIds(records, 500, 365 * 24 * HOUR, now)).toEqual(["old"]);
   });
 });
