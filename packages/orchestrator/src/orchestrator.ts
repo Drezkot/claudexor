@@ -2441,6 +2441,10 @@ export class Orchestrator {
       processingLease.onDenied,
       processingAdmission,
     );
+    spec.extra["routeBillingKnowledge"] = this.routeBillingKnowledge(
+      runInput ?? ({ repoRoot: contract.repo.root } as RunInput),
+      adapter.id,
+    );
     if (interaction) spec.extra["interactionChannel"] = interaction;
     const workEnvelope = this.workReportEnvelopeFor(routed, contract, Boolean(interaction));
     const workReportMode: WorkReportEnvelopeMode = this.applyWorkEnvelope(spec, workEnvelope);

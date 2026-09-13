@@ -20,16 +20,19 @@ export class ProcessingBudgetAdmissionError extends Error {
 
 function preparedCost(spec: HarnessRunSpec, harnessId: string): CostEvidence | undefined {
   if (!spec.processing || !spec.processing_cost_basis) return undefined;
+  const resolved = spec.extra["routeBillingKnowledge"];
   const ordinary =
-    spec.credential_profile?.credential_kind === "api_key"
-      ? "metered"
-      : spec.credential_profile
-        ? "subscription_entitlement"
-        : spec.auth_preference === "api_key"
-          ? "metered"
-          : spec.auth_preference === "subscription"
-            ? "subscription_entitlement"
-            : "unknown";
+    resolved === "metered" || resolved === "subscription_entitlement" || resolved === "unknown"
+      ? resolved
+      : spec.credential_profile?.credential_kind === "api_key"
+        ? "metered"
+        : spec.credential_profile
+          ? "subscription_entitlement"
+          : spec.auth_preference === "api_key"
+            ? "metered"
+            : spec.auth_preference === "subscription"
+              ? "subscription_entitlement"
+              : "unknown";
   return processingCostEvidence(
     { model: spec.model_hint, receipt: spec.processing, costBasis: spec.processing_cost_basis },
     ordinary,
