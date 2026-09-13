@@ -94,6 +94,7 @@ export interface ContinuitySummaryInputs {
     "processing_preference" | "processing" | "processing_cost_basis" | "processing_allow_paid"
   >;
   processingAdmission?: ProcessingAdmission;
+  physicalDispatchStarted?: () => void;
 }
 
 /**
@@ -128,6 +129,7 @@ export async function resolveContinuitySummary(
       signal: inputs.signal,
       processing: inputs.processing,
       processingAdmission: inputs.processingAdmission,
+      physicalDispatchStarted: inputs.physicalDispatchStarted,
     });
     if (!text) return null;
     writeThreadSummary(projectRoot, threadId, upToTurnId, text);

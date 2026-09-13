@@ -2171,6 +2171,7 @@ export class Orchestrator {
       "processing_preference" | "processing" | "processing_cost_basis" | "processing_allow_paid"
     >,
     processingAdmission?: import("@claudexor/core").ProcessingAdmission,
+    physicalDispatchStarted?: () => void,
   ): Promise<{ pointerLine: string | null } | null> {
     const ctx = runInput.threadContinuity;
     if (!runInput.threadId || !ctx) return null;
@@ -2223,6 +2224,7 @@ export class Orchestrator {
         signal: runInput.signal,
         processing,
         processingAdmission,
+        physicalDispatchStarted,
       });
       const result = buildContinuation(req);
       // Disclose on every lane and stamp the turn (INV-137: never silent).
@@ -2379,6 +2381,7 @@ export class Orchestrator {
           log,
           capturedProcessing,
           processingAdmission,
+          () => ledger.markPhysicalDispatchStarted(processingLease.id),
         )
       : null;
     const artifactRelativeDir = routed.browserRequirement.effective

@@ -57,6 +57,7 @@ export interface SummaryRunParams {
   >;
   /** The same lease-bound admission callback as the enclosing candidate. */
   processingAdmission?: ProcessingAdmission;
+  physicalDispatchStarted?: () => void;
 }
 
 function boundBytes(text: string, maxBytes: number): string {
@@ -141,6 +142,7 @@ export async function summarizeThreadPrefix(params: SummaryRunParams): Promise<s
       },
     });
     await admitPreparedProcessing(spec);
+    params.physicalDispatchStarted?.();
     for await (const raw of params.adapter.run(spec)) {
       if (abort.signal.aborted) return null;
       const event = raw as HarnessEventType;

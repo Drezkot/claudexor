@@ -237,6 +237,7 @@ export class BudgetLedger {
       this.financial.unknownPaidInFlight.add(leaseId);
     else if (zeroCash && !this.financial.physicalDispatchStarted.has(leaseId))
       this.financial.unknownPaidInFlight.delete(leaseId);
+    this.financial.physicalDispatchStarted.delete(leaseId);
     return { granted: true, tier: this.tier(), lease };
   }
 
@@ -306,6 +307,7 @@ export class BudgetLedger {
     this.financial.holds.delete(leaseId);
     const previousPaidUnresolved = this.financial.unknownPaidInFlight.has(leaseId);
     this.financial.unknownPaidInFlight.delete(leaseId);
+    this.financial.physicalDispatchStarted.delete(leaseId);
     const reservedZeroCash =
       !previousPaidUnresolved &&
       (lease.cost.billing === "proven_zero" || lease.cost.billing === "subscription_entitlement");
@@ -351,6 +353,7 @@ export class BudgetLedger {
     if (lease?.state === "reserved") lease.state = "cancelled";
     this.financial.holds.delete(leaseId);
     this.financial.unknownPaidInFlight.delete(leaseId);
+    this.financial.physicalDispatchStarted.delete(leaseId);
   }
   spend(): number {
     return this.taskScope === null
