@@ -1,6 +1,7 @@
 import { delegationBeltFor } from "./delegationBelt.js";
 import {
   bindProcessingAdmission,
+  processingAdmissionForLease,
   updateProcessingStreamHold,
   ProcessingBudgetAdmissionError,
 } from "./processing-dispatch.js";
@@ -289,6 +290,7 @@ import {
   finalVerifyBlocks,
   finalVerifyPatch,
   finalVerifyFiles,
+  verifyAndDeliverFiles,
   verifyAndDeliver,
 } from "@claudexor/delivery";
 import { HarnessGateway } from "@claudexor/gateway";
@@ -2164,6 +2166,9 @@ export class Orchestrator {
     paths: RunPaths,
     repoRoot: string,
     log?: EventLog,
+    processing?: Pick<HarnessRunSpec,
+      "processing_preference" | "processing" | "processing_cost_basis" | "processing_allow_paid">,
+    processingAdmission?: import("@claudexor/core").ProcessingAdmission,
   ): Promise<{ pointerLine: string | null } | null> {
     const ctx = runInput.threadContinuity;
     if (!runInput.threadId || !ctx) return null;
@@ -2214,6 +2219,8 @@ export class Orchestrator {
         laneEnv: this.laneHomeEnvFor(runInput, harnessId, profileId) ?? {},
         envInheritance: envInheritance(this.config(runInput.repoRoot)),
         signal: runInput.signal,
+        processing,
+        processingAdmission,
       });
       const result = buildContinuation(req);
       // Disclose on every lane and stamp the turn (INV-137: never silent).
@@ -2348,6 +2355,15 @@ export class Orchestrator {
     // build the continuation packet, materialize context/THREAD.md, and point
     // the prompt at it — never embed the packet body in the prompt. Replaces the
     // old static session.rebound "not_portable" phrase with a real disclosure.
+    const processingAdmission = processingAdmissionForLease(
+      ledger, processingLease.id, adapter.id, attemptId, processingLease.onDenied,
+    );
+    const capturedProcessing = {
+      processing_preference: contract.processing_preference,
+      processing: knobs.processing?.receipt,
+      processing_cost_basis: knobs.processing?.costBasis,
+      processing_allow_paid: knobs.processingAllowPaid,
+    };
     const laneContinuity = runInput
       ? await this.resolveContinuity(
           runInput,
@@ -2359,6 +2375,8 @@ export class Orchestrator {
           paths,
           envelope.repo_root,
           log,
+          capturedProcessing,
+          processingAdmission,
         )
       : null;
     const artifactRelativeDir = routed.browserRequirement.effective
@@ -2420,6 +2438,7 @@ export class Orchestrator {
       adapter.id,
       attemptId,
       processingLease.onDenied,
+      processingAdmission,
     );
     if (interaction) spec.extra["interactionChannel"] = interaction;
     // D-16: compile the WorkReport envelope onto the spec (overriding the plain
@@ -4079,6 +4098,25 @@ export class Orchestrator {
         });
       }
       if (mutatingRun && winnerRun.files) {
+        let directoryDelivery:
+          | { applied: boolean; appliedPaths: string[]; alreadyApplied?: boolean }
+          | undefined;
+        if (input.inPlace === true && !inPlaceWinner && facts.lifecycle === "succeeded") {
+          const delivered = await verifyAndDeliverFiles(
+            execRoot,
+            winnerRun.files,
+            {},
+            gateSpecsFromContract(contract),
+            (freshVerify) =>
+              finalVerifyBlocks(freshVerify)
+                ? (freshVerify.reason ?? "final verify failed before directory race adoption")
+                : null,
+            log,
+          );
+          store.writeYaml(join(paths.finalDir, "delivery_receipt.yaml"), delivered);
+          directoryDelivery = delivered;
+          if (!delivered.applied) facts = { ...facts, checks: "failed", reason: "checks_failed" };
+        }
         await publishDirectoryCandidate({
           files: winnerRun.files,
           store,
@@ -4088,6 +4126,7 @@ export class Orchestrator {
           harnessId: winnerRun.harnessId,
           facts,
           log,
+          delivery: directoryDelivery,
         });
       } else if (mutatingRun) {
         secretDiff.assertNoSecretLikeTokens("final patch diff", winnerRun.diff);

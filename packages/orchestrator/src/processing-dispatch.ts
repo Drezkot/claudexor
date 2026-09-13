@@ -49,6 +49,19 @@ function reprice(
 
 /** Bind once when the logical lease and spec meet. Copies/retries preserve the
  * callback, which receives each actual prepared profile/model before spawn. */
+export function processingAdmissionForLease(
+  ledger: BudgetLedger,
+  leaseId: string,
+  harnessId: string,
+  attemptId: string | null,
+  onDenied?: (denial: BudgetDenial) => void,
+): ProcessingAdmission {
+  return (actual) => {
+    const cost = preparedCost(actual, harnessId);
+    if (cost) reprice(ledger, leaseId, cost, harnessId, attemptId, onDenied);
+  };
+}
+
 export function bindProcessingAdmission(
   spec: HarnessRunSpec,
   ledger: BudgetLedger,
@@ -56,12 +69,11 @@ export function bindProcessingAdmission(
   harnessId: string,
   attemptId: string | null,
   onDenied?: (denial: BudgetDenial) => void,
-): void {
-  const admission: ProcessingAdmission = (actual) => {
-    const cost = preparedCost(actual, harnessId);
-    if (cost) reprice(ledger, leaseId, cost, harnessId, attemptId, onDenied);
-  };
-  spec.extra["processingAdmission"] = admission;
+  admission?: ProcessingAdmission,
+): ProcessingAdmission {
+  const bound = admission ?? processingAdmissionForLease(ledger, leaseId, harnessId, attemptId, onDenied);
+  spec.extra["processingAdmission"] = bound;
+  return bound;
 }
 
 /** One panel owns one lease. A later slot must not erase another slot's paid

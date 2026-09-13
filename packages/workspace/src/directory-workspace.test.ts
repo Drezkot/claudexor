@@ -201,9 +201,11 @@ describe("ordinary directory workspaces", () => {
       "unknown",
     );
     expect(await applyWorkspaceFiles(f.source, captured.manifest, f.run)).toMatchObject({
-      applied: false,
-      treeMutated: false,
+      applied: true,
+      treeMutated: true,
+      appliedPaths: ["new.txt"],
     });
+    expect(await readFile(join(f.source, "new.txt"), "utf8")).toBe("safe new output");
     expect(
       await applyWorkspaceFiles(f.source, captured.manifest, f.run, ["new.txt"]),
     ).toMatchObject({ applied: true });

@@ -135,12 +135,29 @@ export async function harnessAccountModels(
 ): Promise<ControlHarnessAccountModelsResponse> {
   const adapter = (input.registry ?? buildRegistry({ includeFakes: false })).get(input.harnessId);
   const profiles = catalogProfiles(input, input.harnessId, input.credentialProfileId);
+  // The account view is explicitly route-scoped. Keep the durable account
+  // rows separate, but do not enumerate a credential from the other route.
+  // A conflicting explicit pin is a typed unavailable account rather than a
+  // silent cross-route fallback.
+  const routeProfiles = input.route
+    ? profiles.filter(
+        (profile) =>
+          (profile.credential_kind === "api_key" ? "api_key" : "local_session") === input.route,
+      )
+    : profiles;
+  if (input.route && routeProfiles.length === 0 && input.credentialProfileId) {
+    throw Object.assign(new Error("The pinned catalog account does not support the requested route"), {
+      code: "model_account_unavailable",
+      status: 409,
+      retryable: false,
+    });
+  }
   // Discovery is host-level capability data, shared by this request's rows.
   let manifestPromise: ReturnType<HarnessAdapter["discover"]> | undefined;
   const accounts = await enumerateAccountCatalogs({
     context: input,
     adapter,
-    profiles,
+    profiles: routeProfiles,
     read: async (profile, canReadCatalog) => {
       if (!adapter) return null;
       const manifest = await (manifestPromise ??= adapter.discover());

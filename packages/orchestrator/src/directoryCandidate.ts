@@ -164,6 +164,7 @@ export async function publishDirectoryCandidate(input: {
   harnessId: string;
   facts: RunOutcomeFacts;
   log: EventLog;
+  delivery?: { applied: boolean; appliedPaths: string[]; alreadyApplied?: boolean };
 }): Promise<void> {
   const { files, paths, store } = input;
   for (const entry of files.manifest.entries)
@@ -217,9 +218,9 @@ export async function publishDirectoryCandidate(input: {
       source_root: files.manifest.sourceRoot,
       execution_root: files.manifest.executionRoot,
       no_changes: files.noChanges,
-      applied_paths: direct ? files.changedPaths : [],
-      adopted: direct,
-      apply_state: direct ? "applied" : "not_applied",
+      applied_paths: input.delivery?.appliedPaths ?? (direct ? files.changedPaths : []),
+      adopted: input.delivery?.applied ?? direct,
+      apply_state: input.delivery?.applied ? "applied" : direct ? "applied" : "not_applied",
     },
   });
   store.writeYaml(join(paths.finalDir, "work_product.yaml"), product);

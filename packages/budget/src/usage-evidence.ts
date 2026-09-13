@@ -42,6 +42,14 @@ function ordinaryIncluded(
     (billing === undefined || billing.kind === "unknown")
   )
     return true;
+  if (
+    (processing?.reason === "native_default_unconfirmed" ||
+      processing?.reason === "processing_variant_unconfirmed; selected_model_preserved") &&
+    processing.requested === null &&
+    processing.submitted === null &&
+    (billing === undefined || billing.kind === "unknown")
+  )
+    return true;
   return processing === undefined && billing === undefined;
 }
 

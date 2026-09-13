@@ -23,6 +23,23 @@ const prepared = (
   costBasis: { nativeMode: mode, kind, source: "fixture" },
 });
 describe("processing cost before ranking and reserve", () => {
+  it("keeps omitted native processing on the ordinary billing path", () => {
+    const legacy: PreparedHarnessProcessing = {
+      model: "exact-model",
+      receipt: {
+        requested: null,
+        submitted: null,
+        submittedNative: null,
+        observed: "unknown",
+        observedNative: [],
+        reason: "native_default_unconfirmed",
+        source: "fixture",
+      },
+      costBasis: { nativeMode: null, kind: "unknown", source: "fixture" },
+    };
+    expect(processingCostEvidence(legacy, "subscription_entitlement", ["legacy"])).toBeUndefined();
+  });
+
   it("premium mode outranks auth-only free inference without inventing an estimate", () => {
     const cost = processingCostEvidence(
       prepared("fast", "paid_credits"),

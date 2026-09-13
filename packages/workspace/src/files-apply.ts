@@ -122,25 +122,34 @@ export async function applyWorkspaceFiles(
     };
   try {
     await verifyWorkspaceFiles(manifest, artifactRoot);
-    const entries = selectedWorkspaceChanges(manifest, paths);
+    // Entries with an unknown preimage are retained as custody/disclosure
+    // facts, but can never authorize overwriting an existing target. They are
+    // therefore excluded from the mutation set while safe selected entries
+    // remain deliverable.
+    const entries = selectedWorkspaceChanges(manifest, paths).filter(
+      (entry) => entry.before !== "unknown",
+    );
     const current = new Map<string, WorkspaceFileState | null>();
     for (const entry of entries)
       current.set(
         entry.path,
         await readWorkspaceFile(await workspaceFilePath(targetRoot, entry.path, true)),
       );
-    if (entries.every((entry) => sameWorkspaceFile(entry.after, current.get(entry.path) ?? null)))
+    const pendingEntries = entries.filter(
+      (entry) => !sameWorkspaceFile(entry.after, current.get(entry.path) ?? null),
+    );
+    if (pendingEntries.length === 0)
       return { ...result, applied: true, alreadyApplied: true };
-    for (const entry of entries) {
+    for (const entry of pendingEntries) {
       if (!sameWorkspaceFile(entry.before, current.get(entry.path) ?? null))
         return { ...result, detail: `Target preimage changed: ${entry.path}` };
     }
     // Child removals precede directory replacement; creations establish parents first.
     const ordered = [
-      ...entries
+      ...pendingEntries
         .filter((entry) => entry.after === null)
         .sort((a, b) => b.path.split("/").length - a.path.split("/").length),
-      ...entries
+      ...pendingEntries
         .filter((entry) => entry.after !== null)
         .sort((a, b) => a.path.split("/").length - b.path.split("/").length),
     ];

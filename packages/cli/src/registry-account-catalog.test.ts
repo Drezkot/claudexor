@@ -140,6 +140,26 @@ describe("account-scoped harness model inventory", () => {
     });
     expect(f.models).not.toHaveBeenCalled();
   });
+
+  it("filters account rows by the requested credential route and rejects a conflicting pin", async () => {
+    const f = fixture();
+    f.input.config.credential_profiles[1] = CredentialProfile.parse({
+      ...f.input.config.credential_profiles[1],
+      credential_kind: "api_key",
+      isolation_locator: null,
+      secret_ref: "openai:api",
+    });
+    const api = await harnessAccountModels({ ...f.input, route: "api_key" });
+    expect(api.accounts.map((row) => row.credentialProfileId)).toEqual(["b"]);
+    expect(f.models.mock.calls.map(([spec]) => spec?.credentialProfile?.profile_id)).toEqual(["b"]);
+    f.models.mockClear();
+    const local = await harnessAccountModels({ ...f.input, route: "local_session" });
+    expect(local.accounts.map((row) => row.credentialProfileId)).toEqual(["a"]);
+    expect(f.models.mock.calls.map(([spec]) => spec?.credentialProfile?.profile_id)).toEqual(["a"]);
+    await expect(
+      harnessAccountModels({ ...f.input, route: "local_session", credentialProfileId: "b" }),
+    ).rejects.toMatchObject({ code: "model_account_unavailable", status: 409 });
+  });
 });
 
 it("uses API-key manifest provenance while native accounts retain their own live inventory", async () => {
