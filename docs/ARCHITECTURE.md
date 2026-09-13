@@ -2715,6 +2715,15 @@ serial. Both `/v2/quota` and the atomic Accounts response decorate snapshots
 with the same server-owned model-aware availability projection. Raw journal
 records and projection signatures remain undecorated, and clients never promote
 a model-scoped exhausted window into an account-wide percentage or block.
+A refresh journals a subject's snapshot only when its evidence changed
+(everything except `observed_at`; a freshness flip counts): an unchanged
+re-observation keeps the fresh observation time in memory, and the projection
+marker still publishes it. After a restart a replayed snapshot therefore
+carries the observation time of its last journaled change until the first
+admission poll (immediate on arm, then every 60 s) re-observes it — it may read
+stale, or past the 24-hour window drop out of the projection, for up to one poll
+interval. The marker's `projection_signature` is the sha256 digest of the
+projection (snapshots plus absences), compared only for equality.
 Runtime-update rollback remains backward-readable: a scoped snapshot — or one
 whose source postdates v3.2.0's strict enum (`cursor_rate_limit`) — is first
 prepared under a typed record that an older engine ignores, then committed by
