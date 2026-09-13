@@ -21,7 +21,7 @@ import { isVanishedErrno, safeArtifactPath, safeArtifactRoot } from "./artifact-
 import { TERMINAL_STATES } from "./sse-shared.js";
 import { readFilesWorkProduct } from "./files-work-product.js";
 import { applyFilesResult } from "./files-apply-route.js";
-import { selectedWorkspaceChanges } from "@claudexor/workspace";
+import { deliverableWorkspaceChanges } from "@claudexor/workspace";
 import { streamRunEvents } from "./run-events-stream.js";
 import { boundedArtifactText, outputReadyState, primaryOutput } from "./primary-output.js";
 import {
@@ -2121,7 +2121,7 @@ export class DaemonControlApiServer {
         const applied = [
           ...new Set([...(readDeliveryState(record)?.appliedPaths ?? []), ...paths]),
         ];
-        const complete = selectedWorkspaceChanges(manifest).every((entry) =>
+        const complete = deliverableWorkspaceChanges(manifest).every((entry) =>
           applied.includes(entry.path),
         );
         markRunApplyState(record, complete ? "applied" : "not_applied", applied, true);

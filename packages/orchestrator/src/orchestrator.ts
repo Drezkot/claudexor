@@ -4103,10 +4103,20 @@ export class Orchestrator {
           store.writeYaml(join(paths.finalDir, "delivery_receipt.yaml"), delivered);
           directoryDeliveryReceipt = true;
           directoryDelivery = delivered;
+          finalVerify = delivered.finalVerify;
+          if (finalVerifyBlocks(finalVerify)) finalVerifyFailed = true;
           if (!delivered.applied) {
             deliveryFailureReason = delivered.detail ?? "directory race adoption was refused";
             facts = { ...facts, checks: "failed", reason: "checks_failed" };
           }
+          writeRaceDeliveryDecision(store, decisionPath, {
+            decision: result.decision,
+            facts,
+            reviewVerified: actualReviewVerified,
+            finalVerify,
+            deliveryFailureReason,
+            deliveryReceiptPath: "final/delivery_receipt.yaml",
+          });
         }
         await publishDirectoryCandidate({
           files: winnerRun.files,
@@ -7428,18 +7438,11 @@ export class Orchestrator {
         `# Omissions\n\n${unsuccessful.map((a) => `- ${a.attemptId} / ${a.harnessId} (${a.status}): ${a.error}`).join("\n") || "- None recorded by the runner. Synthesis claims still require evidence checks."}\n`,
       );
     }
-    // A read-only report (ask / deep-scan) has no live-tree work; the only
-    // non-clean terminal is an aggregate paid-budget stop.
     let terminalFacts: RunOutcomeFacts = makeOutcomeFacts("succeeded");
     const reportBudgetTerminal = ledger.terminal();
     if (reportBudgetTerminal) {
       terminalFacts = makeOutcomeFacts("failed", { reason: reportBudgetTerminal });
     } else if (!opts.deepScan) {
-      // D-16: fold the winning read-only attempt's work_state into the terminal.
-      // A terminal context exhaustion with no completed report ⇒ interrupted;
-      // a needs_input/incomplete report ⇒ a succeeded run whose work_state
-      // vetoes applyability and a clean exit (INV-116). answer.md was already
-      // persisted from the unwrapped OUTPUT.
       const winnerTelemetry = succeeded[0]?.telemetry;
       const winnerWorkState = winnerTelemetry?.outcome?.workState;
       if (winnerTelemetry?.contextExhausted && winnerWorkState?.state !== "completed") {
@@ -7506,9 +7509,6 @@ export class Orchestrator {
         failure_ref: "final/failure.yaml",
       });
     } else if (workVetoed) {
-      // D-16: a succeeded lifecycle whose work_state vetoes is a needs-me
-      // terminal — run.blocked (not run.completed); the outcome-aware exit
-      // projection returns non-zero from the same facts.
       log.emit("run.blocked", {
         lifecycle: terminalFacts.lifecycle,
         facts: terminalFacts,

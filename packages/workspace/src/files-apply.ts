@@ -60,6 +60,13 @@ export function selectedWorkspaceChanges(
   );
 }
 
+export function deliverableWorkspaceChanges(
+  manifest: WorkspaceFilesManifest,
+  paths?: readonly string[],
+): WorkspaceFileChange[] {
+  return selectedWorkspaceChanges(manifest, paths).filter((entry) => entry.before !== "unknown");
+}
+
 export async function materializeWorkspaceBaseline(
   root: string,
   manifest: WorkspaceFilesManifest,
@@ -138,13 +145,15 @@ export async function applyWorkspaceFiles(
     const pendingEntries = entries.filter(
       (entry) => !sameWorkspaceFile(entry.after, current.get(entry.path) ?? null),
     );
-    if (pendingEntries.length === 0)
-      return refusedUnknown.length > 0
-        ? {
-            ...result,
-            detail: `Unknown preimage retains custody: ${refusedUnknown.map((entry) => entry.path).join(", ")}`,
-          }
-        : { ...result, applied: true, alreadyApplied: true };
+    if (pendingEntries.length === 0) {
+      const detail =
+        refusedUnknown.length > 0
+          ? `Unknown preimage retains custody: ${refusedUnknown.map((entry) => entry.path).join(", ")}`
+          : undefined;
+      return entries.length === 0 && refusedUnknown.length > 0
+        ? { ...result, detail }
+        : { ...result, applied: true, alreadyApplied: true, detail };
+    }
     for (const entry of pendingEntries) {
       if (!sameWorkspaceFile(entry.before, current.get(entry.path) ?? null))
         return { ...result, detail: `Target preimage changed: ${entry.path}` };
@@ -212,7 +221,15 @@ export async function applyWorkspaceFiles(
       result.treeMutated = true;
       result.appliedPaths.push(entry.path);
     }
-    return { ...result, applied: true };
+    return {
+      ...result,
+      applied: true,
+      ...(refusedUnknown.length > 0
+        ? {
+            detail: `Unknown preimage retains custody: ${refusedUnknown.map((entry) => entry.path).join(", ")}`,
+          }
+        : {}),
+    };
   } catch (error) {
     return { ...result, detail: error instanceof Error ? error.message : String(error) };
   }

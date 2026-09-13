@@ -3,7 +3,7 @@ import {
   readWorkspaceFile,
   workspaceFilePath,
   sameWorkspaceFile,
-  selectedWorkspaceChanges,
+  deliverableWorkspaceChanges,
 } from "@claudexor/workspace";
 import {
   ControlApplyCheckResponse,
@@ -94,7 +94,7 @@ export async function checkFilesResult(
   const refused = ctx.gateError(record, "", root, verify);
   if (refused) return ControlApplyCheckResponse.parse({ ok: false, code: 1, stderr: refused });
   let alreadyApplied = true;
-  for (const entry of selectedWorkspaceChanges(candidate.manifest, paths)) {
+  for (const entry of deliverableWorkspaceChanges(candidate.manifest, paths)) {
     const actual = await readWorkspaceFile(await workspaceFilePath(root, entry.path, true));
     if (sameWorkspaceFile(entry.after, actual)) continue;
     alreadyApplied = false;
