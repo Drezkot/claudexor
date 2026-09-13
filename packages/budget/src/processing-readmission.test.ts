@@ -70,6 +70,7 @@ describe("physical processing readmission on one logical lease", () => {
     const ledger = new BudgetLedger({ kind: "finite", maxUsd: 2 });
     const lease = reserve(ledger, cost("unknown"));
     ledger.updateHold(lease.lease_id, 0.25);
+    ledger.markPhysicalDispatchStarted(lease.lease_id);
     expect(
       ledger.repriceReservedLease(lease.lease_id, cost("subscription_entitlement")).granted,
     ).toBe(true);
@@ -82,6 +83,7 @@ describe("physical processing readmission on one logical lease", () => {
     const ledger = new BudgetLedger({ kind: "finite", maxUsd: 1 });
     const lease = reserve(ledger, cost("unknown"));
     ledger.updateHold(lease.lease_id, 1.5);
+    ledger.markPhysicalDispatchStarted(lease.lease_id);
     expect(
       ledger.repriceReservedLease(lease.lease_id, cost("subscription_entitlement")).granted,
     ).toBe(true);
@@ -91,6 +93,16 @@ describe("physical processing readmission on one logical lease", () => {
       provenance: [],
     });
     expect(ledger.terminal()).toBe("cost_unverifiable");
+  });
+  it("clears unknown preflight debt when included before physical dispatch", () => {
+    const ledger = new BudgetLedger({ kind: "finite", maxUsd: 2 });
+    const lease = reserve(ledger, cost("unknown"));
+    expect(
+      ledger.repriceReservedLease(lease.lease_id, cost("subscription_entitlement")).granted,
+    ).toBe(true);
+    expect(ledger.reserve({ taskId: "t", intent: "review", harnessId: "other" }).granted).toBe(
+      true,
+    );
   });
   it("preserves family scope and rejects repricing a closed lease", () => {
     const ledger = new BudgetLedger();
