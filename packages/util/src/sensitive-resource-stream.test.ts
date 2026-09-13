@@ -28,9 +28,7 @@ describe("streaming content policy", () => {
     scanner.write("-----END " + "PRIVATE KEY-----");
     expect(scanner.finish()).toBe(true);
     const reversed = sensitiveResourcePolicy.createContentScanner();
-    reversed.write(
-      "-----END " + "PRIVATE KEY-----\n-----BEGIN " + "PRIVATE KEY-----",
-    );
+    reversed.write("-----END " + "PRIVATE KEY-----\n-----BEGIN " + "PRIVATE KEY-----");
     expect(reversed.finish()).toBe(false);
   });
   it("does not manufacture a fixed-length AWS key at a chunk boundary", () => {
