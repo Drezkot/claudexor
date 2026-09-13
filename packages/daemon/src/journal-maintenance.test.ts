@@ -125,7 +125,12 @@ describe("journal maintenance generations", () => {
     const inline = manager("project:default");
     inline.value.start();
     expect(inline.slot.current().options.deferCompaction).toBe(false);
-    expect(inline.slot.current().physicalBytes()).toBeLessThan(before);
+    // A daemon manager always folds, and a fold implies the seq-preserving
+    // background path: the lossless synchronous compaction (new epoch, records
+    // renumbered by index) is skipped at open, so without a maintenance
+    // callback the file only grows by the recovery append.
+    expect(inline.slot.current().physicalBytes()).toBeGreaterThanOrEqual(before);
+    expect(inline.slot.current().atCompactionThreshold()).toBe(true);
   });
 
   it("runs one flight at a time, serializes partitions, and aborts/drains at stop", async () => {
