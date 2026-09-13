@@ -1,56 +1,71 @@
+import { randomBytes } from "node:crypto";
 import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { DurableJournal } from "./index.js";
 
-// Scale only the existing logical cap; count real UTF-8 bytes at its exact edge.
+// Scale only the frame payload cap: the compressed-output and envelope guards
+// are the sole live source of typed `capacity` declines.
+const CAP = 8192;
 vi.mock("./frame-codec.js", async (original) => ({
   ...(await original<typeof import("./frame-codec.js")>()),
-  MAX_COMPACTED_LOGICAL_BYTES: 512,
+  MAX_PAYLOAD_BYTES: 8192,
 }));
-describe("background logical capacity", () => {
-  it.each([512, 513])("handles %s logical UTF-8 bytes without trimming", async (bytes) => {
-    const root = realpathSync.native(mkdtempSync(join(tmpdir(), "journal-capacity-")));
-    const stagingDir = join(root, "staging");
-    mkdirSync(stagingDir);
-    const now = () => new Date("2026-01-01T00:00:00Z");
-    const journal = new DurableJournal({
-      rootDir: join(root, "journal"),
-      partition: "global",
-      deferCompaction: true,
-      compactionThresholdBytes: 0,
-      now,
-    });
+
+let root: string;
+let stagingDir: string;
+beforeEach(() => {
+  root = realpathSync.native(mkdtempSync(join(tmpdir(), "journal-capacity-")));
+  stagingDir = join(root, "staging");
+  mkdirSync(stagingDir);
+});
+afterEach(() => {
+  rmSync(root, { recursive: true, force: true });
+});
+
+function fixture(payload: (n: number) => unknown): DurableJournal {
+  const journal = new DurableJournal({
+    rootDir: join(root, "journal"),
+    partition: "global",
+    deferCompaction: true,
+    compactionThresholdBytes: 0,
+    now: () => new Date("2026-01-01T00:00:00Z"),
+  });
+  journal.appendBatch(Array.from({ length: 24 }, (_, n) => ({ type: "row", payload: payload(n) })));
+  return journal;
+}
+
+describe("background compaction capacity", () => {
+  it("declines typed with the cap that fired when a chunk cannot be compressed under it", async () => {
+    const journal = fixture((n) => ({ n, blob: randomBytes(768).toString("base64") }));
     try {
-      // A seq-preserving snapshot stores `{seq,time,type,payload}` per record.
-      const prefixBytes = Buffer.byteLength(
-        JSON.stringify([
-          { seq: 1, time: now().toISOString(), type: "record", payload: { text: "é" } },
-        ]),
-      );
-      journal.append("record", { text: "é" + "x".repeat(bytes - prefixBytes) });
       const before = readFileSync(journal.path);
-      const logical = journal.records().map(({ time, type, payload }) => ({ time, type, payload }));
-      const stored = journal
-        .records()
-        .map(({ seq, time, type, payload }) => ({ seq, time, type, payload }));
-      expect(Buffer.byteLength(JSON.stringify(stored))).toBe(bytes);
-      const result = await journal.compactInBackground({ stagingDir });
-      if (bytes === 512) expect(result).toMatchObject({ records: 1, retainedCount: 1 });
-      else {
-        // A single record that can never decode within the guard is refused typed.
-        expect(result).toEqual({ declined: true, reason: "capacity", cap: 16 * 1024 * 1024 });
-        expect(readFileSync(journal.path)).toEqual(before);
-      }
+      const logical = journal.records().map(({ seq, payload }) => ({ seq, payload }));
+      expect(await journal.compactInBackground({ stagingDir })).toEqual({
+        declined: true,
+        reason: "capacity",
+        cap: CAP,
+      });
+      expect(readFileSync(journal.path)).toEqual(before);
       expect(journal.state().status).toBe("ready");
-      expect(journal.records().map(({ time, type, payload }) => ({ time, type, payload }))).toEqual(
-        logical,
-      );
-      expect(journal.append("after.capacity", true).seq).toBe(2);
+      expect(journal.records().map(({ seq, payload }) => ({ seq, payload }))).toEqual(logical);
+      expect(journal.append("after.capacity", true).seq).toBe(25);
     } finally {
       journal.close();
-      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("compacts the same shape when it compresses under the cap", async () => {
+    const journal = fixture((n) => ({ n, blob: "x".repeat(1024) }));
+    try {
+      expect(await journal.compactInBackground({ stagingDir })).toMatchObject({
+        records: 24,
+        retainedCount: 24,
+      });
+      expect(journal.append("after.compaction", true).seq).toBe(25);
+    } finally {
+      journal.close();
     }
   });
 });

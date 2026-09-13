@@ -554,6 +554,44 @@ describe("streamed compaction", () => {
     ]);
   });
 
+  it("compacts a 12 MiB compressible record as its own chunk beyond the logical cut point", async () => {
+    const journal = fixture(0);
+    journal.append("wide", { text: "compressible ".repeat((12 * 1024 * 1024) / 13) });
+    journal.append("after", { n: 1 });
+    const expected = logical(journal.records());
+    expect(await journal.compactInBackground({ stagingDir })).toMatchObject({
+      records: 2,
+      retainedCount: 2,
+    });
+    expect(logical(journal.records())).toEqual(expected);
+    journal.close();
+    expect(logical(fixture(0).records())).toEqual(expected);
+  });
+
+  it("declines typed with the frame payload cap when one record cannot be enveloped", async () => {
+    const journal = fixture(0);
+    // Dense JSON-safe noise: the base64 gzip envelope of one such record exceeds the frame cap.
+    const alphabet = Buffer.from(
+      Array.from({ length: 95 }, (_, n) => 0x20 + n).filter(
+        (code) => code !== 0x22 && code !== 0x5c,
+      ),
+    );
+    const noise = Buffer.allocUnsafe(16_700_000);
+    const random = randomBytes(noise.length);
+    for (let index = 0; index < noise.length; index += 1)
+      noise[index] = alphabet[random[index]! % alphabet.length]!;
+    journal.append("noise", noise.toString("latin1"));
+    const before = digest(journal);
+    expect(await journal.compactInBackground({ stagingDir })).toEqual({
+      declined: true,
+      reason: "capacity",
+      cap: 16 * 1024 * 1024,
+    });
+    expect(digest(journal)).toBe(before);
+    expect(journal.append("after.cap", true).seq).toBe(2);
+    expect(readdirSync(stagingDir)).toEqual([]);
+  });
+
   it.each([18, 24])(
     "leaves incompressible %s-record history in place with a typed no-reclaim decline",
     async (count) => {

@@ -35,8 +35,9 @@ export type JournalCompactionDeclineReason =
 export interface JournalCompactionDeclined {
   declined: true;
   reason: JournalCompactionDeclineReason;
-  logicalBytes?: number;
   compressedBytes?: number;
+  /** The cap that fired: the frame payload cap for `capacity`, the current
+   * file size for `no_reclaim`. */
   cap?: number;
 }
 
@@ -212,10 +213,21 @@ export function compactedJournalRecord(
   };
 }
 
-export function capacityError(kind: string): Error {
+/** A typed capacity refusal names the cap that actually fired. */
+export function capacityError(kind: string, cap: number): Error {
   return Object.assign(new Error(`journal compaction exceeds the existing ${kind} cap`), {
     code: "journal_compaction_capacity",
+    cap,
   });
+}
+
+export function capacityCapOf(error: unknown): number | undefined {
+  return typeof error === "object" &&
+    error !== null &&
+    "cap" in error &&
+    typeof error.cap === "number"
+    ? error.cap
+    : undefined;
 }
 
 export function isCompactionCapacityError(error: unknown): boolean {

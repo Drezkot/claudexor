@@ -4,15 +4,10 @@ import { open, unlink, type FileHandle } from "node:fs/promises";
 import { join } from "node:path";
 import { setImmediate } from "node:timers/promises";
 import { encodeJournalPayload } from "./append-batch.js";
-import {
-  HASH_BYTES,
-  MAX_PAYLOAD_BYTES,
-  ZERO_HASH,
-  encodeFrame,
-  type JournalRecord,
-} from "./frame-codec.js";
+import { HASH_BYTES, ZERO_HASH, encodeFrame, type JournalRecord } from "./frame-codec.js";
 import { STREAM_BATCH_BYTES, snapshotChunks } from "./journal-compaction-chunks.js";
 import {
+  capacityCapOf,
   declinedCompaction,
   isCompactionCapacityError,
   logicalRecord,
@@ -144,8 +139,10 @@ export async function prepareBackgroundCompaction(input: {
       (error === input.signal.reason || (error instanceof Error && error.name === "AbortError"))
     )
       return declinedCompaction("aborted");
-    if (isCompactionCapacityError(error))
-      return declinedCompaction("capacity", { cap: MAX_PAYLOAD_BYTES });
+    if (isCompactionCapacityError(error)) {
+      const cap = capacityCapOf(error);
+      return declinedCompaction("capacity", cap === undefined ? {} : { cap });
+    }
     throw error;
   } finally {
     try {

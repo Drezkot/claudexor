@@ -6,7 +6,6 @@ import { encodeJournalPayload } from "./append-batch.js";
 import {
   COMPACTED_SNAPSHOT,
   HASH_BYTES,
-  MAX_COMPACTED_LOGICAL_BYTES,
   MAX_PAYLOAD_BYTES,
   SNAPSHOT_CHUNK_LOGICAL_BYTES,
   ZERO_HASH,
@@ -36,7 +35,9 @@ export interface SnapshotChunk {
  * chunk's header names the first sequence it covers and its `logicalSpan`
  * runs up to the next chunk's first retained record (or `endSeq`), so the
  * dropped numbers are accounted for without a record. Chunks are cut by
- * logical bytes so the compressed base64 envelope always fits one frame. */
+ * logical bytes so the compressed base64 envelope fits one frame; a single
+ * record larger than the cut point becomes its own chunk, and only the
+ * compressed-output and envelope caps can refuse it. */
 export async function* snapshotChunks(input: {
   partition: string;
   epoch: string;
@@ -46,7 +47,7 @@ export async function* snapshotChunks(input: {
   endSeq: number;
   signal: AbortSignal;
 }): AsyncGenerator<SnapshotChunk> {
-  const limit = Math.min(SNAPSHOT_CHUNK_LOGICAL_BYTES, MAX_COMPACTED_LOGICAL_BYTES);
+  const limit = SNAPSHOT_CHUNK_LOGICAL_BYTES;
   const cursor = { index: 0, pending: null as { json: string; bytes: number } | null };
   let coverStart = 1;
   let previousFrameHash = ZERO_HASH;
@@ -81,13 +82,13 @@ function encodeSnapshotPayload(count: number, compressed: Buffer): Buffer {
     data: compressed.toString("base64"),
   };
   const bytes = encodeJournalPayload(payload);
-  if (bytes.length > MAX_PAYLOAD_BYTES) throw capacityError("envelope");
+  if (bytes.length > MAX_PAYLOAD_BYTES) throw capacityError("envelope", MAX_PAYLOAD_BYTES);
   return bytes;
 }
 
 /** One chunk's JSON array, record by record. Stops before the record that
- * would push the chunk past `limit`, leaving it pending for the next chunk. A
- * single record that cannot fit any chunk is a typed capacity refusal. */
+ * would push a non-empty chunk past `limit`, leaving it pending for the next
+ * chunk; the first record of a chunk is always taken, whatever its size. */
 async function* serializeChunk(
   input: { records: readonly JournalRecord[]; count: number; signal: AbortSignal },
   cursor: { index: number; pending: { json: string; bytes: number } | null },
@@ -101,8 +102,7 @@ async function* serializeChunk(
     input.signal.throwIfAborted();
     const next = cursor.pending ?? serializeRecord(input.records[cursor.index]!);
     const bytes = next.bytes + (emitted === 0 ? 0 : 1);
-    if (totalBytes + bytes > limit) {
-      if (emitted === 0) throw capacityError("logical bytes");
+    if (emitted > 0 && totalBytes + bytes > limit) {
       cursor.pending = next;
       break;
     }
@@ -141,7 +141,8 @@ async function compressChunk(source: AsyncGenerator<string>, signal: AbortSignal
     new Writable({
       write(chunk: Buffer, _encoding, done) {
         compressedBytes += chunk.length;
-        if (compressedBytes > MAX_PAYLOAD_BYTES) return done(capacityError("compressed bytes"));
+        if (compressedBytes > MAX_PAYLOAD_BYTES)
+          return done(capacityError("compressed bytes", MAX_PAYLOAD_BYTES));
         chunks.push(chunk);
         done();
       },
