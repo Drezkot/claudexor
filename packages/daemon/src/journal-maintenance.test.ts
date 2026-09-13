@@ -31,9 +31,10 @@ afterEach(async () => {
 });
 function queue() {
   const warn = vi.fn();
-  const maintenance = new JournalMaintenance(root, warn);
+  const note = vi.fn();
+  const maintenance = new JournalMaintenance(root, warn, note);
   queues.push(maintenance);
-  return { maintenance, warn };
+  return { maintenance, warn, note };
 }
 function journal(partition: string, large = false) {
   const value = new DurableJournal({
@@ -127,7 +128,7 @@ describe("journal maintenance generations", () => {
     expect(inline.slot.current().physicalBytes()).toBeLessThan(before);
   });
 
-  it("runs one generation once, serializes partitions, and aborts/drains at stop", async () => {
+  it("runs one flight at a time, serializes partitions, and aborts/drains at stop", async () => {
     const first = journal("global");
     const second = journal("project:other");
     let active = 0;
@@ -147,7 +148,7 @@ describe("journal maintenance generations", () => {
           () => {
             active -= 1;
             ended.push(this);
-            resolve(null);
+            resolve({ declined: true, reason: "aborted" });
           },
           { once: true },
         );
@@ -172,26 +173,69 @@ describe("journal maintenance generations", () => {
     expect(maximum).toBe(1);
   });
 
-  it("does not retry failed or unprofitable generations and still serves later generations", async () => {
+  it("re-requests a generation after its flight settles and logs typed outcomes", async () => {
     const first = journal("global");
     const second = journal("project:second");
     const calls = vi
       .spyOn(DurableJournal.prototype, "compactInBackground")
       .mockRejectedValueOnce(new Error("preparation failed"))
-      .mockResolvedValue(null);
-    const { maintenance, warn } = queue();
+      .mockResolvedValueOnce({ declined: true, reason: "no_reclaim", logicalBytes: 10, cap: 5 })
+      .mockResolvedValueOnce({ declined: true, reason: "below_threshold" })
+      .mockResolvedValue({
+        beforeBytes: 100,
+        afterBytes: 40,
+        records: 3,
+        retainedCount: 3,
+        retiredCount: 7,
+        retiredBytes: 60,
+      });
+    const { maintenance, warn, note } = queue();
     maintenance.request(first);
     maintenance.request(second);
     maintenance.arm();
     await vi.waitFor(() => expect(calls).toHaveBeenCalledTimes(2));
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining("preparation failed"));
+    expect(note).toHaveBeenCalledWith(
+      "journal.compaction_declined partition=project:second reason=no_reclaim logicalBytes=10 cap=5",
+    );
+    // A failed or declined generation is not condemned: the threshold hook
+    // re-requests it after the next crossing, and the queue runs it again.
     maintenance.request(first);
     maintenance.request(second);
-    await setImmediate();
-    expect(calls).toHaveBeenCalledTimes(2);
-    expect(warn).toHaveBeenCalledWith(expect.stringContaining("preparation failed"));
+    await vi.waitFor(() => expect(calls).toHaveBeenCalledTimes(4));
+    expect(note).toHaveBeenCalledTimes(2); // below_threshold stays silent
+    expect(note).toHaveBeenLastCalledWith(
+      "journal.records_retired partition=project:second retainedCount=3 retiredCount=7 retiredBytes=60 beforeBytes=100 afterBytes=40",
+    );
     const third = journal("project:new");
     maintenance.request(third);
-    await vi.waitFor(() => expect(calls).toHaveBeenCalledTimes(3));
+    await vi.waitFor(() => expect(calls).toHaveBeenCalledTimes(5));
+  });
+
+  it("coalesces requests that arrive while the same generation is in flight into one more pass", async () => {
+    const first = journal("global");
+    let release: (() => void) | null = null;
+    const calls = vi.spyOn(DurableJournal.prototype, "compactInBackground").mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          release = () => resolve({ declined: true, reason: "below_threshold" });
+        }),
+    );
+    const { maintenance } = queue();
+    maintenance.request(first);
+    maintenance.arm();
+    await vi.waitFor(() => expect(calls).toHaveBeenCalledTimes(1));
+    maintenance.request(first);
+    maintenance.request(first);
+    maintenance.request(first);
+    await setImmediate();
+    expect(calls).toHaveBeenCalledTimes(1);
+    release!();
+    await vi.waitFor(() => expect(calls).toHaveBeenCalledTimes(2));
+    release!();
+    await setImmediate();
+    await setImmediate();
+    expect(calls).toHaveBeenCalledTimes(2);
   });
 
   it("retires an archived generation before rename and never publishes its pending candidate", async () => {

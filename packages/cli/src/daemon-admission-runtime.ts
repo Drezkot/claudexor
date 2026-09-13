@@ -38,6 +38,8 @@ export interface StartupDiagnosticsHandle {
   diagnostics: DaemonStartupDiagnostics | null;
   recordStage(stage: string, message: string): void;
   recordFailure(message: string, error: unknown): void;
+  /** Daemon log line plus a diagnostics record under `stage` (redacted). */
+  log(stage: string, message: string): void;
   close(): void;
 }
 
@@ -82,6 +84,11 @@ export function openStartupDiagnostics(identity: {
     diagnostics,
     recordStage: (stage, message) => record({ stage, message }),
     recordFailure: (message, error) => record({ stage: "startup_failure", message, error }),
+    log: (stage, message) => {
+      const redacted = redactSecrets(message);
+      logLine(logPath(), redacted);
+      record({ stage, message: redacted });
+    },
     close: () => diagnostics?.close(),
   };
 }

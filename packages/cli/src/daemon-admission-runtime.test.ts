@@ -64,6 +64,7 @@ function runtimeFixture(initialBlocked: string[]) {
       diagnostics: null,
       recordStage: (_stage, message) => messages.push(message),
       recordFailure: vi.fn(),
+      log: vi.fn(),
       close: vi.fn(),
     },
     commandRecords: () => [],

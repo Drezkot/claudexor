@@ -35,7 +35,7 @@ function event(runId: string, type: RunEvent["type"], seq = 1): RunEvent {
   };
 }
 
-const runEventReads = (reads: ReturnType<typeof vi.spyOn>) =>
+const runEventReads = (reads: { mock: { calls: unknown[][] } }) =>
   reads.mock.calls.filter((call) => (call[1] as string[] | undefined)?.includes("run.event"));
 
 describe("durable terminal run-event index", () => {

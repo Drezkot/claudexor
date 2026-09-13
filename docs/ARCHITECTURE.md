@@ -242,7 +242,17 @@ at every wire boundary.
   runs separately after admission. A command's params are immutable after
   acceptance: only `command.accepted` carries them, every `command.updated`
   frame omits them, and replay merges the accepted params back (legacy
-  full-record updates replay unchanged).
+  full-record updates replay unchanged). Every partition replays and compacts
+  through the daemon's fold policy (`journal-fold-policy.ts`), which decides
+  what a partition may forget: a command keeps its acceptance and its latest
+  update (pruned ids forget both; model-operation receipts are never pruned), a
+  finished run keeps only its terminal event, a resolved question forgets its
+  request and resolution together, quota keeps the latest projection marker and
+  the latest unit per subject (a scoped prepare plus its adjacent upsert is one
+  unit), thread pings keep the latest revision, setup saves are kept whole and
+  a terminal save forgets the job's log lines; everything else — and anything
+  the policy cannot classify — is kept. Startup memory therefore follows the
+  retained set, not the file.
 - `packages/cli`: thin command surface plus local host-integration lifecycle
   (`claudexor plugin`) for generated Claude Code/Codex/Cursor/OpenCode
   skill/MCP artifacts and command artifacts where hosts support them. Plugin
@@ -1936,6 +1946,20 @@ intact and recover with a compatible newer reader. A pre-update backup must not
 automatically replace later work. This boundary uses the existing runtime version
 floor and recovery plane; it adds no alternate journal or compatibility shim.
 
+The folded journal is the same kind of boundary. Once this engine has served a
+root, its partitions may hold seq-preserving multi-frame snapshots
+(`count < logicalSpan`), `command.updated` frames without params, digest-only
+quota markers and replay-folded history. The 3.11.0 reader decodes a folded
+snapshot as a record-count mismatch and enters the recovery plane loudly, and
+it would replay a params-less update as a record without params; neither is a
+supported rollback of that state. The root-authority semantic floor is the
+enforcement: the first successful serve of the release that ships the fold
+advances the floor to that version, after which the older engine refuses the
+root typed (`root_authority_floor_regression`) — no second mechanism. A first
+start on a legacy (unfolded) journal folds at replay, so its startup memory
+already follows the retained set; the first background compaction then
+rewrites the partition file.
+
 Every shutdown trigger — SIGTERM/SIGINT, the `claudexor.shutdown` socket RPC,
 a startup failure — enters ONE state machine (`DaemonRuntimeShutdown
 .beginShutdown(reason)`): abort in-flight runs, complete their journaled
@@ -2010,13 +2034,20 @@ fallback launch — until admission opens.
 Automatic journal compaction is cancellable maintenance after normal admission.
 Every daemon-owned JournalManager opts into `deferCompaction` and requests an
 attempt after its generation opens or recovers. A process-local pending set and
-one in-flight promise serialize global and project partitions; new partitions
-use the same callback. Maintenance is edge-triggered on the byte threshold: the
-journal's `onCompactionThreshold` hook fires at most once per crossing after an
-append and is re-armed by a successful install, so a long-lived daemon requests
-another pass when the file grows past the threshold again. There is no
-maintenance job, persisted retry state, or manual upkeep requirement. The
-existing byte threshold remains unchanged.
+one in-flight promise serialize global and project partitions and coalesce
+repeated requests — a request that arrives during a generation's own flight
+runs one more pass after it, and a failed or declined pass never condemns the
+generation; new partitions use the same callback. Maintenance is edge-triggered
+on the byte threshold: the journal's `onCompactionThreshold` hook fires at most
+once per crossing after an append and is re-armed by a successful install, so a
+long-lived daemon requests another pass when the file grows past the threshold
+again. Every pass ends in one daemon-log line that also lands in the startup
+diagnostics record: `journal.records_retired` (`retainedCount`, `retiredCount`,
+`retiredBytes` beside the byte counts) or `journal.compaction_declined` with
+its typed reason and bounds; below-threshold and empty passes stay silent, and
+no control-API field carries this yet. There is no maintenance job, persisted
+retry state, or manual upkeep requirement. The existing byte threshold remains
+unchanged.
 
 `compactInBackground({stagingDir, signal?})` captures an immutable logical prefix,
 applies the journal's `fold` to it, streams the retained records through

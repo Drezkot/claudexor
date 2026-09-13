@@ -85,8 +85,10 @@ export async function main(): Promise<void> {
   let releaseWriterLease = true;
   let lifecycle: ReturnType<typeof armDaemonLifecycle> | null = null;
   let quotaPoller: ReturnType<typeof createDaemonQuotaPoller> | null = null;
+  // Maintenance failures, typed declines and `journal.records_retired`
+  // receipts land in the daemon log and the startup diagnostics record.
   const journalMaintenance = new JournalMaintenance(daemonDir(), (message) =>
-    logLine(logPath(), redactSecrets(message)),
+    startupDiagnostics.log("journal_maintenance", message),
   );
   try {
     const token = ensureToken();
