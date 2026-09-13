@@ -6083,20 +6083,23 @@ export class Orchestrator {
     );
   }
 
-  private routeBillingKnowledge(input: RunInput, harnessId: string): "metered" | "unknown" {
+  private routeBillingKnowledge(
+    input: RunInput,
+    harnessId: string,
+  ): "metered" | "subscription_entitlement" | "unknown" {
     // A selected profile's credential_kind decides billing (round-18 #2).
     const profileRoute = this.credentials.profileAuthRoute(input, harnessId);
-    if (profileRoute) return profileRoute === "api_key" ? "metered" : "unknown";
+    if (profileRoute) return profileRoute === "api_key" ? "metered" : "subscription_entitlement";
     // Deps-closure site: no selected route exists yet, so the RESOLVED
     // preference (per-run > per-harness config > global) speaks — never the
     // raw run input (#121).
     const mode = authModeForPreference(
       this.authPreferenceForHarness(input.repoRoot, harnessId, input.authPreference),
     );
-    if (mode) return mode === "api_key" ? "metered" : "unknown";
+    if (mode) return mode === "api_key" ? "metered" : "subscription_entitlement";
     return loadHarnessMetrics(globalConfigDir())[harnessId]?.last_auth_mode === "api_key"
       ? "metered"
-      : "unknown";
+      : "subscription_entitlement";
   }
 
   /**

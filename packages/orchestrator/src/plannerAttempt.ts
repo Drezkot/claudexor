@@ -108,7 +108,10 @@ export interface PreparedPlannerAttempt {
  * fields; this module owns the planner lease, stream, telemetry, and outcome. */
 export interface PlannerAttemptDeps {
   prepare(args: PlannerAttemptArgs): Promise<PreparedPlannerAttempt>;
-  billingKnowledge(input: RunInput, harnessId: string): "metered" | "unknown";
+  billingKnowledge(
+    input: RunInput,
+    harnessId: string,
+  ): "metered" | "subscription_entitlement" | "unknown";
   inactivityTimeoutMs(repoRoot: string): number;
   quotaEventSink?: (harnessId: string, event: HarnessEvent) => void;
 }
