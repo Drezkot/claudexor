@@ -864,6 +864,9 @@ async function collectReviewerOutput(
     }
     if (isCancelled()) throw new Error("Reviewer cancelled before dispatch");
     await admitPreparedProcessing(runSpec);
+    const markPhysicalDispatchStarted = runSpec.extra["markPhysicalDispatchStarted"];
+    if (typeof markPhysicalDispatchStarted === "function")
+      (markPhysicalDispatchStarted as () => void)();
     if (isCancelled()) throw new Error("Reviewer cancelled before dispatch");
     currentAuthMode = null;
     costKnowledge.startAttempt(runSpec);

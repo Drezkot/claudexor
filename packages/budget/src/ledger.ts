@@ -237,7 +237,6 @@ export class BudgetLedger {
       this.financial.unknownPaidInFlight.add(leaseId);
     else if (zeroCash && !this.financial.physicalDispatchStarted.has(leaseId))
       this.financial.unknownPaidInFlight.delete(leaseId);
-    this.financial.physicalDispatchStarted.delete(leaseId);
     return { granted: true, tier: this.tier(), lease };
   }
 
