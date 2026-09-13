@@ -20,7 +20,20 @@ export class ProcessingBudgetAdmissionError extends Error {
 
 function preparedCost(spec: HarnessRunSpec, harnessId: string): CostEvidence | undefined {
   if (!spec.processing || !spec.processing_cost_basis) return undefined;
-  const resolved = spec.extra["routeBillingKnowledge"];
+  // A concrete profile on the prepared spec is authoritative. The extra is
+  // only a resolver/fallback for routes that have no profile identity yet.
+  const profileBilling =
+    spec.credential_profile?.credential_kind === "api_key"
+      ? "metered"
+      : spec.credential_profile
+        ? "subscription_entitlement"
+        : undefined;
+  const resolver = spec.extra["routeBillingKnowledge"];
+  const resolved =
+    profileBilling ??
+    (typeof resolver === "function"
+      ? (resolver as (actual: HarnessRunSpec) => unknown)(spec)
+      : resolver);
   const ordinary =
     resolved === "metered" || resolved === "subscription_entitlement" || resolved === "unknown"
       ? resolved
