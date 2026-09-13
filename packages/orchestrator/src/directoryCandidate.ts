@@ -223,14 +223,16 @@ export async function publishDirectoryCandidate(input: {
       no_changes: files.noChanges,
       applied_paths: input.delivery?.appliedPaths ?? (direct ? files.changedPaths : []),
       adopted:
-        !files.manifest.entries.some(
-          (entry) => entry.before === "unknown" && entry.after !== null,
-        ) &&
+        (direct ||
+          !files.manifest.entries.some(
+            (entry) => entry.before === "unknown" && entry.after !== null,
+          )) &&
         (input.delivery?.applied ?? direct),
       apply_state:
-        !files.manifest.entries.some(
-          (entry) => entry.before === "unknown" && entry.after !== null,
-        ) &&
+        (direct ||
+          !files.manifest.entries.some(
+            (entry) => entry.before === "unknown" && entry.after !== null,
+          )) &&
         (input.delivery?.applied || direct)
           ? "applied"
           : "not_applied",
