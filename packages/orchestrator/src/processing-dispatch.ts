@@ -74,6 +74,7 @@ export function bindProcessingAdmission(
   const bound =
     admission ?? processingAdmissionForLease(ledger, leaseId, harnessId, attemptId, onDenied);
   spec.extra["processingAdmission"] = bound;
+  spec.extra["markPhysicalDispatchStarted"] = () => ledger.markPhysicalDispatchStarted(leaseId);
   return bound;
 }
 

@@ -187,6 +187,8 @@ export async function* runModelGovernedRoute(
     }
   }
   await admitPreparedProcessing(spec);
+  const markStarted = spec.extra["markPhysicalDispatchStarted"];
+  if (typeof markStarted === "function") (markStarted as () => void)();
   if (spec.processing?.reason === "processing_control_unavailable") {
     yield {
       type: "status",

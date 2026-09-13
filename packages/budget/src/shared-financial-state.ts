@@ -15,6 +15,7 @@ export interface SharedFinancialState {
   leases: Map<string, BudgetLease>;
   holds: Map<string, { reservedUsd: number; observedUsd: number }>;
   unknownPaidInFlight: Set<string>;
+  physicalDispatchStarted: Set<string>;
   totalsByTask: Map<string, TaskFinancialTotals>;
   cashUsd: number;
   valuationUsd: number;
@@ -49,6 +50,7 @@ export function newSharedFinancialState(
     leases: new Map(),
     holds: new Map(),
     unknownPaidInFlight: new Set(),
+    physicalDispatchStarted: new Set(),
     totalsByTask: new Map(),
     cashUsd: 0,
     valuationUsd: 0,

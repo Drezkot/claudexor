@@ -93,6 +93,9 @@ export function promptFingerprint(prompt: string): string {
  * Task views expose their own totals; routing, quota and prompt-loop evidence
  * stay view-local. */
 export class BudgetLedger {
+  markPhysicalDispatchStarted(leaseId: string): void {
+    this.financial.physicalDispatchStarted.add(leaseId);
+  }
   private readonly observations: BudgetObservation[] = [];
   private readonly quotaSnapshots = new Map<string, QuotaSnapshot>();
   private readonly promptCounts = new Map<string, number>();
@@ -232,6 +235,8 @@ export class BudgetLedger {
       this.financial.holds.set(leaseId, { ...previous, reservedUsd: requiredHold });
     if (!zeroCash && cost.knowledge === "unknown" && this.cap() !== null)
       this.financial.unknownPaidInFlight.add(leaseId);
+    else if (zeroCash && !this.financial.physicalDispatchStarted.has(leaseId))
+      this.financial.unknownPaidInFlight.delete(leaseId);
     return { granted: true, tier: this.tier(), lease };
   }
 
