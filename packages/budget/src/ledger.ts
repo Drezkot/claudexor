@@ -232,6 +232,7 @@ export class BudgetLedger {
       this.financial.holds.set(leaseId, { ...previous, reservedUsd: requiredHold });
     if (!zeroCash && cost.knowledge === "unknown" && this.cap() !== null)
       this.financial.unknownPaidInFlight.add(leaseId);
+    else if (zeroCash) this.financial.unknownPaidInFlight.delete(leaseId);
     return { granted: true, tier: this.tier(), lease };
   }
 
