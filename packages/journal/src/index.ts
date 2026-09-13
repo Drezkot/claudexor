@@ -366,9 +366,13 @@ export class DurableJournal extends JournalCore {
     queueMicrotask(hook);
   }
 
+  /** A fold implies deferred, seq-preserving background compaction: the
+   * lossless synchronous path would mint a new epoch and renumber the
+   * retained set. Explicit `compact()` keeps its own contract. */
   private compactAtThreshold(): void {
     if (
       !this.options.deferCompaction &&
+      !this.options.fold &&
       this.recovery.status === "ready" &&
       this.atCompactionThreshold()
     )

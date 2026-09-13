@@ -163,6 +163,46 @@ describe("fold at replay", () => {
     expect(readFileSync(plain.path).includes(Buffer.from(COMPACTED_SNAPSHOT))).toBe(true);
   });
 
+  it("never runs synchronous threshold compaction when a fold is configured", () => {
+    for (const prepare of [false, true]) {
+      const rootDir = join(root, prepare ? "prepared" : "direct");
+      const seeded = open({ rootDir });
+      seeded.appendBatch(
+        Array.from({ length: 40 }, (_, n) => ({
+          type: n % 4 === 0 ? "latest" : "history",
+          payload: { n, text: "payload ".repeat(32) },
+        })),
+      );
+      const epoch = seeded.currentEpoch();
+      seeded.close();
+      const before = readFileSync(seeded.path);
+      const over = {
+        rootDir,
+        fold: dropHistory,
+        deferCompaction: false,
+        compactionThresholdBytes: 1,
+      };
+      const journal = open(over, prepare);
+      if (prepare) journal.activatePrepared();
+      expect(readFileSync(journal.path)).toEqual(before);
+      expect(journal.currentEpoch()).toBe(epoch);
+      expect(journal.currentSequence()).toBe(40);
+      expect(journal.records().map((record) => record.seq)).toEqual([37]);
+      expect(journal.atCompactionThreshold()).toBe(true);
+      expect(journal.append("still.chained", null).seq).toBe(41);
+      journal.close();
+      const verbatim = open({ rootDir });
+      expect(verbatim.currentEpoch()).toBe(epoch);
+      expect(verbatim.currentSequence()).toBe(41);
+      verbatim.close();
+      // Without a fold the library default still compacts synchronously at the threshold.
+      const plain = open({ rootDir, deferCompaction: false, compactionThresholdBytes: 1 });
+      expect(plain.currentEpoch()).not.toBe(epoch);
+      expect(plain.currentSequence()).toBe(41);
+      expect(readFileSync(plain.path).length).toBeLessThan(before.length);
+    }
+  });
+
   it("fires the threshold hook once per crossing and re-arms after a successful install", async () => {
     const crossings: number[] = [];
     const journal = open({
