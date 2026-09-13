@@ -126,9 +126,9 @@ export async function applyWorkspaceFiles(
     // facts, but can never authorize overwriting an existing target. They are
     // therefore excluded from the mutation set while safe selected entries
     // remain deliverable.
-    const entries = selectedWorkspaceChanges(manifest, paths).filter(
-      (entry) => entry.before !== "unknown",
-    );
+    const selected = selectedWorkspaceChanges(manifest, paths);
+    const refusedUnknown = selected.filter((entry) => entry.before === "unknown");
+    const entries = selected.filter((entry) => entry.before !== "unknown");
     const current = new Map<string, WorkspaceFileState | null>();
     for (const entry of entries)
       current.set(
@@ -139,7 +139,12 @@ export async function applyWorkspaceFiles(
       (entry) => !sameWorkspaceFile(entry.after, current.get(entry.path) ?? null),
     );
     if (pendingEntries.length === 0)
-      return { ...result, applied: true, alreadyApplied: true };
+      return refusedUnknown.length > 0
+        ? {
+            ...result,
+            detail: `Unknown preimage retains custody: ${refusedUnknown.map((entry) => entry.path).join(", ")}`,
+          }
+        : { ...result, applied: true, alreadyApplied: true };
     for (const entry of pendingEntries) {
       if (!sameWorkspaceFile(entry.before, current.get(entry.path) ?? null))
         return { ...result, detail: `Target preimage changed: ${entry.path}` };

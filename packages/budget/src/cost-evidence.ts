@@ -35,6 +35,11 @@ export function attemptCostEvidence(
   if (processingCost)
     return CostEvidenceSchema.parse({
       ...processingCost,
+      estimatedUsd: processingCost.estimatedUsd ?? estimatedUsd ?? null,
+      knowledge:
+        processingCost.knowledge === "unknown" && estimatedUsd !== undefined
+          ? "estimated"
+          : processingCost.knowledge,
       provenance: [...processingCost.provenance, `attempt:${attemptId}`],
     });
   return routeCostEvidence({

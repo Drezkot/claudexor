@@ -2166,8 +2166,10 @@ export class Orchestrator {
     paths: RunPaths,
     repoRoot: string,
     log?: EventLog,
-    processing?: Pick<HarnessRunSpec,
-      "processing_preference" | "processing" | "processing_cost_basis" | "processing_allow_paid">,
+    processing?: Pick<
+      HarnessRunSpec,
+      "processing_preference" | "processing" | "processing_cost_basis" | "processing_allow_paid"
+    >,
     processingAdmission?: import("@claudexor/core").ProcessingAdmission,
   ): Promise<{ pointerLine: string | null } | null> {
     const ctx = runInput.threadContinuity;
@@ -2351,12 +2353,12 @@ export class Orchestrator {
           routed.quotaAdmission,
         )
       : undefined;
-    // Continuity (INV-137): once the lane (harness + resolved profile) is known,
-    // build the continuation packet, materialize context/THREAD.md, and point
-    // the prompt at it — never embed the packet body in the prompt. Replaces the
-    // old static session.rebound "not_portable" phrase with a real disclosure.
     const processingAdmission = processingAdmissionForLease(
-      ledger, processingLease.id, adapter.id, attemptId, processingLease.onDenied,
+      ledger,
+      processingLease.id,
+      adapter.id,
+      attemptId,
+      processingLease.onDenied,
     );
     const capturedProcessing = {
       processing_preference: contract.processing_preference,
@@ -2423,10 +2425,6 @@ export class Orchestrator {
       ...(inPlaceEnvelope && sessionFields?.resume_session_id
         ? { resume_session_id: sessionFields.resume_session_id }
         : {}),
-      // Scoped harness home for isolated envelopes AND for every delegated run;
-      // an ordinary in-place run keeps the native environment so the resumed
-      // vendor session is reachable. See scopedHarnessHome for the cost a
-      // delegated in-place attempt pays for that scoped state.
       ...(harnessHome.env ? { env: harnessHome.env } : {}),
       raw_context_packet: rawContextPacket,
       stream_deltas: streamDeltas,
@@ -2441,8 +2439,6 @@ export class Orchestrator {
       processingAdmission,
     );
     if (interaction) spec.extra["interactionChannel"] = interaction;
-    // D-16: compile the WorkReport envelope onto the spec (overriding the plain
-    // caller-schema transport) and keep the mode for the answer unwrap.
     const workEnvelope = this.workReportEnvelopeFor(routed, contract, Boolean(interaction));
     const workReportMode: WorkReportEnvelopeMode = this.applyWorkEnvelope(spec, workEnvelope);
     const inactivityMs = harnessInactivityTimeoutMs(this.config(contract.repo.root));
@@ -4077,17 +4073,9 @@ export class Orchestrator {
         log.emit("output.ready", { kind: "artifact", path });
       }
       const winnerAnswer = winnerRun.answerText ?? "";
-      // The winner's final MESSAGE is the human-facing answer and materializes
-      // for diff-ful runs too: the chat renders final/answer.md (the projection
-      // prefers it), never the arbitration summary — "Run … Winner: a01 …" is
-      // machine telemetry, not what the agent said. The diff stays in the
-      // Diff tab; summary.md remains a diagnostics artifact.
       if (winnerAnswer.length > 0) {
         store.writeText(join(paths.finalDir, "answer.md"), winnerAnswer + "\n");
       }
-      // The run's structured-output contract: ONE engine validator, called on
-      // the winner's answer regardless of diff presence (a non-conformant
-      // answer stays success-with-warnings; the receipt is the truth).
       if (contract.output_schema) {
         finalizeStructuredOutput({
           store,
@@ -4099,9 +4087,13 @@ export class Orchestrator {
       }
       if (mutatingRun && winnerRun.files) {
         let directoryDelivery:
-          | { applied: boolean; appliedPaths: string[]; alreadyApplied?: boolean }
-          | undefined;
-        if (input.inPlace === true && !inPlaceWinner && facts.lifecycle === "succeeded") {
+          { applied: boolean; appliedPaths: string[]; alreadyApplied?: boolean } | undefined;
+        const directoryAdoptable =
+          facts.lifecycle === "succeeded" &&
+          reviewAllowsApply(facts) &&
+          facts.checks !== "failed" &&
+          !workStateVetoes(facts);
+        if (input.inPlace === true && !inPlaceWinner && directoryAdoptable) {
           const delivered = await verifyAndDeliverFiles(
             execRoot,
             winnerRun.files,
@@ -5373,8 +5365,6 @@ export class Orchestrator {
     // Deliver the converged/last work to final/ so `apply` and `inspect` can
     // use it. Directory results retain complete partial files with their actual
     // lifecycle; direct effects are already applied and promise no rollback.
-    // D-16 r8 keeps interrupted Git-envelope patches diagnostic in attempts/,
-    // while in-place Git work retains its existing Revert evidence.
     if (lastRun && (lastRun.files || !interrupted || input.inPlace === true)) {
       const convAdoptable =
         facts.lifecycle === "succeeded" &&
