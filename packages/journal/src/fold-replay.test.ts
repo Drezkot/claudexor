@@ -203,6 +203,21 @@ describe("fold at replay", () => {
     }
   });
 
+  it("refuses explicit synchronous compaction under a fold and leaves the file intact", async () => {
+    const seeded = seed(40);
+    const before = readFileSync(seeded.path);
+    const journal = open({ fold: dropHistory });
+    expect(() => journal.compact()).toThrow(/unavailable with a fold; use compactInBackground/);
+    expect(readFileSync(journal.path)).toEqual(before);
+    expect(journal.currentEpoch()).toBe(seeded.epoch);
+    expect(journal.currentSequence()).toBe(40);
+    expect(journal.records().map((record) => record.seq)).toEqual([37]);
+    expect(journal.state().status).toBe("ready");
+    expect(await journal.compactInBackground({ stagingDir })).toMatchObject({ records: 1 });
+    expect(journal.currentEpoch()).toBe(seeded.epoch);
+    expect(journal.append("after.refusal", null).seq).toBe(41);
+  });
+
   it("fires the threshold hook once per crossing and re-arms after a successful install", async () => {
     const crossings: number[] = [];
     const journal = open({

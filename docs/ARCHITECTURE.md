@@ -229,9 +229,11 @@ at every wire boundary.
   `capacity`, `no_reclaim`) and leaves the existing frames untouched, so a large
   valid history remains readable and startup stays ready. Library constructor
   and prepared-activation triggers remain synchronous by default; a journal
-  constructed with a fold skips that synchronous threshold compaction, because
-  a fold implies the deferred seq-preserving background path (an explicit
-  `compact()` call keeps its lossless single-frame contract). The daemon
+  constructed with a fold never uses the lossless single-frame writer at all:
+  threshold compaction is skipped and an explicit `compact()` call is refused,
+  because that legacy snapshot would let an older engine read the folded set
+  as a complete history. A fold implies the deferred seq-preserving background
+  path. The daemon
   opts into deferred maintenance and streams compaction after normal admission;
   see the lifecycle section below. Projection reads select exact record types
   before payload copying without changing full-history reads, sequence numbers

@@ -197,8 +197,14 @@ export class DurableJournal extends JournalCore {
     return this.knownFileBytes;
   }
 
-  /** Atomically replace physical frames with one checksummed compressed frame. */
+  /** Atomically replace physical frames with one checksummed compressed frame.
+   * Refused when a fold is configured: this lossless single-frame writer would
+   * persist the retained set renumbered from 1 as a complete history, which an
+   * older engine cannot tell apart from a lossless snapshot. */
   compact(): { beforeBytes: number; afterBytes: number; records: number } | null {
+    if (this.options.fold) {
+      throw new Error("synchronous compaction is unavailable with a fold; use compactInBackground");
+    }
     this.background?.controller.abort();
     this.assertReadable();
     this.assertWritable();
