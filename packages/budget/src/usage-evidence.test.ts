@@ -69,6 +69,22 @@ describe("processing-aware usage evidence", () => {
       "valuation",
     );
   });
+  it.each(["fast", "mixed"] as const)(
+    "does not relabel submitted standard when observed mode is %s",
+    (observed) => {
+      expect(
+        usageAmountKind(
+          "local_session",
+          undefined,
+          {
+            ...receipt("standard"),
+            observed,
+          },
+          basis("unknown"),
+        ),
+      ).toBe("unknown");
+    },
+  );
 
   it.each(["valuation", "unknown"] as const)(
     "premium %s amount leaves actual paid consumption unknown at finite settlement",

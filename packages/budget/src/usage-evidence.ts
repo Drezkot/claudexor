@@ -43,7 +43,9 @@ function ordinaryIncluded(
   )
     return true;
   if (
-    (processing?.submitted === "standard" ||
+    ((processing?.submitted === "standard" &&
+      processing.observed !== "fast" &&
+      processing.observed !== "mixed") ||
       (processing?.requested === null &&
         processing.submitted === null &&
         processing.reason !== "native_explicit" &&
