@@ -55,6 +55,21 @@ describe("processing-aware usage evidence", () => {
     ).toBe("valuation");
   });
 
+  it("treats an omitted native processing control as ordinary included work", () => {
+    const omitted: ProcessingReceipt = {
+      requested: null,
+      submitted: null,
+      submittedNative: null,
+      observed: "unknown",
+      observedNative: [],
+      reason: "native_default_unconfirmed",
+      source: "fixture",
+    };
+    expect(usageAmountKind("local_session", undefined, omitted, basis("unknown"))).toBe(
+      "valuation",
+    );
+  });
+
   it.each(["valuation", "unknown"] as const)(
     "premium %s amount leaves actual paid consumption unknown at finite settlement",
     (amount) => {

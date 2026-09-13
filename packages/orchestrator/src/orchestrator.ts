@@ -4029,8 +4029,7 @@ export class Orchestrator {
     let finalVerifyFailed = false;
     let deliveryFailureReason: string | null = null;
     let raceDeliveryReceipt: Awaited<ReturnType<typeof verifyAndDeliver>> | null = null;
-    // A single in-place turn already mutated its execution tree; race adoption
-    // instead defers verification until immediately before delivery.
+    let directoryDeliveryReceipt = false;
     const inPlaceWinner = winnerRun?.reviewCwd === execRoot;
     const deferredRaceVerify = input.inPlace === true && !inPlaceWinner;
     if (
@@ -4046,13 +4045,9 @@ export class Orchestrator {
       finalVerify = winnerRun.files
         ? await finalVerifyFiles(winnerRun.files, undefined, gateSpecsFromContract(contract), log)
         : await finalVerifyPatch(execRoot, winnerRun, gateSpecsFromContract(contract), log);
-      // Verify errors block like proven failures; accept_risk stays available.
-      // A failed fresh verify lands on the CHECKS axis (a needs-decision block).
       finalVerifyFailed = finalVerifyBlocks(finalVerify);
       if (finalVerifyFailed) facts = { ...facts, checks: "failed", reason: "checks_failed" };
     }
-    // A needs-decision terminal (review blocked or checks failed) overrides the
-    // persisted green arbitration fields; otherwise the facts pass through.
     const needsDec = facts.review === "blocked" || facts.checks === "failed";
     store.writeYaml(join(paths.arbitrationDir, "decision.yaml"), {
       ...result.decision,
@@ -4106,8 +4101,12 @@ export class Orchestrator {
             log,
           );
           store.writeYaml(join(paths.finalDir, "delivery_receipt.yaml"), delivered);
+          directoryDeliveryReceipt = true;
           directoryDelivery = delivered;
-          if (!delivered.applied) facts = { ...facts, checks: "failed", reason: "checks_failed" };
+          if (!delivered.applied) {
+            deliveryFailureReason = delivered.detail ?? "directory race adoption was refused";
+            facts = { ...facts, checks: "failed", reason: "checks_failed" };
+          }
         }
         await publishDirectoryCandidate({
           files: winnerRun.files,
@@ -4202,7 +4201,8 @@ export class Orchestrator {
           reviewVerified: actualReviewVerified,
           finalVerify,
           deliveryFailureReason,
-          deliveryReceiptPath: raceDeliveryReceipt ? "final/delivery_receipt.yaml" : null,
+          deliveryReceiptPath:
+            raceDeliveryReceipt || directoryDeliveryReceipt ? "final/delivery_receipt.yaml" : null,
         });
         if (inPlaceWinner && requestedSingleCandidate && adopted === true) {
           revertAnchorId = await createRevertAnchorOrNull(execRoot, preTurnSha, postTurnSha);
@@ -4212,7 +4212,7 @@ export class Orchestrator {
           kind: input.create === true ? "new_repo" : "patch",
           source_task_id: taskId,
           producer_attempt_id: winnerRun.attemptId,
-          ...(raceDeliveryReceipt
+          ...(raceDeliveryReceipt || directoryDeliveryReceipt
             ? { files: { delivery_receipt: "final/delivery_receipt.yaml" } }
             : {}),
           meta: {
