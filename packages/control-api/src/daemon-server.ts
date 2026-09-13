@@ -2121,9 +2121,9 @@ export class DaemonControlApiServer {
         const applied = [
           ...new Set([...(readDeliveryState(record)?.appliedPaths ?? []), ...paths]),
         ];
-        const complete = deliverableWorkspaceChanges(manifest).every((entry) =>
-          applied.includes(entry.path),
-        );
+        const complete =
+          deliverableWorkspaceChanges(manifest).every((entry) => applied.includes(entry.path)) &&
+          !manifest.entries.some((entry) => entry.before === "unknown" && entry.after !== null);
         markRunApplyState(record, complete ? "applied" : "not_applied", applied, true);
       },
       deliveredApplyState: (record) => controlRunResult(record).applyState,
