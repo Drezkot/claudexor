@@ -3135,7 +3135,11 @@ export class Orchestrator {
           attemptId,
           this.reservationEstimateUsd(input, i > 0),
           this.routeBillingKnowledge(input, routed.adapter.id),
-          processingCostEvidence(routed.processing, "unknown", [`harness:${routed.adapter.id}`]),
+          processingCostEvidence(
+            routed.processing,
+            this.routeBillingKnowledge(input, routed.adapter.id),
+            [`harness:${routed.adapter.id}`],
+          ),
         ),
       });
       log.emit("budget.lease.created", {
@@ -3368,9 +3372,11 @@ export class Orchestrator {
                 contAttemptId,
                 this.estimateUsdFloor(input.repoRoot),
                 this.routeBillingKnowledge(input, adapter.id),
-                processingCostEvidence(slot.routed.processing, "unknown", [
-                  `harness:${adapter.id}`,
-                ]),
+                processingCostEvidence(
+                  slot.routed.processing,
+                  this.routeBillingKnowledge(input, slot.routed.adapter.id),
+                  [`harness:${adapter.id}`],
+                ),
               ),
             });
             if (contLease.granted) {
@@ -3793,9 +3799,11 @@ export class Orchestrator {
           "synth",
           this.reservationEstimateUsd(input),
           this.routeBillingKnowledge(input, synthRouted.adapter.id),
-          processingCostEvidence(synthRouted.processing, "unknown", [
-            `harness:${synthRouted.adapter.id}`,
-          ]),
+          processingCostEvidence(
+            synthRouted.processing,
+            this.routeBillingKnowledge(input, synthRouted.adapter.id),
+            [`harness:${synthRouted.adapter.id}`],
+          ),
         ),
       });
       if (lease.granted) {
@@ -4848,7 +4856,11 @@ export class Orchestrator {
             attemptId,
             this.reservationEstimateUsd(input),
             this.routeBillingKnowledge(input, adapter.id),
-            processingCostEvidence(routed.processing, "unknown", [`harness:${adapter.id}`]),
+            processingCostEvidence(
+              routed.processing,
+              this.routeBillingKnowledge(input, routed.adapter.id),
+              [`harness:${adapter.id}`],
+            ),
           ),
         });
         if (!lease.granted) {
@@ -6128,7 +6140,9 @@ export class Orchestrator {
           attemptId,
           this.estimateUsdFloor(input.repoRoot),
           this.routeBillingKnowledge(input, harnessId),
-          processingCostEvidence(routed?.processing, "unknown", [`harness:${harnessId}`]),
+          processingCostEvidence(routed?.processing, this.routeBillingKnowledge(input, harnessId), [
+            `harness:${harnessId}`,
+          ]),
         ),
       buildSpec: async (routed, homeEnv, prompt, attemptId) => {
         const knobs = this.routeSpecKnobs(routed, contract, undefined, input.effort);
@@ -6396,7 +6410,11 @@ export class Orchestrator {
           attemptId,
           this.reservationEstimateUsd(input, opts.deepScan && idx > 0),
           this.routeBillingKnowledge(input, adapter.id),
-          processingCostEvidence(routed.processing, "unknown", [`harness:${adapter.id}`]),
+          processingCostEvidence(
+            routed.processing,
+            this.routeBillingKnowledge(input, routed.adapter.id),
+            [`harness:${adapter.id}`],
+          ),
         ),
       });
       if (!lease.granted) {

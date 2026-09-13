@@ -22,7 +22,7 @@ function preparedCost(spec: HarnessRunSpec, harnessId: string): CostEvidence | u
   if (!spec.processing || !spec.processing_cost_basis) return undefined;
   return processingCostEvidence(
     { model: spec.model_hint, receipt: spec.processing, costBasis: spec.processing_cost_basis },
-    "unknown",
+    spec.auth_preference === "api_key" ? "metered" : "subscription_entitlement",
     [`harness:${harnessId}`, `profile:${spec.credential_profile?.profile_id ?? "default"}`],
   );
 }
