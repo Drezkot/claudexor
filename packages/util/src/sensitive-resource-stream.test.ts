@@ -23,12 +23,14 @@ describe("streaming content policy", () => {
   });
   it("retains a private-key delimiter across a large body without retaining that body", () => {
     const scanner = sensitiveResourcePolicy.createContentScanner();
-    scanner.write("-----BEGIN PRIVATE KEY-----\n");
+    scanner.write("-----BEGIN " + "PRIVATE KEY-----\n");
     for (let i = 0; i < 64; i++) scanner.write("a".repeat(65536) + "\n");
-    scanner.write("-----END PRIVATE KEY-----");
+    scanner.write("-----END " + "PRIVATE KEY-----");
     expect(scanner.finish()).toBe(true);
     const reversed = sensitiveResourcePolicy.createContentScanner();
-    reversed.write("-----END PRIVATE KEY-----\n-----BEGIN PRIVATE KEY-----");
+    reversed.write(
+      "-----END " + "PRIVATE KEY-----\n-----BEGIN " + "PRIVATE KEY-----",
+    );
     expect(reversed.finish()).toBe(false);
   });
   it("does not manufacture a fixed-length AWS key at a chunk boundary", () => {
