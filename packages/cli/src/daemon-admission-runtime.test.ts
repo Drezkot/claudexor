@@ -66,6 +66,7 @@ function runtimeFixture(initialBlocked: string[]) {
       recordFailure: vi.fn(),
       close: vi.fn(),
     },
+    commandRecords: () => [],
     normalPlane,
   });
   return {

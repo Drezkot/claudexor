@@ -299,6 +299,7 @@ export async function main(): Promise<void> {
       global: journalManager,
       partitions: threads,
       diagnostics: startupDiagnostics,
+      commandRecords: () => commandStoreSlot.prepared().records(),
       normalPlane: {
         requested: () => shutdownRuntime!.requested(),
         armQuotaPolling: () => quotaPoller!.arm(),

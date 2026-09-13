@@ -22,6 +22,7 @@ import { sweepRetiredConfigKeysAtStartup } from "@claudexor/config";
 import { redactSecrets } from "@claudexor/util";
 import { DAEMON_LAUNCH_SOURCE_ENV } from "./daemon-launch.js";
 import { logLine, runStartupCrashGc } from "./daemon-lifecycle.js";
+import { commandScopeRoots } from "./orphan-sweeper.js";
 import {
   completeStartupAdmission,
   recoveryBlockedPartitions,
@@ -137,6 +138,9 @@ export function createStartupAdmissionRuntime(input: {
   global: JournalManager;
   partitions: ProjectPartitions;
   diagnostics: StartupDiagnosticsHandle;
+  /** The stage-2 prepared global command records: crash-GC derives the
+   * sweepable project roots from them instead of replaying the journal again. */
+  commandRecords: () => Iterable<{ params?: unknown }>;
   normalPlane: NormalPlaneDuties;
 }): {
   runAdmissionCompletion(blockedPartitions: () => string[]): Promise<DaemonServingMode>;
@@ -219,6 +223,7 @@ export function createStartupAdmissionRuntime(input: {
             runStartupCrashGc({
               daemonDir: daemonDir(),
               logPath: logPath(),
+              knownProjectRoots: () => commandScopeRoots(input.commandRecords()),
               ...(input.diagnostics.diagnostics
                 ? { diagnostics: input.diagnostics.diagnostics }
                 : {}),
