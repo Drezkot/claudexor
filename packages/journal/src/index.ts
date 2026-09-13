@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import { closeSync, fstatSync, lstatSync, renameSync, rmSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { ensureCanonicalPrivateDirectory, fsyncDirectory } from "@claudexor/util";
-import { prepareAppendBatch } from "./append-batch.js";
+import { cloneJson, prepareAppendBatch } from "./append-batch.js";
 import { ZERO_HASH, type JournalRecord } from "./frame-codec.js";
 import { prepareJournalCompaction, type JournalCompactionResult } from "./journal-compaction.js";
 import {
@@ -34,6 +34,8 @@ export { JournalCursorError } from "./journal-cursor.js";
 export { journalPartitionDirectory } from "./journal-partition.js";
 export { JournalRecoveryRequiredError, JournalAppendUncertainError };
 export type { JournalRecoveryLocation, JournalRecoveryState } from "./journal-recovery-state.js";
+export type { FoldRecord, FoldVerdict, JournalFold } from "./journal-fold.js";
+export { keepEverything } from "./journal-fold.js";
 import {
   JournalRecoveryRequiredError,
   JournalAppendUncertainError,
@@ -517,8 +519,4 @@ export class DurableJournal {
   private assertOpen(): void {
     if (this.closed) throw new Error("journal writer is closed");
   }
-}
-
-function cloneJson<T>(value: T): T {
-  return JSON.parse(JSON.stringify(value)) as T;
 }

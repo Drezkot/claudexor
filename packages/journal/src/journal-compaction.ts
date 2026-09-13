@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { closeSync, constants, openSync, rmSync } from "node:fs";
 import { gzipSync } from "node:zlib";
-import { encodeJournalPayload } from "./append-batch.js";
+import { cloneJson, encodeJournalPayload } from "./append-batch.js";
 import {
   COMPACTED_SNAPSHOT,
   HASH_BYTES,
@@ -192,8 +192,4 @@ export function isCompactionCapacityError(error: unknown): boolean {
       error.code === "ERR_STRING_TOO_LONG" ||
       error.code === "journal_compaction_capacity")
   );
-}
-
-function cloneJson<T>(value: T): T {
-  return JSON.parse(JSON.stringify(value)) as T;
 }
