@@ -20,7 +20,7 @@ import {
 } from "./budget.js";
 export { ControlQuotaResponse } from "./quota.js";
 import { RunOutcomeFacts } from "./decision.js";
-import { EffortHint, HarnessModel, InputTokenUsage, InteractionQuestion } from "./harness.js";
+import { EffortHint, InputTokenUsage, InteractionQuestion } from "./harness.js";
 import { ContinuityKind, ThreadState, ThreadTurnKind, WorkspaceMode } from "./thread.js";
 import { ResourceAttachmentRef } from "./attachment.js";
 import { RequestRequirementResolution } from "./request-requirements.js";
@@ -28,10 +28,12 @@ import { ProtectedPathApproval, TestCommandInvocation } from "./task.js";
 import { RunScope } from "./control-run-scope.js";
 import { RunFailure } from "./control-run-failure.js";
 import { RunExecution } from "./control-run-execution.js";
+import { WorkspaceScopePath } from "./files-manifest.js";
 import { makeControlRunRetrySchemas } from "./control-run-retry.js";
 import { ControlAuthRoute } from "./control-auth-route.js";
 import { DelegatedChildRunIds, RunDelegationInfo } from "./delegation.js";
 import { HARNESS_INACTIVITY_TIMEOUT_DEFAULT_MS, InteractionTimeoutValue } from "./config.js";
+import { ProcessingPreference } from "./processing.js";
 export { RunExecution } from "./control-run-execution.js";
 export { ControlTimelineEvent } from "./control-timeline.js";
 export const ControlReviewerPanelEntry = z
@@ -52,6 +54,7 @@ export const ControlReviewerPanelEntry = z
     credentialProfileId: NonBlankString.optional().describe(
       "Per-reviewer credential profile id; explicit pins are strict and never fall back.",
     ),
+    processingPreference: ProcessingPreference.optional(),
   })
   .strict()
   .describe(
@@ -103,6 +106,7 @@ export const ControlRunStartRequest = z
         "Harness-scoped model map (harness id to model id); an entry here wins over the scalar model and over the per-harness settings default.",
       ),
     effort: EffortHint.optional().describe("Requested reasoning effort."),
+    processingPreference: ProcessingPreference.optional(),
     /** Harness-scoped effort map (harness id → effort). Specific beats general:
      * an entry here wins over the scalar `effort` and the per-harness settings
      * default, analogous to `models`. Exact Retry replays the frozen
@@ -485,9 +489,10 @@ export const RunApplyState = z
     "applied_review_blocked",
     /** A prior in-place application was reverted to its pre-turn snapshot. */
     "reverted",
+    "discarded",
   ])
   .describe(
-    "Honest application state of a run's changes: not_applied (no in-place mutation), applied (applied and review clean), applied_review_blocked (applied but review blocked/unconverged), or reverted.",
+    "Honest application state: not_applied (delivery pending), applied, applied_review_blocked, reverted, or discarded (remaining copied output deliberately not applied).",
   );
 export type RunApplyState = z.infer<typeof RunApplyState>;
 
@@ -501,6 +506,13 @@ export type RunApplyState = z.infer<typeof RunApplyState>;
 export const RunDeliveryState = z
   .object({
     applyState: RunApplyState.default("not_applied"),
+    appliedPaths: z
+      .array(WorkspaceScopePath)
+      .optional()
+      .describe(
+        "Paths already delivered from a directory result; remaining paths retain pending custody.",
+      ),
+    discardedAt: z.string().nullable().optional(),
     deliveredAt: z
       .string()
       .nullable()
@@ -525,10 +537,10 @@ export type RunDeliveryState = z.infer<typeof RunDeliveryState>;
 export const ControlRunResult = z
   .object({
     kind: z
-      .enum(["patch", "answer", "plan", "report", "none"])
+      .enum(["patch", "files", "answer", "plan", "report", "none"])
       .default("none")
       .describe(
-        "What the turn actually produced: a patch, an answer, a plan (no files changed), a report, or nothing.",
+        "What the turn actually produced: a Git patch, directory files, an answer, a plan, a report, or nothing.",
       ),
     diffStat: z
       .object({
@@ -770,6 +782,12 @@ export type ControlEvidenceIntegrity = z.infer<typeof ControlEvidenceIntegrity>;
 
 export const ControlBudgetSnapshot = z
   .object({
+    cashKnowledge: z
+      .enum(["exact", "estimated", "unknown"])
+      .optional()
+      .describe(
+        "Cash certainty from the ledger; explicit unknown keeps spendUsd null independently of valuation.",
+      ),
     paidBudget: PaidBudget.default({ kind: "unlimited" }),
     spendUsd: z
       .number()
@@ -942,6 +960,7 @@ export type ApplyTarget = z.infer<typeof ApplyTarget>;
 
 export const ControlApplyCheckRequest = z
   .object({
+    paths: z.array(WorkspaceScopePath).optional(),
     target: ApplyTarget.default({ kind: "original_project" }),
   })
   .strict()
@@ -950,6 +969,7 @@ export type ControlApplyCheckRequest = z.infer<typeof ControlApplyCheckRequest>;
 
 export const ControlApplyRequest = z
   .object({
+    paths: z.array(WorkspaceScopePath).optional(),
     target: ApplyTarget.default({ kind: "original_project" }),
     mode: z
       .enum(["apply", "branch", "commit", "pr"])
@@ -976,9 +996,10 @@ export const RunDecisionAction = z
     /** Restore the live in-place tree to this turn's pre-turn snapshot (server-owned;
      * refuses if the tree has diverged from the recorded post-turn state). */
     "revert_run",
+    "discard",
   ])
   .describe(
-    "Operator decision on a blocked run: accept_clean_patch (apply it), rerun_with_feedback, accept_risk, override_needs_human, or revert_run (restore the pre-turn snapshot).",
+    "Operator decision: apply an accepted result, rerun with feedback, accept risk, override needs-human, revert a recorded Git effect, or discard remaining copied files without applying them.",
   );
 export type RunDecisionAction = z.infer<typeof RunDecisionAction>;
 
@@ -1005,14 +1026,14 @@ export const ControlRunDecisionRequest = z
     target: ApplyTarget.optional().describe("Delivery target for accept_clean_patch."),
   })
   .strict()
-  .describe("Typed, auditable operator decision on a NEEDS_HUMAN-blocked run.");
+  .describe("Typed operator decision on a run or its pending copied result.");
 export type ControlRunDecisionRequest = z.infer<typeof ControlRunDecisionRequest>;
 
 export const ControlRunDecisionResponse = z
   .object({
     accepted: z.boolean().describe("Whether the decision was accepted."),
     status: z
-      .enum(["applied", "requeued", "rejected", "unsupported"])
+      .enum(["applied", "requeued", "rejected", "unsupported", "discarded"])
       .describe("Outcome: applied, requeued (a new turn was enqueued), rejected, or unsupported."),
     /** New run id when the decision re-enqueues a turn (rerun_with_feedback). */
     newRunId: Id.optional().describe(
@@ -1351,37 +1372,12 @@ export const ControlThreadDetail = z
   );
 export type ControlThreadDetail = z.infer<typeof ControlThreadDetail>;
 
-/**
- * Models enumerable for one harness. `source` is honest about provenance:
- * "api" when the adapter implemented a real enumeration (raw-api / OpenAI
- * `GET /v1/models`), "manifest" when the list is the manifest's known-good
- * hint set, "none" when the harness has no model truth source at all (the
- * list is then empty and explicit models are refused under strict model-truth validation).
- */
-export const ControlHarnessModelsResponse = z
-  .object({
-    harnessId: z.string().describe("Harness the models belong to."),
-    models: z
-      .array(HarnessModel)
-      .default([])
-      .describe("Enumerable models; empty when the harness has no model truth source."),
-    source: z
-      .enum(["api", "manifest", "none"])
-      .describe(
-        "Provenance of the list: api (a live vendor enumeration), manifest (the manifest's known-good hint set), or none (no model truth source; explicit models are refused).",
-      ),
-    /** Freshness note for manifest-sourced lists: the vendor CLI version the
-     * known-model hints were last verified against (null for api/none). */
-    verifiedAgainst: z
-      .string()
-      .nullable()
-      .default(null)
-      .describe(
-        "Vendor CLI version the manifest hints were last verified against; null for api/none sources.",
-      ),
-  })
-  .describe("Models enumerable for one harness, with honest provenance.");
-export type ControlHarnessModelsResponse = z.infer<typeof ControlHarnessModelsResponse>;
+export {
+  ControlHarnessModelsResponse,
+  ControlHarnessAccountCatalog,
+  ControlHarnessAccountModelsResponse,
+  ControlHarnessModelsQueryResponse,
+} from "./control-harness-models.js";
 
 export const ControlSettingsSnapshot = z
   .object({

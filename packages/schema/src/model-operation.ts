@@ -6,6 +6,7 @@ import { Id, IsoTimestamp, NonBlankString } from "./primitives.js";
 import { ControlProblem } from "./problem.js";
 import { RunLifecycle } from "./status-projection.js";
 import { TokenUsage } from "./telemetry.js";
+import { ProcessingCapability, ProcessingPreference, ProcessingReceipt } from "./processing.js";
 
 export const ModelPayloadRef = z
   .object({
@@ -102,6 +103,7 @@ export const ModelCallOptions = z
   .object({
     reasoningEffort: NonBlankString.optional(),
     serviceTier: NonBlankString.optional(),
+    processingPreference: ProcessingPreference.optional(),
     parallelToolCalls: z.boolean().optional(),
     cacheKey: NonBlankString.optional(),
     maxOutputTokens: z.number().int().positive().optional(),
@@ -157,6 +159,7 @@ export const ModelCallResult = z
     usage: ModelUsage,
     cost: ModelCostEvidence,
     appliedOptions: ModelCallOptions,
+    processing: ProcessingReceipt.optional(),
     problem: ControlProblem.nullable(),
     nativeContinuation: ModelNativeContinuation.nullable()
       .optional()
@@ -182,6 +185,7 @@ export const ModelCatalogEntry = z
     reasoningEfforts: z.array(z.string()),
     defaultReasoningEffort: z.string().nullable(),
     supportedOptions: z.array(z.string()),
+    processing: ProcessingCapability.optional(),
   })
   .strict()
   .describe(
@@ -205,6 +209,25 @@ export const ControlModelSourcesResponse = z
   .describe("Available raw model transports, distinct from agent harness inventory.");
 export type ControlModelSourcesResponse = z.infer<typeof ControlModelSourcesResponse>;
 
+export const ControlModelSourcesAccountsResponse = z
+  .object({
+    sources: z.array(
+      ControlModelSourcesResponse.shape.sources.element.extend({
+        processingPreferences: z.array(ProcessingPreference),
+        accountCatalog: z.literal(true),
+      }),
+    ),
+  })
+  .strict();
+export type ControlModelSourcesAccountsResponse = z.infer<
+  typeof ControlModelSourcesAccountsResponse
+>;
+export const ControlModelSourcesQueryResponse = z.union([
+  ControlModelSourcesResponse,
+  ControlModelSourcesAccountsResponse,
+]);
+export type ControlModelSourcesQueryResponse = z.infer<typeof ControlModelSourcesQueryResponse>;
+
 export const ControlModelCatalogResponse = z
   .object({
     source: Id,
@@ -223,6 +246,37 @@ export const ControlModelCatalogResponse = z
     "Exact-profile model discovery, not a global CLI alias list or an inference entitlement guarantee.",
   );
 export type ControlModelCatalogResponse = z.infer<typeof ControlModelCatalogResponse>;
+
+export const AccountCatalogAvailability = z
+  .object({
+    credentialProfileId: Id,
+    availability: z.enum(["available", "unavailable", "unknown"]),
+    problem: ControlProblem.nullable(),
+  })
+  .strict()
+  .describe(
+    "Current account evidence for display; this does not certify fresh execution admission.",
+  );
+export type AccountCatalogAvailability = z.infer<typeof AccountCatalogAvailability>;
+
+export const ControlModelAccountCatalogResponse = z
+  .object({
+    source: Id,
+    accounts: z.array(
+      AccountCatalogAvailability.extend({ catalog: ControlModelCatalogResponse.nullable() }),
+    ),
+    partial: z.boolean(),
+  })
+  .strict()
+  .describe(
+    "All enabled managed model accounts, or one strict pin, retaining independent catalogs and failures. A missing catalog makes partial true.",
+  );
+export type ControlModelAccountCatalogResponse = z.infer<typeof ControlModelAccountCatalogResponse>;
+export const ControlModelCatalogQueryResponse = z.union([
+  ControlModelCatalogResponse,
+  ControlModelAccountCatalogResponse,
+]);
+export type ControlModelCatalogQueryResponse = z.infer<typeof ControlModelCatalogQueryResponse>;
 
 export const ModelDispatch = z
   .object({

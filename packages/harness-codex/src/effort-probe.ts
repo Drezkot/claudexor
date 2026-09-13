@@ -22,6 +22,8 @@ import type { HarnessEvent, HarnessRunSpec, ModelEffortCapability } from "@claud
 import { EffortHint, effortLevelsForModel, mergeEffortLadders } from "@claudexor/schema";
 import { resolveEffort } from "@claudexor/core";
 import { nowIso } from "@claudexor/util";
+import { readCodexProcessingModels } from "./processing.js";
+import type { ProcessingCapability, HarnessModel } from "@claudexor/schema";
 import { BIN, probeEnv } from "./missing-cli.js";
 import { CODEX_VENDOR_CLI_VERSION } from "./vendor-cli-version.js";
 
@@ -36,10 +38,11 @@ export type CodexEffortCapability = Record<string, ModelEffortCapability>;
  */
 export interface CodexEffortCatalog {
   models: CodexEffortCapability;
-  /** `model/list` entry flagged `isDefault: true`; null when the vendor marked none. */
+  /** Vendor default; null when none is advertised. */
   defaultModel: string | null;
+  processing?: Record<string, ProcessingCapability>;
+  nativeModels?: HarnessModel[];
 }
-
 /**
  * Recorded fallback coverage: the pinned CLI's visible `model/list` capture,
  * plus unchanged ladders retained from historical account captures. Presence
@@ -186,7 +189,13 @@ export function readModelListEfforts(data: unknown): CodexEffortCatalog | null {
     if (!entry) continue;
     capability[entry[0]] = entry[1];
   }
-  return Object.keys(capability).length > 0 ? { models: capability, defaultModel } : null;
+  return Object.keys(capability).length > 0
+    ? {
+        models: capability,
+        defaultModel,
+        ...readCodexProcessingModels(data),
+      }
+    : null;
 }
 
 /**

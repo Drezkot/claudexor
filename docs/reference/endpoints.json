@@ -234,6 +234,26 @@
       "request_schema": null,
       "parameters": [
         {
+          "name": "view",
+          "in": "query",
+          "required": false,
+          "repeatable": false,
+          "enum": [
+            "accounts"
+          ],
+          "schema_ref": null,
+          "description": "Opt in to all enabled account catalogs with separate availability and provenance; omission preserves the legacy response."
+        },
+        {
+          "name": "credentialProfileId",
+          "in": "query",
+          "required": false,
+          "repeatable": false,
+          "enum": null,
+          "schema_ref": "Id",
+          "description": "Restrict the accounts view to this exact enabled credential profile."
+        },
+        {
           "name": "route",
           "in": "query",
           "required": false,
@@ -246,7 +266,7 @@
           "description": "Filter enumerated models to the given credential route (models foreign to the route are hidden)."
         }
       ],
-      "response_schema": "ControlHarnessModelsResponse",
+      "response_schema": "ControlHarnessModelsQueryResponse",
       "error_schema": "ControlProblem"
     },
     {
@@ -329,8 +349,20 @@
       "summary": "List raw model transports, independent of agent harnesses.",
       "auth": "loopback_bearer",
       "request_schema": null,
-      "parameters": [],
-      "response_schema": "ControlModelSourcesResponse",
+      "parameters": [
+        {
+          "name": "view",
+          "in": "query",
+          "required": false,
+          "repeatable": false,
+          "enum": [
+            "accounts"
+          ],
+          "schema_ref": null,
+          "description": "Opt in to account catalog and processing transport capabilities; omitted preserves the legacy source shape."
+        }
+      ],
+      "response_schema": "ControlModelSourcesQueryResponse",
       "error_schema": "ControlProblem"
     },
     {
@@ -342,6 +374,17 @@
       "auth": "loopback_bearer",
       "request_schema": null,
       "parameters": [
+        {
+          "name": "view",
+          "in": "query",
+          "required": false,
+          "repeatable": false,
+          "enum": [
+            "accounts"
+          ],
+          "schema_ref": null,
+          "description": "Enumerate every enabled account's separate inventory and availability; omitted selects one account using the inference pool criteria. Account view cannot be combined with requestedModel."
+        },
         {
           "name": "credentialProfileId",
           "in": "query",
@@ -361,7 +404,7 @@
           "description": "Select one account able to serve this model using the inference pool criteria; omitted discovers one account without a model constraint."
         }
       ],
-      "response_schema": "ControlModelCatalogResponse",
+      "response_schema": "ControlModelCatalogQueryResponse",
       "error_schema": "ControlProblem"
     },
     {

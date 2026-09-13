@@ -97,6 +97,14 @@ describe("plan CLI attachment transport", () => {
       "--attach",
       attachmentPath,
       "--json",
+      "--processing",
+      "standard",
+      "--workspace-kind",
+      "directory",
+      "--scope-path",
+      "assets, originals",
+      "--scope-path",
+      "brief.txt",
     ];
     try {
       await import("./cli.js");
@@ -115,6 +123,12 @@ describe("plan CLI attachment transport", () => {
       mode: "plan",
       prompt: "Use the attached brief",
       attachments: [{ resourceId: "res-plan-1" }],
+      processingPreference: "standard",
+      execution: {
+        isolation: "envelope",
+        workspaceKind: "directory",
+        scopePaths: ["assets, originals", "brief.txt"],
+      },
     });
     expect(JSON.stringify(runBody)).not.toContain(attachmentPath);
     expect(JSON.stringify(runBody)).not.toContain("PLAN_ATTACHMENT_SENTINEL");

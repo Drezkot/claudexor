@@ -22,10 +22,17 @@
  * here would reject a valid cross-profile fallback.
  */
 import type { HarnessAdapter } from "@claudexor/core";
-import { HarnessUnavailableError, validateModel } from "@claudexor/core";
+import {
+  HarnessUnavailableError,
+  validateModel,
+  hasModelInventoryForRoute,
+  prepareHarnessProcessing,
+  admitPreparedProcessing,
+} from "@claudexor/core";
 import {
   knownModelIdsForRoute,
   type CredentialProfile,
+  type HarnessCapabilities,
   type HarnessEvent,
   type HarnessRunSpec,
   type KnownModelEntry,
@@ -35,6 +42,7 @@ export interface ModelGovernedRoute {
   adapter: HarnessAdapter;
   /** Manifest model truth source (used when the adapter has no live models()). */
   knownModels: readonly KnownModelEntry[];
+  modelInventoryRoutes?: Readonly<HarnessCapabilities["model_inventory_routes"]>;
   /** Pre-spawn credential-route estimate: route-annotated manifest models are
    * filtered by it, and stay EXCLUDED when it is null (fail-closed — a
    * route-scoped model never passes the gate on an undecidable route). */
@@ -72,7 +80,7 @@ async function modelTruthForRoute(
   },
 ): Promise<ModelTruth> {
   const route = authRouteForProfile(query.profile, routed.authRouteEstimate);
-  if (typeof routed.adapter.models === "function") {
+  if (hasModelInventoryForRoute(routed.adapter, routed.modelInventoryRoutes, route)) {
     const inventory = await routed.adapter.models({
       cwd: query.cwd,
       ...(query.env ? { env: query.env } : {}),
@@ -144,6 +152,21 @@ export async function* runModelGovernedRoute(
   routed: ModelGovernedRoute,
   spec: HarnessRunSpec,
 ): AsyncIterable<HarnessEvent> {
+  let nativeModel: string | null = null;
+  if (spec.processing_preference || routed.adapter.prepareProcessing) {
+    const prepared = await prepareHarnessProcessing(routed.adapter, {
+      preference: spec.processing_preference,
+      model: spec.model_hint,
+      effort: spec.effort_hint,
+      credentialProfile: spec.credential_profile,
+      cwd: spec.cwd,
+      env: spec.env,
+      authPreference: spec.auth_preference,
+      allowPaid: spec.processing_allow_paid,
+    });
+    nativeModel = prepared.model;
+    spec = { ...spec, processing: prepared.receipt, processing_cost_basis: prepared.costBasis };
+  }
   const model = spec.model_hint?.trim();
   if (model) {
     const profile = spec.credential_profile ?? null;
@@ -154,6 +177,26 @@ export async function* runModelGovernedRoute(
       profile,
     });
     assertModelsAllowed(routed, [{ role: "model", model }], truth, profile);
+    if (nativeModel && nativeModel !== model) {
+      assertModelsAllowed(
+        routed,
+        [{ role: "native processing model", model: nativeModel }],
+        truth,
+        profile,
+      );
+    }
+  }
+  await admitPreparedProcessing(spec);
+  const markStarted = spec.extra["markPhysicalDispatchStarted"];
+  if (typeof markStarted === "function") (markStarted as () => void)();
+  if (spec.processing?.reason === "processing_control_unavailable") {
+    yield {
+      type: "status",
+      ts: new Date().toISOString(),
+      session_id: spec.session_id,
+      processing: spec.processing,
+      text: "Processing preference is unavailable; using ordinary native execution.",
+    };
   }
   yield* routed.adapter.run(spec);
 }

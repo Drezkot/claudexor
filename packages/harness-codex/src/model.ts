@@ -1,3 +1,10 @@
+import {
+  codexProcessingCapability,
+  prepareCodexProcessing,
+  observeCodexProcessing,
+  codexProcessingCost,
+} from "./processing.js";
+import type { ProcessingReceipt } from "@claudexor/schema";
 import { validateModel, type ModelAdapter, type ModelAdapterContext } from "@claudexor/core";
 import type {
   ControlModelCatalogResponse,
@@ -23,6 +30,7 @@ import {
   validateCodexModelOptions,
 } from "./responses.js";
 import { CODEX_VENDOR_CLI_VERSION } from "./vendor-cli-version.js";
+import { processingAdmissionProblem } from "./processing-refusal.js";
 
 const ENDPOINT = "https://chatgpt.com/backend-api/codex";
 const CLIENT = "claudexor";
@@ -132,6 +140,7 @@ export function parseCodexModelCatalog(value: unknown): ModelCatalogEntry[] {
       : [];
     return {
       id,
+      processing: codexProcessingCapability(entry, "codex.models"),
       label: text(entry.display_name),
       isDefault: value === defaultEntry,
       contextWindow: capacity(entry.context_window),
@@ -145,6 +154,7 @@ export function parseCodexModelCatalog(value: unknown): ModelCatalogEntry[] {
         "toolChoice",
         "cacheKey",
         "serviceTier",
+        "processingPreference",
         ...(efforts.length ? ["reasoningEffort"] : []),
         ...(entry.supports_parallel_tool_calls === true ? ["parallelToolCalls"] : []),
       ],
@@ -219,10 +229,26 @@ export function createCodexModelAdapter(deps: CodexModelAdapterDeps = {}): Model
         model: request.model,
       };
       let dispatched = false;
+      let processing: ProcessingReceipt | undefined;
       let nativeContinuation: ModelNativeContinuation | null | undefined =
         request.nativeContinuation === undefined ? undefined : null;
-      const withTurnState = (result: ModelCallResult): ModelCallResult =>
-        nativeContinuation === undefined ? result : { ...result, nativeContinuation };
+      const withTurnState = (result: ModelCallResult): ModelCallResult => {
+        const optIn = request.options.processingPreference !== undefined;
+        const observed =
+          optIn && processing
+            ? observeCodexProcessing(processing, result.appliedOptions.serviceTier)
+            : undefined;
+        return {
+          ...result,
+          ...(nativeContinuation === undefined ? {} : { nativeContinuation }),
+          ...(observed
+            ? {
+                processing: observed,
+                cost: { ...result.cost, processing: codexProcessingCost(observed) },
+              }
+            : {}),
+        };
+      };
       try {
         if (
           request.source !== "codex" ||
@@ -277,7 +303,15 @@ export function createCodexModelAdapter(deps: CodexModelAdapterDeps = {}): Model
             { parameter: "reasoningEffort" },
           );
         }
-        const body = JSON.stringify(buildResponsesRequest(request, route));
+        processing = prepareCodexProcessing(
+          request.options.processingPreference,
+          model.processing,
+          request.options.serviceTier,
+        );
+        const physicalRequest = processing?.submittedNative
+          ? { ...request, options: { ...request.options, serviceTier: processing.submittedNative } }
+          : request;
+        const body = JSON.stringify(buildResponsesRequest(physicalRequest, route));
         const requestHeaders = new Headers(headers(auth));
         if (nativeContinuation) {
           requestHeaders.set(
@@ -315,7 +349,11 @@ export function createCodexModelAdapter(deps: CodexModelAdapterDeps = {}): Model
           } catch {
             /* HTTP status remains an authoritative refusal. */
           }
-          result.problem = authenticatedProblem(response, error, auth, now());
+          result.problem = processingAdmissionProblem(
+            authenticatedProblem(response, error, auth, now()),
+            request.options,
+            processing,
+          );
           return withTurnState(result);
         }
         // Capture before reading the stream. A truncated body still owns this

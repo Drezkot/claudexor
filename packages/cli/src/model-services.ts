@@ -20,6 +20,7 @@ import {
 } from "@claudexor/orchestrator";
 import {
   ControlModelCatalogResponse,
+  ControlModelAccountCatalogResponse,
   ControlProblem,
   GlobalConfig,
   type CredentialProfile,
@@ -32,6 +33,7 @@ import { accountsMigrationGate } from "./accounts-unified-migration.js";
 import { buildRegistry } from "./registry.js";
 import { credentialUnusableLedger } from "./run-orchestrator.js";
 import type { RetentionRunner } from "./retention-service.js";
+import { catalogProfiles, enumerateAccountCatalogs } from "./account-catalog.js";
 
 interface ModelSource {
   adapter: ModelAdapter;
@@ -383,28 +385,59 @@ export function createModelServices(deps: Dependencies) {
   return {
     operations,
     routes: {
-      modelSources: async () => ({
+      modelSources: async (view?: "accounts") => ({
         sources: sources.map(({ adapter, label, credentialHarness }) => ({
           id: adapter.id,
           label,
           credentialHarness,
+          ...(view === "accounts"
+            ? { processingPreferences: ["standard", "fast", "economy"], accountCatalog: true }
+            : {}),
         })),
       }),
       modelCatalog: async (
         sourceId: string,
         credentialProfileId?: string,
         requestedModel?: string,
-      ) =>
-        (
-          await resolve(
-            getSource(sourceId),
-            credentialProfileId
-              ? { mode: "pin", profileId: credentialProfileId }
-              : { mode: "auto" },
-            requestedModel ?? null,
-            lifetime.signal,
-          )
-        ).catalog,
+      ) => {
+        const { catalog } = await resolve(
+          getSource(sourceId),
+          credentialProfileId ? { mode: "pin", profileId: credentialProfileId } : { mode: "auto" },
+          requestedModel ?? null,
+          lifetime.signal,
+        );
+        return {
+          ...catalog,
+          models: catalog.models.map(({ processing: _processing, ...model }) => model),
+        };
+      },
+      modelAccountCatalog: async (sourceId: string, credentialProfileId?: string) => {
+        const source = getSource(sourceId);
+        const context = { config: config(), quota: deps.quota().read(), unusable: unusable.live() };
+        const accounts = await enumerateAccountCatalogs({
+          context,
+          adapter: registry.get(source.credentialHarness),
+          profiles: catalogProfiles(context, source.credentialHarness, credentialProfileId, true),
+          read: async (profile, canReadCatalog) => {
+            lifetime.signal.throwIfAborted();
+            if (!canReadCatalog) return null;
+            const catalog = ControlModelCatalogResponse.parse(
+              await source.adapter.catalog({ profile, signal: lifetime.signal }),
+            );
+            if (catalog.source !== sourceId || catalog.credentialProfileId !== profile.profile_id)
+              throw modelError(
+                "model_catalog_identity_mismatch",
+                "The model catalog does not identify the requested account",
+              );
+            return catalog;
+          },
+        });
+        return ControlModelAccountCatalogResponse.parse({
+          source: sourceId,
+          accounts,
+          partial: accounts.some((entry) => entry.catalog === null),
+        });
+      },
       createModelOperation: operations.create.bind(operations),
       getModelOperation: async (id: string) => operations.inspect(id),
       readModelResult: async (id: string) => operations.readResult(id),

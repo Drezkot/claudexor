@@ -109,6 +109,226 @@ function setup(
   };
 }
 
+describe("processing on the physical Codex model request", () => {
+  it.each([
+    {
+      preference: "economy",
+      native: "flex",
+      status: 429,
+      vendorCode: "resource_unavailable",
+      refusal: "capacity",
+    },
+    {
+      preference: "economy",
+      native: "flex",
+      status: 400,
+      vendorCode: "unsupported_parameter",
+      refusal: "unsupported",
+    },
+    {
+      preference: "fast",
+      native: "priority",
+      status: 400,
+      vendorCode: "unsupported_parameter",
+      refusal: "unsupported",
+    },
+  ] as const)(
+    "returns a confirmed $refusal refusal for submitted $native without another send",
+    async ({ preference, native, status, vendorCode, refusal }) => {
+      const fixture = setup((init) => {
+        expect(JSON.parse(String(init?.body)).service_tier).toBe(native);
+        return Response.json(
+          { error: { code: vendorCode, param: "service_tier" } },
+          { status, headers: { "x-request-id": "refusal-fixture", "retry-after": "2" } },
+        );
+      });
+      fixture.fetcher.mockResolvedValueOnce(
+        Response.json({
+          models: catalog.models.map((model) => ({
+            ...model,
+            service_tiers: [{ id: "flex" }, { id: "priority" }],
+          })),
+        }),
+      );
+      fixture.request.options.processingPreference = preference;
+      const result = await fixture.adapter.invoke(fixture.request, fixture.context);
+      expect(result).toMatchObject({
+        outcome: "failed",
+        message: null,
+        problem: {
+          code: "processing_unavailable",
+          context: {
+            httpStatus: status,
+            vendorCode,
+            parameter: "service_tier",
+            requestId: "refusal-fixture",
+            retryAfterMs: 2000,
+            generationStarted: false,
+            processingFallback: "standard",
+            processingRefusal: refusal,
+          },
+        },
+        processing: {
+          requested: preference,
+          submitted: preference,
+          submittedNative: native,
+          observed: "unknown",
+        },
+        cost: { knowledge: "unknown", cashUsd: null },
+      });
+      expect(fixture.onDispatch).toHaveBeenCalledTimes(1);
+      expect(fixture.fetcher.mock.calls.filter(([, init]) => init?.method === "POST")).toHaveLength(
+        1,
+      );
+      expect(ModelCallResult.safeParse(result).success).toBe(true);
+    },
+  );
+
+  it.each([
+    { status: 429, code: "rate_limit_exceeded", param: "service_tier", preference: "economy" },
+    { status: 429, code: "insufficient_quota", param: "service_tier", preference: "economy" },
+    { status: 429, code: "resource_unavailable", param: "service_tier", preference: "fast" },
+    { status: 500, code: "resource_unavailable", param: "service_tier", preference: "economy" },
+    { status: 403, code: "resource_unavailable", param: "service_tier", preference: "economy" },
+    { status: 400, code: "unsupported_parameter", param: "temperature", preference: "economy" },
+    { status: 400, code: "invalid_value", param: "service_tier", preference: "economy" },
+    { status: 400, code: "unsupported_parameter", param: "serviceTier", preference: "economy" },
+    { status: 400, code: "unsupported_parameter", param: "service_tier", preference: "standard" },
+  ] as const)(
+    "does not assert non-generation for $status/$code/$param on $preference",
+    async ({ status, code, param, preference }) => {
+      const fixture = setup(() => Response.json({ error: { code, param } }, { status }));
+      fixture.fetcher.mockResolvedValueOnce(
+        Response.json({
+          models: catalog.models.map((model) => ({
+            ...model,
+            service_tiers: [{ id: "flex" }, { id: "priority" }],
+          })),
+        }),
+      );
+      fixture.request.options.processingPreference = preference;
+      const result = await fixture.adapter.invoke(fixture.request, fixture.context);
+      expect(result.problem?.code).not.toBe("processing_unavailable");
+      expect(result.problem?.context).not.toHaveProperty("generationStarted");
+      expect(result.problem?.context).not.toHaveProperty("processingFallback");
+      expect(fixture.fetcher.mock.calls.filter(([, init]) => init?.method === "POST")).toHaveLength(
+        1,
+      );
+    },
+  );
+
+  it.each([undefined, "economy"] as const)(
+    "keeps an exact native override authoritative with advisory opt-in %s",
+    async (preference) => {
+      const fixture = setup(() =>
+        Response.json({ error: { code: "resource_unavailable" } }, { status: 429 }),
+      );
+      fixture.request.options.serviceTier = "flex";
+      fixture.request.options.processingPreference = preference;
+      const result = await fixture.adapter.invoke(fixture.request, fixture.context);
+      expect(result.problem).toMatchObject({
+        code: "rate_limited",
+        context: { vendorCode: "resource_unavailable" },
+      });
+      expect(result.problem?.context).not.toHaveProperty("generationStarted");
+      if (preference === undefined) {
+        expect(result).not.toHaveProperty("processing");
+        expect(result.cost).not.toHaveProperty("processing");
+      }
+      expect(fixture.fetcher.mock.calls.filter(([, init]) => init?.method === "POST")).toHaveLength(
+        1,
+      );
+    },
+  );
+
+  it("does not turn a failed response inside a successful stream into an admission refusal", async () => {
+    const fixture = setup(
+      () =>
+        new Response(
+          `data: ${JSON.stringify({ type: "response.failed", response: { error: { code: "resource_unavailable" } } })}\n\n`,
+        ),
+    );
+    fixture.fetcher.mockResolvedValueOnce(
+      Response.json({
+        models: catalog.models.map((model) => ({ ...model, service_tiers: [{ id: "flex" }] })),
+      }),
+    );
+    fixture.request.options.processingPreference = "economy";
+    const result = await fixture.adapter.invoke(fixture.request, fixture.context);
+    expect(result.problem?.code).not.toBe("processing_unavailable");
+    expect(result.problem?.context).not.toHaveProperty("generationStarted");
+    expect(fixture.onDispatch).toHaveBeenCalledTimes(1);
+    expect(fixture.fetcher.mock.calls.filter(([, init]) => init?.method === "POST")).toHaveLength(
+      1,
+    );
+  });
+
+  it("does not infer a Flex refusal from advisory intent when the actual request fell back to default", async () => {
+    const fixture = setup((init) => {
+      expect(JSON.parse(String(init?.body)).service_tier).toBe("default");
+      return Response.json({ error: { code: "resource_unavailable" } }, { status: 429 });
+    });
+    fixture.request.options.processingPreference = "economy";
+    const result = await fixture.adapter.invoke(fixture.request, fixture.context);
+    expect(result.processing).toMatchObject({
+      requested: "economy",
+      submitted: "standard",
+      submittedNative: "default",
+    });
+    expect(result.problem?.context).not.toHaveProperty("generationStarted");
+    expect(fixture.fetcher.mock.calls.filter(([, init]) => init?.method === "POST")).toHaveLength(
+      1,
+    );
+  });
+
+  it("translates an advertised Fast preference but reports the provider's Standard fallback", async () => {
+    const fixture = setup((init) => {
+      expect(JSON.parse(String(init?.body)).service_tier).toBe("priority");
+      return terminal();
+    });
+    fixture.fetcher.mockResolvedValueOnce(
+      Response.json({
+        models: catalog.models.map((model) => ({ ...model, service_tiers: [{ id: "priority" }] })),
+      }),
+    );
+    fixture.request.options.processingPreference = "fast";
+    const result = await fixture.adapter.invoke(fixture.request, fixture.context);
+    expect(result.processing).toMatchObject({
+      requested: "fast",
+      submitted: "fast",
+      observed: "standard",
+    });
+    expect(result.cost.processing?.kind).toBe("unknown");
+  });
+  it("retains exact native override over Standard and does not retry unknown transport", async () => {
+    const fixture = setup((init) => {
+      expect(JSON.parse(String(init?.body)).service_tier).toBe("priority");
+      throw new Error("unknown after send");
+    });
+    fixture.request.options.processingPreference = "standard";
+    fixture.request.options.serviceTier = "priority";
+    const result = await fixture.adapter.invoke(fixture.request, fixture.context);
+    expect(result.processing).toMatchObject({
+      requested: "standard",
+      submitted: "fast",
+      observed: "unknown",
+      reason: "native_explicit",
+    });
+    expect(result.outcome).toBe("unknown");
+    expect(fixture.fetcher.mock.calls.filter(([, init]) => init?.method === "POST")).toHaveLength(
+      1,
+    );
+  });
+  it("keeps old serviceTier-only clients on the strict legacy response shape", async () => {
+    const fixture = setup();
+    fixture.request.options.serviceTier = "priority";
+    const result = await fixture.adapter.invoke(fixture.request, fixture.context);
+    expect(result).not.toHaveProperty("processing");
+    expect(result.cost).not.toHaveProperty("processing");
+    expect(ModelCallResult.omit({ processing: true }).strict().parse(result)).toEqual(result);
+  });
+});
+
 describe("exact-profile Codex model catalog", () => {
   it("does not borrow CLI compaction, effective percentages, aliases, or hardcoded defaults", async () => {
     const fixture = setup();

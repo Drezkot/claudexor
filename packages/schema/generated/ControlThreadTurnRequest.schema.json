@@ -87,6 +87,15 @@
           "pattern": "^[a-z0-9]+(?:[_-][a-z0-9]+)*$",
           "description": "Requested reasoning effort."
         },
+        "processingPreference": {
+          "type": "string",
+          "enum": [
+            "standard",
+            "fast",
+            "economy"
+          ],
+          "description": "Advisory service preference. Fast or Economy may use ordinary Standard service; fallback never introduces Fast. Omission preserves native defaults. Explicit native serviceTier takes precedence."
+        },
         "efforts": {
           "type": "object",
           "additionalProperties": {
@@ -337,6 +346,10 @@
               "credentialProfileId": {
                 "$ref": "#/definitions/ControlThreadTurnRequest/properties/harnesses/items",
                 "description": "Per-reviewer credential profile id; explicit pins are strict and never fall back."
+              },
+              "processingPreference": {
+                "$ref": "#/definitions/ControlThreadTurnRequest/properties/processingPreference",
+                "description": "Advisory service preference. Fast or Economy may use ordinary Standard service; fallback never introduces Fast. Omission preserves native defaults. Explicit native serviceTier takes precedence."
               }
             },
             "required": [
@@ -396,6 +409,38 @@
           "type": "integer",
           "exclusiveMinimum": 0,
           "description": "Per-run turn cap (beats per-harness settings)."
+        },
+        "execution": {
+          "type": "object",
+          "properties": {
+            "workspaceKind": {
+              "type": "string",
+              "enum": [
+                "git",
+                "directory"
+              ],
+              "description": "Explicit directory execution needs no Git initialization; omission preserves existing clients."
+            },
+            "scopePaths": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1
+              },
+              "description": "Agent-selected input footprint. Directory copies materialize this entire selection; direct runs need no whole-tree baseline."
+            },
+            "isolation": {
+              "type": "string",
+              "enum": [
+                "envelope",
+                "live"
+              ],
+              "default": "envelope",
+              "description": "Run isolation: envelope (isolated worktree in the external per-project runtime namespace, the default) or live (the project tree itself)."
+            }
+          },
+          "additionalProperties": false,
+          "description": "Directory geometry for this turn; project identity and execution root remain thread-owned."
         },
         "answersPlanRunId": {
           "$ref": "#/definitions/ControlThreadTurnRequest/properties/planRunId",

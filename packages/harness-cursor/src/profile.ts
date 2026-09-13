@@ -1,3 +1,4 @@
+import type { HarnessRunSpec } from "@claudexor/schema";
 import { join } from "node:path";
 import {
   canonicalIsolationLocator,
@@ -266,4 +267,15 @@ export async function probeCursorCredentialAccount(
       identity: null,
     };
   }
+}
+
+// Ask + sandbox bound readonly; force approves optional native web unless it is off.
+export function cursorAccessArgs(spec: HarnessRunSpec): string[] {
+  if (spec.access === "readonly") {
+    const force = spec.external_context_policy === "off" ? [] : ["--force"];
+    return [...force, "--sandbox", "enabled", "--trust"];
+  }
+  if (spec.access === "workspace_write") return ["--force", "--sandbox", "enabled", "--trust"];
+  if (spec.access === "inherit_native") return ["--trust"];
+  return ["--force", "--sandbox", "disabled", "--trust"];
 }

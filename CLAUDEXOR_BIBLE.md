@@ -254,8 +254,11 @@ invariant or operator decision before proceeding.
   line, event, doctor report, run artifact, or source reference. Model
   prose is context, not proof. verify: review protocol; reviewer evidence
   preflight in reviewEngine.
-- **INV-041** Diffs come from git in the isolated worktree or live in-place
-  target, never from model edit narration. Captured diffs must round-trip:
+- **INV-041** Git diffs come from git in the isolated worktree or live in-place
+  target, never from model edit narration. Directory work products record observed
+  file bytes in a digest-bound manifest; a text diff is only a preview. Copied
+  file results retain the selected baseline and complete output bytes for exact
+  delivery, while direct effects disclose any unknown preimages. Captured diffs must round-trip:
   what the engine records as the work product must `git apply` cleanly to
   the base it was captured against (no silent corruption — CRLF, quoted
   paths, binary — between capture and delivery). verify: workspace diff
@@ -270,6 +273,12 @@ invariant or operator decision before proceeding.
   the shared sensitive-resource boundary, are the candidate plane; the
   sealed/redacted evidence packet is a separate explicit plane. Gitignored
   local state that is absent from the diff never crosses the reviewer boundary.
+  For an explicit directory result, the complete selected file manifest supplies
+  the candidate inventory instead of Git membership. Retained unchanged inputs
+  and observed output bytes remain available, with baseline/output evidence in
+  the explicit packet and the same sensitive-resource boundary. A selected file
+  is not excluded merely because its directory name usually denotes generated
+  output; unselected source siblings are never implicitly copied.
   verify: reviewEngine route-proof,
   candidate-inventory, and ignored-sibling tests; per-reviewer artifact
   checklist.
@@ -479,7 +488,10 @@ invariant or operator decision before proceeding.
 - **INV-072** Ordinary project runs (and Best-of candidates) execute in
   isolated envelopes under the external per-project runtime namespace
   (`~/.claudexor/v3/projects/<project-sha256>/workspaces/.../tree`), with the
-  harness cwd at the envelope worktree. The repository's `.claudexor/`
+  harness cwd at the envelope worktree. Explicit directory execution uses either
+  the selected live folder or an isolated copy of the caller-selected footprint,
+  without initializing Git. Stable project identity and execution address remain
+  separate facts. The repository's `.claudexor/`
   remains user-owned versioned config. verify: workspace manager tests.
 - **INV-073** Chat thread WRITE turns run IN-PLACE in the thread's
   explicit execution tree — the live project for an `in_place` thread, or
@@ -506,8 +518,10 @@ invariant or operator decision before proceeding.
   resolve) — is refused with a typed error naming the remediation BEFORE any
   mutation, instead of being initialized; a home that is already a healthy
   repository is respected untouched.
-  Supported in-place paths that do not cross a Git boundary remain available
-  without initialization. Claudexor never creates or edits the project's
+  Explicit directory workspaces, live or copied, need no Git boundary and never
+  initialize the original folder or change the requested run strategy. Supported
+  in-place paths that do not cross a Git boundary remain available without
+  initialization. Claudexor never creates or edits the project's
   `.gitignore`; repo `.claudexor/` is user-owned state and runtime stays
   external. verify: git-init, boundary-root refusal, lazy isolated-thread,
   run-applicability, and gitignore non-interference workspace tests.
@@ -629,12 +643,16 @@ invariant or operator decision before proceeding.
   negotiated major, while unversioned product aliases are refused. verify:
   control-api handshake/catalog tests; docs-truth catalog parity; UI review.
 - **INV-111** Apply is allowed only for successful runs with a successful
-  decision record and a patch WorkProduct for the original verified repo
+  decision record and a digest-bound patch or copied-files WorkProduct for the original verified repo
   root — with one typed, server-owned exception: an operator decision
   (`POST /v2/runs/:id/decision`, `accept_risk`/`override_needs_human`)
   persists an auditable, patch-hash-bound record that unblocks apply for a
   `blocked` run; a mutated patch invalidates the override. The human
-  decision is never client-faked state. verify: apply-gate tests; canary
+  decision is never client-faked state. Direct file effects are already in place
+  and do not offer a second apply or an unproved full rollback. Explicit discard
+  ends pending copy delivery without applying or reverting files; existing
+  retention owns the retained result. Partial application preserves custody of
+  unselected changes. verify: apply-gate tests; canary
   `[INV-112:apply-needs-verified-review]`.
 - **INV-112** Ordinary Agent work defaults to no internal model review,
   independently of how its executor was selected. Explicit review controls
@@ -657,6 +675,9 @@ invariant or operator decision before proceeding.
   enumerated in ARCHITECTURE with its fence, and each has one: envelope
   delivery, manual apply, race adoption, and thread apply
   go through the delivery-owned fresh verifier immediately before mutation;
+  copied directory files use the same delivery owner with per-file preimages and
+  complete content artifacts, while direct directory execution records observed
+  effects without pretending they await application;
   (the retired `orchestrate-apply` path is gone — delegation sub-runs carry
   no apply tool, so the parent integrates their results through the ordinary
   apply path, CONCEPT-CHANGE(INV-113));
@@ -690,7 +711,9 @@ invariant or operator decision before proceeding.
   manual apply, race winner, thread delivery, or convergence result — it is
   re-verified by the delivery owner in a fresh
   envelope (`git apply` to a clean base + configured deterministic gates
-  there) immediately before the target preimage check; the result is recorded
+  there) immediately before the target preimage check; a copied directory result
+  instead verifies its manifest, full content hashes, and reproduction on the
+  retained selected baseline through that same verifier owner. The result is recorded
   in the decision/receipt, and a missing, stale, or failed verifier
   infrastructure error blocks fail-closed exactly like a proven failure.
   A patch that cannot survive a clean base does not touch the live tree.

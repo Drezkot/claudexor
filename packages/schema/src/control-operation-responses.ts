@@ -8,6 +8,7 @@ import {
 } from "./control.js";
 import { Id } from "./primitives.js";
 import { DeliveryReceipt } from "./delivery.js";
+import { RunExecution } from "./control-run-execution.js";
 
 export const ControlRunStartResponse = z
   .union([ControlRunStartInfo, ControlQueuedRunInfo])
@@ -120,6 +121,13 @@ export const ControlThreadTurnRequest = ControlRunStartRequest.omit({
   planRef: true,
 })
   .extend({
+    execution: RunExecution.pick({ workspaceKind: true, scopePaths: true, isolation: true })
+      .partial()
+      .strict()
+      .optional()
+      .describe(
+        "Directory geometry for this turn; project identity and execution root remain thread-owned.",
+      ),
     /** Source plan whose open questions this follow-up answers. The thread
      * route validates ownership/current-head/duplicate submission. */
     answersPlanRunId: Id.optional().describe(

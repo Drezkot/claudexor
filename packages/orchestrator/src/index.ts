@@ -13,3 +13,4 @@ export {
 export { selectFromAccountPool } from "./account-pool.js";
 export { resolveAccountForRun } from "./account-resolution.js";
 export { differentialSubjectVerdict } from "./credential-differential.js";
+export { liveUnusableFor, profileQuotaBlock } from "./credential-cooldown.js";

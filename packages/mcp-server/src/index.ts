@@ -1,3 +1,4 @@
+import { runExecutionSchema } from "./run-execution-schema.js";
 import { isAbsolute } from "node:path";
 import agentCapabilityCatalogSchemaRaw from "@claudexor/schema/generated/AgentCapabilityCatalog.schema.json" with { type: "json" };
 import accountsQuerySchemaRaw from "@claudexor/schema/generated/ControlCredentialProfilesQueryResponse.schema.json" with { type: "json" };
@@ -27,7 +28,7 @@ import { journalRecoveryTools } from "./recovery-tools.js";
 import { formatRunResult, structuredRunResult } from "./run-result-format.js";
 import { assertNoPluginArtifactSkew } from "./plugin-skew.js";
 import { accountsTool } from "./accounts-tool.js";
-import { reviewerPanelEntrySchema } from "./reviewer-panel-schema.js";
+import { reviewerPanelEntrySchema, processingPreferenceSchema } from "./reviewer-panel-schema.js";
 // Inline generated refs once at load; the SDK requires self-contained schemas.
 function inlineJsonSchemaRefs(schema: Record<string, unknown>): Record<string, unknown> {
   const resolvePointer = (pointer: string): unknown => {
@@ -184,10 +185,7 @@ export function buildMcpServer(opts: {
   return server;
 }
 
-/**
- * Serve Claudexor over stdio. The SDK entry owns the era decision per
- * connection; the factory registers the same tools for every era.
- */
+/** Serve the same tools over stdio; the SDK selects the connection's protocol era. */
 export function serveClaudexorMcp(opts: McpServerOptions): { close(): Promise<void> } {
   assertNoPluginArtifactSkew(opts.version);
   const serveOpts: ServeStdioOptions = {
@@ -297,6 +295,7 @@ export function defaultClaudexorTools(runner: RunnerFn): McpTool[] {
         description: "Optional model override for the primary harness.",
       },
       effort: effortJsonSchema("Optional effort override for the primary harness."),
+      processingPreference: processingPreferenceSchema,
       web: {
         type: "string",
         enum: ExternalContextPolicy.options,
@@ -317,6 +316,7 @@ export function defaultClaudexorTools(runner: RunnerFn): McpTool[] {
         type: "string",
         description: "Absolute path of the target project. Defaults to the MCP server cwd.",
       },
+      execution: runExecutionSchema,
       paidBudget: paidBudgetSchema,
       access: {
         type: "string",

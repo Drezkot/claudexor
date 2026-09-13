@@ -282,6 +282,15 @@
               "$ref": "#/definitions/ModelCallRequest/properties/model",
               "description": "User-supplied string that must contain visible content, not just whitespace."
             },
+            "processingPreference": {
+              "type": "string",
+              "enum": [
+                "standard",
+                "fast",
+                "economy"
+              ],
+              "description": "Advisory service preference. Fast or Economy may use ordinary Standard service; fallback never introduces Fast. Omission preserves native defaults. Explicit native serviceTier takes precedence."
+            },
             "parallelToolCalls": {
               "type": "boolean"
             },

@@ -33,8 +33,8 @@ Read these together before changing shared behavior:
 - `packages/harness-*` translate native CLI/API streams into typed events. They
   do not select winners, manage budgets, or decide review policy. Each has a
   `fixtures/` dir backing its conformance parity test.
-- `packages/workspace` owns worktree envelopes, scoped harness homes, diff
-  capture, and cleanup.
+- `packages/workspace` owns Git and directory envelopes, scoped harness homes,
+  byte-faithful diff/file capture, and cleanup.
 - `packages/policy` owns typed risk classification, protected-path rules, and
   the workspace path guard.
 - `packages/context` owns the scope atlas and lazy ContextPack.
@@ -397,6 +397,32 @@ Do not fork contracts in UI code, CLI parsing, adapter output, or docs. Run
 ratchet, so removing or replacing a product surface also removes every stale
 positive promise instead of relying on a one-time documentation cleanup.
 
+## Processing preference
+
+`processingPreference` is an advisory transport option for the selected model,
+independent of routing goal, reasoning effort, context and output policy.
+Standard requests ordinary service. Fast and Economy may fall back to Standard;
+fallback, account rotation and retry must never introduce Fast. Omission keeps
+legacy behavior, while explicit native `serviceTier` on `ModelCallOptions` takes
+precedence and is disclosed. Keep the captured preference and canonical request
+unchanged on exact replay. A confirmed no-generation processing refusal may
+produce a new Standard request and reservation; an unknown outcome may not.
+
+Choosing Fast permits its premium service within existing monetary limits. It
+does not enable paid account settings, change credentials, buy credits, or raise
+limits. An explicit no-paid policy selects ordinary fallback before dispatch.
+Resolve native controls and mode-qualified billing before ranking and reservation;
+carry observed usage through the existing ledger. Authentication proves the
+credential route, not inclusion of premium service. A native list-price amount is
+valuation; unobserved cash or credit consumption stays unknown. Never use a fixed
+price multiplier or infer actual execution from the submitted flag. Preserve
+requested, submitted and observed service separately, including mixed sessions.
+
+Capabilities, exact-account inventories and their observation provenance belong
+to existing adapter/discovery owners. Clients negotiate new account views through
+the operation catalog and preserve strict legacy requests when unsupported.
+Do not add a parallel catalog cache, pricing ledger or preference resolver.
+
 ## Boundaries
 
 - Adapters translate I/O only. They never orchestrate.
@@ -445,7 +471,8 @@ positive promise instead of relying on a one-time documentation cleanup.
   places that pinned runtime beside the daemon and runs its help entrypoint under
   the app's bundled Node with an empty environment. Do not restore runtime `npx`, `@latest`, or a
   package-manager override.
-- Diffs come from git in the target workspace or envelope.
+- Git diffs come from the target workspace or envelope; directory results use
+  complete manifest-bound files through the same workspace owner.
 - Files and typed artifacts are the source of truth; terminal text and UI rows
   are projections.
 - Unknown modes, invalid config, unavailable harnesses, stale reviews, malformed

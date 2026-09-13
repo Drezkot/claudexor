@@ -14,7 +14,7 @@ import {
 } from "@claudexor/schema";
 import { readTextSafe } from "@claudexor/util";
 import type { ArtifactStore } from "@claudexor/artifact-store";
-import type { HarnessAdapter } from "@claudexor/core";
+import type { HarnessAdapter, ProcessingAdmission } from "@claudexor/core";
 import {
   readThreadSummary,
   revParse,
@@ -89,6 +89,12 @@ export interface ContinuitySummaryInputs {
   laneEnv: Record<string, string>;
   envInheritance: "mirror_native" | "clean";
   signal?: AbortSignal;
+  processing?: Pick<
+    import("@claudexor/schema").HarnessRunSpec,
+    "processing_preference" | "processing" | "processing_cost_basis" | "processing_allow_paid"
+  >;
+  processingAdmission?: ProcessingAdmission;
+  physicalDispatchStarted?: () => void;
 }
 
 /**
@@ -121,6 +127,9 @@ export async function resolveContinuitySummary(
       authPreference: inputs.authPreference,
       envInheritance: inputs.envInheritance,
       signal: inputs.signal,
+      processing: inputs.processing,
+      processingAdmission: inputs.processingAdmission,
+      physicalDispatchStarted: inputs.physicalDispatchStarted,
     });
     if (!text) return null;
     writeThreadSummary(projectRoot, threadId, upToTurnId, text);

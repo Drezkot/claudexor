@@ -1,5 +1,15 @@
 # @claudexor/schema
 
+## 3.11.0
+
+### Minor Changes
+
+- Add advisory Standard, Fast and Economy processing with exact native precedence, account-scoped catalogs and honest observed service and cost evidence. Support ordinary folders through direct work or complete selected copies, retained binary file results, conflict-aware application and explicit discard.
+
+### Patch Changes
+
+- @claudexor/util@3.11.0
+
 ## 3.10.5
 
 ### Patch Changes

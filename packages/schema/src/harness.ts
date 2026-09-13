@@ -21,6 +21,12 @@ import {
 import { QuotaConstraint, QuotaSource } from "./quota.js";
 import { RateLimitSignal } from "./rate-limit.js";
 import { EffortHint, ModelEffortCapability } from "./effort.js";
+import {
+  ProcessingCostBasis,
+  ProcessingPreference,
+  ProcessingReceipt,
+  UsageCostBasis,
+} from "./processing.js";
 import { AuthCapabilities } from "./platform-auth.js";
 export * from "./platform-auth.js";
 // Re-exported so sibling contract modules keep one import path for the type.
@@ -70,6 +76,12 @@ export type WebPolicySupport = z.infer<typeof WebPolicySupport>;
  */
 export const HarnessCapabilities = z
   .object({
+    processing_preferences: z
+      .array(ProcessingPreference)
+      .optional()
+      .describe(
+        "Service preferences translated by this adapter; model/account support is separate.",
+      ),
     plan: z.boolean().default(false).describe("The harness can produce plans (plan intent)."),
     implement: z
       .boolean()
@@ -215,9 +227,16 @@ export const HarnessCapabilities = z
       .describe(
         "Vendor CLI version the effort ladders were last verified against; null = never verified / not applicable.",
       ),
+    model_inventory_routes: z
+      .array(z.enum(["local_session", "api_key"]))
+      .min(1)
+      .optional()
+      .describe(
+        "Credential routes supported by the adapter's live models() producer; omitted preserves all-route support. Other routes use manifest known_models, never another account's live inventory.",
+      ),
     /**
      * Known model ids/aliases this harness accepts — the manifest-declared model
-     * truth source used when the adapter has no live `models()` inventory.
+     * truth source when no live `models()` producer applies to the credential route.
      * STRICT: an explicit model outside the active truth source is refused
      * at settings-write, run preflight, and reviewer resolution; a harness with
      * NO truth source (no `models()` and an empty list) refuses every explicit
@@ -360,39 +379,7 @@ export const HarnessCapabilityProfile = z
   );
 export type HarnessCapabilityProfile = z.infer<typeof HarnessCapabilityProfile>;
 
-/**
- * One enumerable model offered by a harness. Deliberately small: only the
- * fields a real enumeration source (an OpenAI-compatible `GET /v1/models`)
- * can honestly populate. `label`/`context_window` are nullable because the
- * raw `{data:[{id}]}` list rarely carries them.
- */
-export const HarnessModel = z
-  .object({
-    id: z.string().describe("Model id as the vendor enumerates it."),
-    label: z
-      .string()
-      .nullable()
-      .default(null)
-      .describe("Human-readable model label; null when the enumeration source has none."),
-    context_window: z
-      .number()
-      .int()
-      .positive()
-      .nullable()
-      .default(null)
-      .describe("Context window in tokens; null when the enumeration source does not report it."),
-    /** Credential routes the model is scoped to per the manifest annotation;
-     * null = unannotated (available on every route). */
-    routes: z
-      .array(z.enum(["local_session", "api_key"]))
-      .nullable()
-      .default(null)
-      .describe("Credential routes the model is scoped to; null = every route."),
-  })
-  .describe(
-    "One enumerable model offered by a harness, limited to fields a real enumeration source can honestly populate.",
-  );
-export type HarnessModel = z.infer<typeof HarnessModel>;
+export { HarnessModel } from "./harness-model.js";
 
 export const HarnessManifest = z
   .object({
@@ -521,6 +508,12 @@ export type ExtraMcpServer = z.infer<typeof ExtraMcpServer>;
 /** Spec passed to a harness adapter's run(). */
 export const HarnessRunSpec = z
   .object({
+    processing_preference: ProcessingPreference.optional(),
+    processing: ProcessingReceipt.optional().describe(
+      "Prepared native service choice for this exact attempt.",
+    ),
+    processing_cost_basis: ProcessingCostBasis.optional(),
+    processing_allow_paid: z.boolean().optional(),
     session_id: Id.describe("Session id this run belongs to."),
     intent: Intent,
     prompt: z.string().describe("Prompt text delivered to the harness."),
@@ -770,6 +763,8 @@ export type InputTokenUsage = z.infer<typeof InputTokenUsage>;
 /** Normalized event emitted by every adapter (the SSOT of adapter output). */
 export const HarnessEvent = z
   .object({
+    processing: ProcessingReceipt.optional(),
+    processing_cost_basis: ProcessingCostBasis.optional(),
     type: z
       .enum([
         "started",
@@ -831,6 +826,7 @@ export const HarnessEvent = z
           .describe("Reported cache token count; relation to input_tokens is harness-specific."),
         input_token_usage: InputTokenUsage.optional(),
         cost_usd: z.number().nonnegative().optional().describe("Cost in USD."),
+        cost_basis: UsageCostBasis.optional(),
         /** True when cost_usd is derived from token pricing (not natively reported). */
         estimated: z
           .boolean()

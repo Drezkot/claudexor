@@ -19,6 +19,7 @@ import { DaemonServer } from "./server.js";
 import { ResourceStore } from "./resource-store.js";
 import { ModelOperations } from "./model-operations.js";
 import { DaemonControlApiServer } from "../../control-api/src/daemon-server.js";
+import { createCodexModelAdapter } from "../../harness-codex/src/model.js";
 
 const cleanup: Array<() => Promise<void>> = [];
 afterEach(async () => {
@@ -131,6 +132,76 @@ async function fixture(
 }
 
 describe("model operations over the existing daemon command substrate", () => {
+  it("retains a confirmed processing refusal as a physically sent response and never starts Standard itself", async () => {
+    const posts = vi.fn();
+    const fetcher = vi.fn<typeof fetch>(async (_url, init) => {
+      if (init?.method === "POST") {
+        posts(JSON.parse(String(init.body)).service_tier);
+        return Response.json(
+          { error: { code: "resource_unavailable", param: "service_tier" } },
+          { status: 429, headers: { "x-request-id": "custody-refusal" } },
+        );
+      }
+      return Response.json({ models: [{ slug: "test-model", service_tiers: [{ id: "flex" }] }] });
+    });
+    const token = `fixture.${Buffer.from(JSON.stringify({ exp: 2100000000 })).toString("base64url")}.signature`;
+    const adapter = createCodexModelAdapter({
+      fetch: fetcher,
+      now: () => 1900000000000,
+      readAuthFile: async () =>
+        JSON.stringify({
+          auth_mode: "chatgpt",
+          tokens: { account_id: "fixture-account", access_token: token },
+        }),
+    });
+    const f = await fixture((input, context) =>
+      adapter.invoke(input, {
+        ...context,
+        profile: {
+          ...context.profile,
+          isolation_locator: join(process.env.CLAUDEXOR_CONFIG_DIR!, "profiles", "fixture"),
+        },
+      }),
+    );
+    const body = request();
+    body.options.processingPreference = "economy";
+    const ref = f.upload(body);
+    const created = await f.operations.create(ref, "processing-refusal");
+    const done = await f.terminal(created.id);
+    expect(done).toMatchObject({
+      state: "failed",
+      dispatch: { state: "response_received", startedAt: expect.any(String) },
+      response: { state: "ready" },
+      problem: {
+        code: "processing_unavailable",
+        context: {
+          generationStarted: false,
+          processingFallback: "standard",
+          processingRefusal: "capacity",
+          httpStatus: 429,
+          vendorCode: "resource_unavailable",
+          requestId: "custody-refusal",
+        },
+      },
+    });
+    const stored = f.operations.readResult(created.id);
+    const reread = f.operations.readResult(created.id);
+    expect(stored.bytes.equals(reread.bytes)).toBe(true);
+    const result = ModelCallResult.parse(JSON.parse(stored.bytes.toString()));
+    expect(result.processing).toMatchObject({
+      requested: "economy",
+      submitted: "economy",
+      submittedNative: "flex",
+      observed: "unknown",
+    });
+    expect(result.cost).toMatchObject({ knowledge: "unknown", cashUsd: null });
+    expect((await f.operations.create(ref, "processing-refusal")).id).toBe(created.id);
+    f.operations.acknowledge(created.id, stored.sha256);
+    expect((await f.operations.create(ref, "processing-refusal")).response.state).toBe(
+      "acknowledged",
+    );
+    expect(posts.mock.calls).toEqual([["flex"]]);
+  });
   it("keeps turn state in result custody across rejoin and ACK, outside public receipts", async () => {
     const nativeContinuation = {
       route,

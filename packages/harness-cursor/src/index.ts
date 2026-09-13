@@ -1,3 +1,9 @@
+import { cursorAccessArgs } from "./profile.js";
+import {
+  cursorProcessingMethods,
+  applyCursorRunProcessing,
+  cursorProcessingParser,
+} from "./processing.js";
 import { createHash } from "node:crypto";
 import type {
   AuthPreference,
@@ -5,14 +11,13 @@ import type {
   HarnessCapabilityProfile,
   HarnessEvent,
   HarnessManifest,
-  HarnessModel,
   HarnessRunSpec,
 } from "@claudexor/schema";
 import {
   HarnessCapabilityProfile as HarnessCapabilityProfileSchema,
   HarnessManifest as HarnessManifestSchema,
 } from "@claudexor/schema";
-import type { DoctorSpec, HarnessAdapter, HarnessModelSpec } from "@claudexor/core";
+import type { DoctorSpec, HarnessAdapter } from "@claudexor/core";
 import {
   abortSignalFromSpec,
   HarnessUnavailableError,
@@ -114,17 +119,6 @@ export const CURSOR_CAPABILITY_PROFILE: HarnessCapabilityProfile =
  * would resolve the HOST Keychain login, which is never read (D-U3). */
 function cursorFileStoreEnv(env?: EnvMap): boolean {
   return env?.["AGENT_CLI_CREDENTIAL_STORE"] === "file";
-}
-
-// Ask + sandbox bound readonly; force approves optional native web unless it is off.
-function accessArgs(spec: HarnessRunSpec): string[] {
-  if (spec.access === "readonly") {
-    const force = spec.external_context_policy === "off" ? [] : ["--force"];
-    return [...force, "--sandbox", "enabled", "--trust"];
-  }
-  if (spec.access === "workspace_write") return ["--force", "--sandbox", "enabled", "--trust"];
-  if (spec.access === "inherit_native") return ["--trust"];
-  return ["--force", "--sandbox", "disabled", "--trust"];
 }
 
 async function detectVersion(abortSignal?: AbortSignal): Promise<string | null> {
@@ -273,6 +267,15 @@ export function createCursorAdapter(deps: Partial<CursorRuntimeDeps> = {}): Harn
   return {
     id: "cursor",
     capabilityProfile: CURSOR_CAPABILITY_PROFILE,
+    ...cursorProcessingMethods((input) =>
+      listCursorModelsFromReadyRoute(
+        runtime,
+        input,
+        ({ cursorApiKey, ...query }) =>
+          resolveCursorAuthRoute(cursorApiKey ? { ...runtime, cursorApiKey } : runtime, query),
+        (key, fresh) => smokeCursorApiKey(runtime, key, fresh),
+      ),
+    ),
 
     async discover(): Promise<HarnessManifest> {
       const version = await runtime.detectVersion();
@@ -295,6 +298,7 @@ export function createCursorAdapter(deps: Partial<CursorRuntimeDeps> = {}): Harn
         adapter_version: CLAUDEXOR_VERSION,
         provider_family: "cursor",
         capabilities: {
+          processing_preferences: ["standard", "fast", "economy"],
           plan: true,
           implement: true,
           create_from_scratch: true,
@@ -349,16 +353,6 @@ export function createCursorAdapter(deps: Partial<CursorRuntimeDeps> = {}): Harn
       return runCursor(spec, runtime);
     },
 
-    async models(spec?: HarnessModelSpec): Promise<HarnessModel[]> {
-      return listCursorModelsFromReadyRoute(
-        runtime,
-        spec,
-        ({ cursorApiKey, ...input }) =>
-          resolveCursorAuthRoute(cursorApiKey ? { ...runtime, cursorApiKey } : runtime, input),
-        (key, fresh) => smokeCursorApiKey(runtime, key, fresh),
-      );
-    },
-
     async probeCredentialProfile(profile, abortSignal) {
       return probeCursorCredentialProfile(profile, runtime, abortSignal);
     },
@@ -373,7 +367,7 @@ async function* runCursor(
   spec: HarnessRunSpec,
   deps: CursorRuntimeDeps,
 ): AsyncIterable<HarnessEvent> {
-  const args = ["-p", "--output-format", "stream-json", ...accessArgs(spec)];
+  const args = ["-p", "--output-format", "stream-json", ...cursorAccessArgs(spec)];
   // Native Plan's createPlan schema cannot carry D-16 WorkReport; native read-only
   // Ask preserves prompt-owned plan intent and the model-authored final report.
   // `readonly` access rides the SAME mode: Ask is the only mechanism this CLI
@@ -384,7 +378,7 @@ async function* runCursor(
   if (spec.intent === "plan" || spec.access === "readonly") args.push("--mode", "ask");
   // W-C4 live deltas (engine-gated; the parser applies the documented taxonomy).
   if (spec.stream_deltas) args.push("--stream-partial-output");
-  if (spec.model_hint) args.push("--model", spec.model_hint);
+
   // Resume the thread's native cursor chat as a follow-up turn.
   if (spec.resume_session_id) args.push("--resume", spec.resume_session_id);
   // Cursor has no native system-prompt flag; layer instructions as a delimited
@@ -445,6 +439,9 @@ async function* runCursor(
     yield { type: "completed", session_id: spec.session_id, ts: nowIso() };
     return;
   }
+  const prepared = await applyCursorRunProcessing(spec, deps.listCursorModels, env);
+  spec = prepared.spec;
+  if (prepared.nativeModel) args.push("--model", prepared.nativeModel);
   // Engine-owned MCP injection (delegation belt): reconcile the lane's
   // mcp.json and approve MCPs headlessly, or refuse loudly (mcp-config.ts).
   const injection = prepareCursorMcpInjection(env, spec.extra_mcp_servers ?? []);
@@ -485,7 +482,7 @@ async function* runCursor(
     env,
     label: "cursor-agent",
     redact: redactSecrets,
-    parseEvent: stampCursorProfileEvents(profile, cursorParser),
+    parseEvent: cursorProcessingParser(stampCursorProfileEvents(profile, cursorParser), spec),
     // The stderr-only vendor-limit fatal carries the same three credential
     // stamps as stream events (mirrors harness-codex): without the route the
     // quota registry would drop the typed limit on the floor.

@@ -1,3 +1,19 @@
+import type { HarnessCapabilities } from "@claudexor/schema";
+import type { HarnessAdapter } from "./adapter.js";
+
+/** A route-scoped producer is queried only for a known supported route.
+ * Undeclared producers retain legacy behavior; failed producers never fall back. */
+export function hasModelInventoryForRoute(
+  adapter: Pick<HarnessAdapter, "models">,
+  declaredRoutes: Readonly<HarnessCapabilities["model_inventory_routes"]>,
+  route: "local_session" | "api_key" | null,
+): adapter is Pick<HarnessAdapter, "models"> & Required<Pick<HarnessAdapter, "models">> {
+  return (
+    typeof adapter.models === "function" &&
+    (declaredRoutes === undefined || (route !== null && declaredRoutes.includes(route)))
+  );
+}
+
 /**
  * Validate a requested/configured model id against a harness's model truth
  * source — the model analog of the effort normalizer (`normalizeEffort`).

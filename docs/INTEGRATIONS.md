@@ -33,6 +33,16 @@ reading alone does not acknowledge custody. See
 for lifecycle, retention, continuation and capacity semantics, and the
 [feature ledger](FEATURES.md) for transport and acceptance limitations.
 
+Processing uses the optional `processingPreference` contract and the
+[single advisory rule](DEVELOPMENT.md#processing-preference). Discover account
+view support from the existing operation catalog before requesting `view=accounts`;
+preserve per-account models, capability evidence and observation provenance.
+Keep legacy request shapes when the parameter is not advertised. The exact wire
+forms and admission distinction live in [ARCHITECTURE](ARCHITECTURE.md#processing-and-account-catalogs).
+A confirmed processing refusal may authorize a separate caller-owned Standard
+request/reservation; it does not erase the first operation's physical dispatch
+or permit retrying an unknown outcome.
+
 ## Embedded Engine Runtime
 
 An embedding host reuses `claudexor-runtime-<version>.tar.gz`, the same closure
@@ -122,8 +132,8 @@ budget, and event streams come from the daemon/control API, not from
 ### Embedder run controls (v2.1)
 
 Headless per-run knobs on the canonical run verbs (all also accepted by
-`POST /v2/runs`; MCP/ACP exposure is deferred per the parity gate's recorded
-exemptions):
+`POST /v2/runs`; protocol exposure follows the shared schemas and the parity
+gate's explicit exemptions):
 
 - Prompt sources: positional text, `-` (stdin), or `--prompt-file <file>` —
   exactly one source.
@@ -140,6 +150,17 @@ exemptions):
   a host-initiated stop (daemon shutdown, MCP host teardown, an integrating
   host whose owning task died) records its real provenance instead of
   coercing to user intent; an absent code keeps the historical coercion.
+- `--processing standard|fast|economy`: advisory service preference, carried as
+  `processingPreference` on Agent requests and as `options.processingPreference`
+  on raw model requests. Structured reviewer entries accept their own optional
+  `processingPreference`; raw `serviceTier` remains the exact native override.
+- `--workspace-kind directory` and repeatable `--scope-path <relative-path>`:
+  `execution.workspaceKind` and `execution.scopePaths` select the copied input
+  footprint or direct capture coverage; `--scope-path .` selects the whole
+  folder. A selected path may be absent initially and created by the run.
+  `--in-place` maps to `execution.isolation: live` for direct work. These fields
+  are also carried by the typed MCP/ACP run controls; legacy omission preserves existing behavior.
+  See [directory execution](ARCHITECTURE.md#directory-execution).
 - `--max-turns <n>`: per-run turn cap; beats per-harness settings, and a lane
   without native support discloses the ignored knob.
 - `--deny-path <glob>` (repeatable): globs no candidate may touch at all;
@@ -252,12 +273,17 @@ count.
 
 `GET /v2/run-applicability` takes an absolute `repoRoot` query and returns the
 live Workspace Git status plus the engine-owned in-place/isolated run-shape
-matrix. Every isolated Ask/Plan/Agent thread needs Git and may initialize a
-non-Git project when explicitly selected; supported in-place non-Git paths stay
-available. Write-mode runs auto-initialize the Git boundary on ordinary
-non-git roots; the user home directory and filesystem roots get a typed
+matrix for Git-backed thread choices. Directory support is advertised separately
+by `workspaceKinds` in the `mutability` section of `AgentCapabilityCatalog`;
+clients must not apply a
+Git-only matrix verdict to explicit directory execution. Git-backed isolated
+threads materialize a worktree on their first
+mutating turn; earlier read-only turns do not initialize a project. Explicit
+directory execution, live or copied, needs no Git and never enters that initializer.
+Git-backed mutating shapes may announce initialization on ordinary non-Git
+roots; the user home directory and filesystem roots get a typed
 refusal (`git_boundary_root_refused`) naming the remediation instead.
-Direct runs use eager Git admission. Thread turns persist first and
+Git-backed direct runs use eager Git admission. Thread turns persist first and
 run the same canonical preflight in the durable job before provider execution,
 so a refusal is inspectable and Exact Retry replays the unchanged request after
 Git is repaired.
@@ -315,9 +341,26 @@ terminal authority for output-ready state and the primary artifact; only older
 receipts without that member use the legacy artifact/failure fallback.
 Web/tool evidence is projected from the engine-owned
 `final/telemetry.yaml`; runs that predate it report `available: false`. Unknown
-quota or spend remains unknown; do not render missing values as `$0`. Large
-artifacts are size-capped (HTTP 413 names the on-disk path) and timelines are
-capped with an explicit truncation marker.
+quota or spend remains unknown; do not render missing values as `$0`. The optional
+`attemptExecution` array exposes compact per-attempt Processing and amount
+evidence through HTTP and MCP run reads; its [field map](ARCHITECTURE.md#8-artifact-layout)
+distinguishes observed components from prospective billing. General previews
+and timelines remain bounded, with explicit truncation or HTTP 413 diagnostics. Files referenced by a
+directory manifest stream complete digest-checked bytes through the existing
+artifact endpoint; preview caps never define a delivery payload.
+
+A `files` WorkProduct points to `final/files/manifest.json` and complete content
+artifacts. Use the same apply/check and apply operations with optional `paths`
+to deliver selected recorded changes. Copy delivery supports `mode: apply`; Git
+commit/branch/PR delivery is not a file-mode operation. Partial delivery records
+applied paths and retains remaining custody. `POST /v2/runs/:id/decision` with
+`{action: "discard"}` (CLI `claudexor decision <run_id> --discard`) returns
+`{accepted: true, status: "discarded", message: ...}` for a pending terminal
+copy and ends its remaining application without deleting results immediately
+or undoing applied files. Direct effects are
+already in place and have no separate apply/full-rollback promise. The source
+root, preimages, verifier and retention boundaries are defined once in
+[ARCHITECTURE](ARCHITECTURE.md#directory-execution).
 
 Terminal state may include diagnostic non-success states such as
 `stuck_no_progress` (the same diff repeated while a required gate still failed).
@@ -635,13 +678,13 @@ files:
   touched), so a project that has only a `CLAUDE.md` and no `AGENTS.md` still
   works on codex. Per codex's own semantics the fallback is consulted ONLY when
   no `AGENTS.md` is present; it is never merged on top of an existing one.
-- For a project that has `AGENTS.md` and no `CLAUDE.md`, a write-mode run creates
+- For a project that has `AGENTS.md` and no `CLAUDE.md`, Git-backed write preparation creates
   a thin `CLAUDE.md` whose entire body is the official Anthropic import
   `@AGENTS.md` plus a Claudexor ownership marker, so Claude Code reads the same
   file. It is written both at the project root (announced via the
   `project.claude_bridge.created` run event; deleting the generated file stops the
   bridging) and inside each isolated envelope worktree a candidate races in —
-  because an envelope only ever contains committed files, so an untracked
+  because a Git envelope materializes committed files, so an untracked
   project-root bridge would not reach a candidate. The envelope copy carries no
   run event and is excluded from the candidate's diff only when Claudexor created
   it for that run and its bytes still exactly match the generated bridge. Any
@@ -924,12 +967,11 @@ Deliberate limits of the external/host surfaces. Each is a designed boundary
 - `plugin uninstall` removes only Claudexor-owned files and config entries;
   now-empty host directories and `.claudexor-backups/` are deliberately left
   behind (Claudexor never deletes directories or backups it does not own).
-- The embedder run-control contract is CLI/HTTP-first (DT2.1-1): per-run
-  knobs added in 2.1 — `--profile`, `--instructions`, `--max-seconds`,
-  `--deny-path`, `--output-schema`, `--max-turns`, thread continuation — are
-  deliberately NOT exposed as MCP/ACP tool arguments yet; every exemption is
-  recorded with its rationale in `scripts/mcp-cli-parity-check.mjs`
-  (CLI_ONLY_EXEMPT), and the parity gate fails on any UNRECORDED divergence.
+- Run-control exposure follows the actual MCP/ACP schemas and the explicit
+  exceptions in `scripts/mcp-cli-parity-check.mjs` (`CLI_ONLY_EXEMPT`), not a
+  blanket claim that every CLI flag is a protocol argument. Processing and
+  directory execution fields use the shared typed run-control contract. The
+  parity gate rejects unrecorded divergence.
 
 ## Environment reference
 
@@ -962,6 +1004,7 @@ subscription sessions are always preferred.
 | `CLAUDEXOR_ROOT_MODE` | plugins / mcp-server | Provenance marker (`explicit`) the installer stamps ALONGSIDE a serialized `CLAUDEXOR_CONFIG_DIR` only for an operator-chosen non-default root; its absence next to a frozen non-default root is treated as legacy skew and refused. Default-root installs serialize neither. Never set by hand. |
 | `CLAUDEXOR_MANAGED` | plugins | Ownership marker the installer writes into generated host MCP configs (never set by hand). |
 | `CLAUDEXOR_DELEGATION_PARENT_RUN_ID` / `CLAUDEXOR_DELEGATION_REPO_ROOT` / `CLAUDEXOR_DELEGATION_DEPTH` / `CLAUDEXOR_DELEGATION_MAX_SUBRUNS` / `CLAUDEXOR_DELEGATION_BUDGET` | mcp-server (delegation belt) | Injected by the daemon into the `agent --delegate` belt process (`claudexor mcp serve-belt`); carry the parent run id, the original normalized user-project root, nesting depth (belt refuses depth>0), the per-parent sub-run cap, and the resolved parent budget used to bind children to one live daemon-owned paid-budget authority. The bound root prevents a child from falling into the parent harness envelope or being redirected by a raw tool argument. These bootstrap values seed a conservative process-local refusal ledger so the belt can fail closed between daemon responses; daemon family accounting remains the authoritative cap, every child reports its own spend, and the parent reports the aggregate. Never set by hand. |
+| `CLAUDEXOR_DELEGATION_PROCESSING_PREFERENCE` / `CLAUDEXOR_DELEGATION_WORKSPACE_KIND` / `CLAUDEXOR_DELEGATION_SCOPE_PATHS` | orchestrator / mcp-server (delegation belt) | Injected captured Processing preference, workspace kind and JSON array of selected relative paths. The belt carries them into child requests with the parent's bound project; omission preserves the legacy request. These are internal transport fields, never user-set overrides. |
 | `CLAUDEXOR_REVIEWER_TIMEOUT_MS` | config | Per-reviewer timeout override for review panels. |
 | `CLAUDEXOR_REVIEW_WAVE_ID` | release review | Operator-generated UUID identifying one release review wave; each operator reviewer artifact's metadata must carry it, and the sealed release attestation refuses mixed or sequential wave artifacts. |
 | `CLAUDEXOR_HARNESS_INACTIVITY_TIMEOUT_MS` | config | Inactivity window before a silent harness stream is failed (not a wall-clock cap). |

@@ -1,4 +1,10 @@
+import {
+  bindProcessingAdmission,
+  updateProcessingStreamHold,
+  ProcessingBudgetAdmissionError,
+} from "./processing-dispatch.js";
 import { join } from "node:path";
+import { processingCostEvidence } from "./processing-routing.js";
 import type { ArtifactStore, RunPaths } from "@claudexor/artifact-store";
 import { attemptCostEvidence, type BudgetLedger } from "@claudexor/budget";
 import {
@@ -102,7 +108,10 @@ export interface PreparedPlannerAttempt {
  * fields; this module owns the planner lease, stream, telemetry, and outcome. */
 export interface PlannerAttemptDeps {
   prepare(args: PlannerAttemptArgs): Promise<PreparedPlannerAttempt>;
-  billingKnowledge(input: RunInput, harnessId: string): "metered" | "unknown";
+  billingKnowledge(
+    input: RunInput,
+    harnessId: string,
+  ): "metered" | "subscription_entitlement" | "unknown";
   inactivityTimeoutMs(repoRoot: string): number;
   quotaEventSink?: (harnessId: string, event: HarnessEvent) => void;
 }
@@ -123,6 +132,7 @@ export async function runPlannerAttempt(
       attemptId,
       args.reservationEstimateUsd,
       deps.billingKnowledge(input, adapter.id),
+      processingCostEvidence(routed.processing, "unknown", [`harness:${adapter.id}`]),
     ),
   });
   if (!lease.granted) {
@@ -205,6 +215,7 @@ export async function runPlannerAttempt(
     answer,
     telemetry,
   } = preparation.value;
+  bindProcessingAdmission(spec, ledger, lease.lease!.lease_id, adapter.id, attemptId);
   const onAbort = () => {
     void adapter.cancel?.(spec.session_id)?.catch(() => {});
   };
@@ -215,6 +226,7 @@ export async function runPlannerAttempt(
   let cost = 0;
   let costEstimated = false;
   let harnessError: string | null = null;
+  let processingDenial: BudgetDenial | null = null;
   const budgetSignalState = { quotaPressureDisclosed: false };
   try {
     log.emit("harness.started", {
@@ -263,6 +275,21 @@ export async function runPlannerAttempt(
             estimated: safeEv.usage.estimated === true,
           });
         }
+        const streamDenial = updateProcessingStreamHold(
+          spec,
+          telemetry.usageCost,
+          ledger,
+          lease.lease!.lease_id,
+          adapter.id,
+          attemptId,
+        );
+        if (streamDenial) {
+          processingDenial = streamDenial;
+          harnessError = streamDenial.reason;
+          plannerAbort.abort();
+          void adapter.cancel?.(spec.session_id)?.catch(() => {});
+          break;
+        }
         answer.observe(safeEv);
         if (safeEv.type === "error")
           harnessError = safeEv.error ? redactSecrets(safeEv.error) : "harness emitted an error";
@@ -270,6 +297,7 @@ export async function runPlannerAttempt(
     }
   } catch (error) {
     harnessError = safeErrorMessage(error);
+    if (error instanceof ProcessingBudgetAdmissionError) processingDenial = error.denial;
   } finally {
     input.signal?.removeEventListener("abort", onAbort);
     settleGrantedAttemptLease({
@@ -337,7 +365,8 @@ export async function runPlannerAttempt(
       reportProblem: planUnwrapped.reportProblem,
       text: hasPlanText ? planText : null,
       telemetry,
-      budgetDenied: false,
+      budgetDenied: processingDenial !== null,
+      ...(processingDenial ? { budgetDenial: processingDenial } : {}),
     };
   }
   const text = planText || "(no output)";

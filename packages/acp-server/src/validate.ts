@@ -34,6 +34,8 @@ export function validateRunControls(params: unknown): RunControlError | null {
     "externalContextPolicy",
     "model",
     "effort",
+    "processingPreference",
+    "execution",
     "n",
     "race",
     "untilClean",

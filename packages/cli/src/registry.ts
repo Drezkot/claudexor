@@ -1,5 +1,12 @@
-import type { AdapterRegistry } from "@claudexor/core";
-import type { ControlHarnessModelsResponse } from "@claudexor/schema";
+import {
+  hasModelInventoryForRoute,
+  type AdapterRegistry,
+  type HarnessAdapter,
+} from "@claudexor/core";
+import {
+  ControlHarnessAccountModelsResponse,
+  type ControlHarnessModelsResponse,
+} from "@claudexor/schema";
 import { HarnessGateway } from "@claudexor/gateway";
 import { createAgyAdapter } from "@claudexor/harness-agy";
 import { createClaudeAdapter } from "@claudexor/harness-claude";
@@ -8,6 +15,11 @@ import { createCursorAdapter } from "@claudexor/harness-cursor";
 import { FAKE_KINDS, createFakeHarness } from "@claudexor/harness-fake";
 import { createOpenCodeAdapter } from "@claudexor/harness-opencode";
 import { createRawApiAdapter } from "@claudexor/harness-raw-api";
+import {
+  catalogProfiles,
+  enumerateAccountCatalogs,
+  type AccountCatalogContext,
+} from "./account-catalog.js";
 
 export interface RegistryOptions {
   /** Register the fake-harness suite (so `--harness fake-*` works). Default true. */
@@ -69,18 +81,28 @@ export async function harnessModels(
   if (!adapter) {
     return { harnessId, models: [], source: "none", verifiedAgainst: null };
   }
-  if (typeof adapter.models === "function") {
+  const manifest = await adapter.discover();
+  if (
+    hasModelInventoryForRoute(adapter, manifest.capabilities.model_inventory_routes, route ?? null)
+  ) {
     // A live enumeration already reflects the credentials it ran under; the
     // route filter applies to manifest annotations only.
-    const models = await adapter.models({ cwd });
+    const models = await adapter.models({
+      cwd,
+      ...(route
+        ? { authPreference: route === "api_key" ? ("api_key" as const) : ("subscription" as const) }
+        : {}),
+    });
     return {
       harnessId,
-      models: models.map((m) => ({ ...m, routes: m.routes ?? null })),
+      models: models.map(({ processing: _processing, ...model }) => ({
+        ...model,
+        routes: model.routes ?? null,
+      })),
       source: "api",
       verifiedAgainst: null,
     };
   }
-  const manifest = await adapter.discover();
   const known = manifest.capabilities.known_models.filter((entry) =>
     // Route filter (one matcher shape with the governance gate): a bare string
     // is every-route; an annotated entry must include the requested route.
@@ -99,4 +121,91 @@ export async function harnessModels(
     source: "manifest",
     verifiedAgainst: manifest.capabilities.known_models_verified_against,
   };
+}
+
+/** Opt-in account inventory. The legacy unscoped CLI/model list above keeps its exact contract. */
+export async function harnessAccountModels(
+  input: AccountCatalogContext & {
+    harnessId: string;
+    cwd: string;
+    credentialProfileId?: string;
+    route?: "local_session" | "api_key";
+    registry?: AdapterRegistry;
+  },
+): Promise<ControlHarnessAccountModelsResponse> {
+  const adapter = (input.registry ?? buildRegistry({ includeFakes: false })).get(input.harnessId);
+  const profiles = catalogProfiles(input, input.harnessId, input.credentialProfileId);
+  // The account view is explicitly route-scoped. Keep the durable account
+  // rows separate, but do not enumerate a credential from the other route.
+  // A conflicting explicit pin is a typed unavailable account rather than a
+  // silent cross-route fallback.
+  const routeProfiles = input.route
+    ? profiles.filter(
+        (profile) =>
+          (profile.credential_kind === "api_key" ? "api_key" : "local_session") === input.route,
+      )
+    : profiles;
+  if (input.route && routeProfiles.length === 0 && input.credentialProfileId) {
+    throw Object.assign(
+      new Error("The pinned catalog account does not support the requested route"),
+      {
+        code: "model_account_unavailable",
+        status: 409,
+        retryable: false,
+      },
+    );
+  }
+  // Discovery is host-level capability data, shared by this request's rows.
+  let manifestPromise: ReturnType<HarnessAdapter["discover"]> | undefined;
+  const accounts = await enumerateAccountCatalogs({
+    context: input,
+    adapter,
+    profiles: routeProfiles,
+    read: async (profile, canReadCatalog) => {
+      if (!adapter) return null;
+      const manifest = await (manifestPromise ??= adapter.discover());
+      const route = profile.credential_kind === "api_key" ? "api_key" : "local_session";
+      if (
+        canReadCatalog &&
+        hasModelInventoryForRoute(adapter, manifest.capabilities.model_inventory_routes, route)
+      ) {
+        const models = await adapter.models({ cwd: input.cwd, credentialProfile: profile });
+        // The legacy array API also returns [] on transport failures; it is
+        // not a receipt proving this account has an empty vendor inventory.
+        if (models.length === 0) return null;
+        return {
+          harnessId: input.harnessId,
+          credentialProfileId: profile.profile_id,
+          models: models.map((model) => ({ ...model, routes: model.routes ?? null })),
+          source: "api" as const,
+          verifiedAgainst: null,
+          // models() may reuse a provider-owned cache and carries no observation receipt.
+          observedAt: null,
+          provenance: "adapter_models",
+        };
+      }
+      const known = manifest.capabilities.known_models.filter(
+        (entry) => typeof entry === "string" || entry.routes.includes(route),
+      );
+      if (known.length === 0) return null;
+      return {
+        harnessId: input.harnessId,
+        credentialProfileId: profile.profile_id,
+        models: known.map((entry) =>
+          typeof entry === "string"
+            ? { id: entry, label: null, context_window: null, routes: null }
+            : { id: entry.id, label: null, context_window: null, routes: entry.routes },
+        ),
+        source: "manifest" as const,
+        verifiedAgainst: manifest.capabilities.known_models_verified_against,
+        observedAt: null,
+        provenance: "manifest",
+      };
+    },
+  });
+  return ControlHarnessAccountModelsResponse.parse({
+    harnessId: input.harnessId,
+    accounts,
+    partial: accounts.some((entry) => entry.catalog === null),
+  });
 }

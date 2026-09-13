@@ -1,13 +1,13 @@
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { HarnessAdapter } from "@claudexor/core";
 import { HarnessUnavailableError } from "@claudexor/core";
 import {
   ConformanceReport,
   HarnessManifest,
-  type CredentialProfile,
+  CredentialProfile,
   type KnownModelEntry,
   type ProviderFamily,
 } from "@claudexor/schema";
@@ -376,5 +376,49 @@ describe("reviewer effort gate", () => {
         [{ harness: "cursor", credentialProfileId: "missing" }],
       ),
     ).rejects.toThrow(/could not be resolved/);
+  });
+});
+
+describe("reviewer inventory route applicability", () => {
+  it("resolves both API-key panels from manifest while a failed native inventory stays unavailable", async () => {
+    const adapter = reviewerAdapter("generic", "openai", ["high"], { knownModels: ["api-model"] });
+    const manifest = await adapter.discover();
+    manifest.capabilities.model_inventory_routes = ["local_session"];
+    adapter.discover = async () => manifest;
+    const models = vi.fn(async () => []);
+    adapter.models = models;
+    const profile = CredentialProfile.parse({
+      profile_id: "api",
+      harness_id: "generic",
+      display_name: "API",
+      credential_kind: "api_key",
+      secret_ref: "openai:api",
+    });
+    const d = { ...deps([adapter]), resolveReviewerProfile: async () => profile };
+    expect(
+      await resolveExplicitReviewerPanel(d, [
+        { harness: "generic", model: "api-model", credentialProfileId: "api" },
+      ]),
+    ).toHaveLength(1);
+    expect(
+      await resolveAutoReviewerPanel(d, { reviewerModels: { openai: "api-model" } }),
+    ).toHaveLength(1);
+    expect(models).not.toHaveBeenCalled();
+    const nativeProfile = CredentialProfile.parse({
+      ...profile,
+      credential_kind: "config_dir_login",
+      secret_ref: null,
+      isolation_locator: "/profiles/native",
+    });
+    const nativeDeps = { ...d, resolveReviewerProfile: async () => nativeProfile };
+    expect(
+      await resolveAutoReviewerPanel(nativeDeps, { reviewerModels: { openai: "api-model" } }),
+    ).toEqual([]);
+    await expect(
+      resolveExplicitReviewerPanel(nativeDeps, [
+        { harness: "generic", model: "api-model", credentialProfileId: "api" },
+      ]),
+    ).rejects.toThrow(/inventory/);
+    expect(models.mock.calls.length).toBeGreaterThan(0);
   });
 });

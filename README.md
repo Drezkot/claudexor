@@ -15,9 +15,9 @@ pay for. It runs Codex CLI, Claude Code, Cursor CLI, OpenCode, Antigravity
 CLI, and raw API
 adapters behind one typed interface: a chat of turns where read-only questions
 resume the vendor's own native session, write turns land as inspectable
-patches, races pit harnesses against each other with cross-family review, and
-every claim — cost, quota, web evidence, auth route — is a typed fact you can
-audit, never a vibe.
+patches or complete file manifests, races pit harnesses against each other with
+cross-family review, and every claim — cost, quota, web evidence, auth route —
+is a typed fact you can audit, never a vibe.
 
 Compared to driving a bare Codex or Claude Code session, Claudexor adds the
 layer the vendors do not ship: best-of-N races with independent reviewers and
@@ -31,7 +31,7 @@ with a vendor usage source (Antigravity, Claude, and Codex); Cursor has none
 yet. Everything runs on your machine, files are the source of truth, and there
 is no telemetry.
 
-Current status: **v3.10.5**. See "Stability at 2.0" below for what is a stable
+Current status: **v3.11.0**. See "Stability at 2.0" below for what is a stable
 contract and what remains experimental; retired verbs and mode ids hard-error
 with the new spelling instead of silently aliasing.
 
@@ -72,7 +72,7 @@ composer](docs/assets/app-agent-run.jpg)
 - [Remote SSH](#remote-ssh)
 - [Quickstart](#quickstart)
 - [Modes](#modes)
-- [Credential Profiles And Quota](#credential-profiles-and-quota)
+- [Accounts And Quota](#accounts-and-quota)
 - [Web, Budgets, And Gates](#web-budgets-and-gates)
 - [Routing, Auth, And Secrets](#routing-auth-and-secrets)
 - [Daemon And Control API](#daemon-and-control-api)
@@ -89,9 +89,10 @@ composer](docs/assets/app-agent-run.jpg)
 
 - Node.js >= 20.19 (the daemon, CLI, and every surface run on Node)
 - pnpm (via corepack: `corepack enable pnpm`)
-- Git for isolated workspaces, candidate envelopes, and delivery. Supported
-  in-place non-Git paths remain available; Doctor reports Git availability, and
-  the app's Workspace Git check explains whether the selected shape is admitted.
+- Git for Git-backed worktrees, candidate envelopes, and source-control delivery.
+  Explicit directory execution supports direct work and selected-input copies
+  without Git; Doctor reports Git availability, and
+  the app's Workspace Git check explains whether a Git-backed shape is admitted.
 - At least one logged-in vendor CLI — `codex`, `claude`, `cursor-agent`,
   `opencode`, or `agy` (Antigravity, for a Gemini subscription) — OR a
   provider API key (adapters accept `OPENAI_API_KEY`,
@@ -255,19 +256,45 @@ claudexor secrets list
 claudexor daemon start
 ```
 
-`apply --dry-run` checks `final/patch.diff` with `git apply --check` and does
-not mutate the repo. Unknown flags and invalid `--access`/`--web`/`--effort`
-values fail loudly with exit code 2 — a typo never silently runs with defaults.
+`apply --dry-run` checks the retained result without mutating the target: Git
+patches use `git apply --check`; directory results verify the manifest, complete
+content and selected target preimages. Unknown flags and invalid
+`--access`/`--web`/`--effort` values fail loudly with exit code 2 — a typo never
+silently runs with defaults.
 When deterministic gates protect existing test/package surfaces and the task is
 explicitly test-authoring work, use `--allow-protected-path <glob[,glob...]>` to
 record typed per-run approval for those protected gate/test path changes. This
 does not bypass built-in critical/security human gates.
 
+### Processing and ordinary folders
+
+`--processing standard|fast|economy` requests service for the selected model; it
+does not change the reasoning effort or routing goal. Native capabilities and
+observed service remain visible, and Fast stays within existing money limits.
+See the [Processing rule](docs/DEVELOPMENT.md#processing-preference).
+
+Inside an ordinary folder, select directory execution explicitly:
+
+```bash
+# Copy the complete selected folder, work there, then inspect/apply the result:
+claudexor agent "Update the report and its figures" --workspace-kind directory --scope-path . --processing economy
+
+# Work directly in the original folder, recording the selected file footprint:
+claudexor agent "Update report.md" --workspace-kind directory --in-place --scope-path report.md
+```
+
+Repeat `--scope-path` for a narrower copied footprint; omission selects no
+existing input files. Directory execution never initializes Git. Copied results
+retain complete file bytes for later application; direct changes are already in
+place and carry no promise of full rollback. Preview limits do not truncate
+delivery files. See [directory execution](docs/ARCHITECTURE.md#directory-execution)
+and the [feature ledger](docs/FEATURES.md) for current acceptance caveats.
+
 ### Reviewers and approvals
 
 Ordinary Agent runs skip internal model review by default, whether the executor
 is pinned or selected automatically. Completed changes remain normally applicable
-and show **Not reviewed**; required checks and patch-integrity checks still apply.
+and show **Not reviewed**; required checks and result-integrity checks still apply.
 Ask and Plan reject these Agent-only controls; Council is Plan's critique path:
 
 - **Review** — `--review` enables automatic panel selection. Best-of and
@@ -621,7 +648,9 @@ reviews/a01.yaml
 arbitration/decision.yaml
 final/run_facts.yaml
 final/telemetry.yaml
-final/patch.diff
+final/patch.diff?
+final/files/manifest.json?
+final/files/content/<digest>?
 final/work_product.yaml
 final/summary.md
 final/failure.yaml?
@@ -644,14 +673,16 @@ of disappearing into logs.
 Standalone Agent runs use isolated envelopes by default, and Best-of candidates
 always use isolated envelopes. They live under the same external project
 namespace at `~/.claudexor/v3/projects/<project-sha256>/workspaces/.../tree`;
-an isolated run's harness `cwd` is that envelope worktree. Chat thread turns
-follow the workspace mode described above: `in_place` uses the live project,
-while `isolated` uses its persistent thread worktree.
+an isolated run's harness `cwd` is its Git worktree or selected-input directory
+copy. Git-backed chat thread turns follow the workspace mode described above:
+`in_place` uses the live project, while `isolated` uses its persistent thread
+worktree.
 
-Proven work product means a git diff in the envelope, a declared run artifact,
-or an explicitly verified host side-effect. Absolute `/tmp/...` writes are host
-side effects and do not count as project success. A project prompt asking for a
-tmp file should resolve to project-local `tmp/...` or a run artifact unless a
+Proven work product means a Git diff, a complete directory file manifest, a
+declared run artifact, or an explicitly verified host side-effect. Absolute
+`/tmp/...` writes are host side effects and do not count as project success.
+A project prompt asking for a tmp file should resolve to project-local `tmp/...`
+or a run artifact unless a
 future verified host-side-effect mode is explicitly selected.
 
 ## Integrations
@@ -766,7 +797,8 @@ Important boundaries:
 
 - `packages/schema` owns contracts and generated JSON Schema.
 - `packages/harness-*` adapters translate native tool I/O into typed events.
-- `packages/workspace` owns worktree envelopes and scoped harness homes.
+- `packages/workspace` owns Git/directory envelopes, complete file capture and
+  scoped harness homes.
 - `packages/orchestrator` owns the canonical mode pipelines (ask, plan, agent)
   and their separate schema-owned strategy controls; the canonical Modes
   section above defines them.

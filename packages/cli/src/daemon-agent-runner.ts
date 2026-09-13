@@ -92,6 +92,7 @@ export function createDaemonAgentRunner(deps: {
       access: p.access,
       accessDefault: runConfig.trust.access_default,
       requestedInPlace: p.execution.isolation === "live",
+      workspaceKind: p.execution.workspaceKind,
       protectedPaths: runConfig.project.constraints.protected_paths,
       threads,
     });
@@ -259,12 +260,15 @@ export function createDaemonAgentRunner(deps: {
         models: p.models,
         effort: p.effort,
         efforts: p.efforts,
+        processingPreference: p.processingPreference,
         tests: Array.isArray(p.tests) ? p.tests : undefined,
         protectedPathApprovals: Array.isArray(p.protectedPathApprovals)
           ? p.protectedPathApprovals
           : undefined,
         inPlace,
         delegated: p.execution.delegated,
+        workspaceKind: p.execution.workspaceKind,
+        scopePaths: p.execution.scopePaths,
         signal: runSignal,
         onRunStart,
       })

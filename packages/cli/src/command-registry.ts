@@ -189,11 +189,12 @@ export const CLI_COMMANDS: readonly CliCommandSpec[] = [
     positionalPatterns: [{ min: 1, max: 1 }],
     usageArgs: "<run_id> <action-flags>",
     summary:
-      'Decide a blocked run: --accept-risk|--override|--revert|--accept-clean-patch [--apply-mode m]|--rerun --feedback "<text>"',
+      'Record a run decision: --accept-risk|--override|--revert|--discard|--accept-clean-patch [--apply-mode m]|--rerun --feedback "<text>"',
     flags: [
       "accept-risk",
       "override",
       "revert",
+      "discard",
       "accept-clean-patch",
       "rerun",
       "apply-mode",
