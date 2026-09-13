@@ -245,8 +245,7 @@ export class SetupJobStore {
     const afterSeq = this.journal.sequenceAfter(afterCursor);
     let previousCursor = afterCursor ?? null;
     const events: ControlSetupJobEvent[] = [];
-    for (const record of this.journal.records<SetupJournalPayload>(afterSeq)) {
-      if (record.type !== "setup.job.saved") continue;
+    for (const record of this.journal.records<SetupJournalPayload>(afterSeq, ["setup.job.saved"])) {
       const parsed = ControlSetupJobSchema.safeParse(record.payload?.job);
       if (!parsed.success || parsed.data.jobId !== jobId) continue;
       const cursor = this.journal.cursorFor(record);

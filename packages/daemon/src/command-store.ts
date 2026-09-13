@@ -22,6 +22,7 @@ import {
 import { fsyncDirectory, hashJson } from "@claudexor/util";
 import { parse as parseYaml, stringify as stringifyYaml } from "yaml";
 import { idempotencyWireProjection } from "./idempotency-wire-projection.js";
+import { durableTerminalRunEvents } from "./run-event-terminal-index.js";
 import { JOB_STATES, type JobRecord } from "./server.js";
 import {
   lstatOrNull,
@@ -266,23 +267,10 @@ export class CommandStore {
     });
   }
 
-  private durableTerminalEvents(): Map<string, RunEvent> {
-    const terminals = new Map<string, RunEvent>();
-    for (const entry of this.journal.records(0, ["run.event"])) {
-      if (entry.type !== "run.event") continue;
-      const event = RunEventSchema.parse(entry.payload);
-      if (
-        event.type === "run.completed" ||
-        event.type === "run.failed" ||
-        event.type === "run.blocked"
-      ) {
-        if (terminals.has(event.run_id)) {
-          throw new Error(`multiple durable terminal events for run ${event.run_id}`);
-        }
-        terminals.set(event.run_id, event);
-      }
-    }
-    return terminals;
+  /** The partition's durable terminals, from the pass shared with the
+   * RunEventStore projection (parsed once per generation, extended on append). */
+  private durableTerminalEvents(): ReadonlyMap<string, RunEvent> {
+    return durableTerminalRunEvents(this.journal);
   }
 
   private recoverTerminalArtifacts(record: JobRecord, terminal: RunEvent): RunFacts {
