@@ -2441,10 +2441,16 @@ export class Orchestrator {
       processingLease.onDenied,
       processingAdmission,
     );
-    spec.extra["routeBillingKnowledge"] = this.routeBillingKnowledge(
-      runInput ?? ({ repoRoot: contract.repo.root } as RunInput),
-      adapter.id,
-    );
+    const billingInput = runInput ?? ({ repoRoot: contract.repo.root } as RunInput);
+    // Keep billing route-bound until admission observes the actual prepared
+    // profile. The resolver is evaluated per physical dispatch; preparedCost
+    // gives an actual profile precedence over this pool fallback.
+    spec.extra["routeBillingKnowledge"] = (actual: HarnessRunSpec) =>
+      actual.credential_profile?.credential_kind === "api_key"
+        ? "metered"
+        : actual.credential_profile
+          ? "subscription_entitlement"
+          : this.routeBillingKnowledge(billingInput, adapter.id);
     if (interaction) spec.extra["interactionChannel"] = interaction;
     const workEnvelope = this.workReportEnvelopeFor(routed, contract, Boolean(interaction));
     const workReportMode: WorkReportEnvelopeMode = this.applyWorkEnvelope(spec, workEnvelope);
