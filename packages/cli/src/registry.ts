@@ -146,11 +146,14 @@ export async function harnessAccountModels(
       )
     : profiles;
   if (input.route && routeProfiles.length === 0 && input.credentialProfileId) {
-    throw Object.assign(new Error("The pinned catalog account does not support the requested route"), {
-      code: "model_account_unavailable",
-      status: 409,
-      retryable: false,
-    });
+    throw Object.assign(
+      new Error("The pinned catalog account does not support the requested route"),
+      {
+        code: "model_account_unavailable",
+        status: 409,
+        retryable: false,
+      },
+    );
   }
   // Discovery is host-level capability data, shared by this request's rows.
   let manifestPromise: ReturnType<HarnessAdapter["discover"]> | undefined;

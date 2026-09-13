@@ -71,7 +71,8 @@ export function bindProcessingAdmission(
   onDenied?: (denial: BudgetDenial) => void,
   admission?: ProcessingAdmission,
 ): ProcessingAdmission {
-  const bound = admission ?? processingAdmissionForLease(ledger, leaseId, harnessId, attemptId, onDenied);
+  const bound =
+    admission ?? processingAdmissionForLease(ledger, leaseId, harnessId, attemptId, onDenied);
   spec.extra["processingAdmission"] = bound;
   return bound;
 }

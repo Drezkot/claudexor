@@ -198,7 +198,12 @@ export function buildFileBackedSynthesisInput(input: {
     label: string;
     attemptId: string;
     diff: string;
-    files?: { manifestPath: string; manifestSha256: string; artifactRoot: string; manifest: unknown };
+    files?: {
+      manifestPath: string;
+      manifestSha256: string;
+      artifactRoot: string;
+      manifest: unknown;
+    };
   }[];
 }): { prompt: string; content: string } {
   const diffs = input.candidates

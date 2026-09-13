@@ -20,7 +20,12 @@ import {
   type CredentialProfile,
   type HarnessEvent as HarnessEventType,
 } from "@claudexor/schema";
-import { AnswerAssembly, admitPreparedProcessing, type HarnessAdapter, type ProcessingAdmission } from "@claudexor/core";
+import {
+  AnswerAssembly,
+  admitPreparedProcessing,
+  type HarnessAdapter,
+  type ProcessingAdmission,
+} from "@claudexor/core";
 import type { ContinuityTurn } from "./continuity.js";
 
 /** Default wall-clock ceiling for one inline summary pass. */
@@ -132,9 +137,7 @@ export async function summarizeThreadPrefix(params: SummaryRunParams): Promise<s
         : {}),
       extra: {
         abortSignal: abort.signal,
-        ...(params.processingAdmission
-          ? { processingAdmission: params.processingAdmission }
-          : {}),
+        ...(params.processingAdmission ? { processingAdmission: params.processingAdmission } : {}),
       },
     });
     await admitPreparedProcessing(spec);
