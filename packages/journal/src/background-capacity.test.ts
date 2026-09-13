@@ -23,17 +23,24 @@ describe("background logical capacity", () => {
       now,
     });
     try {
+      // A seq-preserving snapshot stores `{seq,time,type,payload}` per record.
       const prefixBytes = Buffer.byteLength(
-        JSON.stringify([{ time: now().toISOString(), type: "record", payload: { text: "é" } }]),
+        JSON.stringify([
+          { seq: 1, time: now().toISOString(), type: "record", payload: { text: "é" } },
+        ]),
       );
       journal.append("record", { text: "é" + "x".repeat(bytes - prefixBytes) });
       const before = readFileSync(journal.path);
       const logical = journal.records().map(({ time, type, payload }) => ({ time, type, payload }));
-      expect(Buffer.byteLength(JSON.stringify(logical))).toBe(bytes);
+      const stored = journal
+        .records()
+        .map(({ seq, time, type, payload }) => ({ seq, time, type, payload }));
+      expect(Buffer.byteLength(JSON.stringify(stored))).toBe(bytes);
       const result = await journal.compactInBackground({ stagingDir });
-      if (bytes === 512) expect(result).not.toBeNull();
+      if (bytes === 512) expect(result).toMatchObject({ records: 1, retainedCount: 1 });
       else {
-        expect(result).toBeNull();
+        // A single record that can never decode within the guard is refused typed.
+        expect(result).toEqual({ declined: true, reason: "capacity", cap: 16 * 1024 * 1024 });
         expect(readFileSync(journal.path)).toEqual(before);
       }
       expect(journal.state().status).toBe("ready");

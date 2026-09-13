@@ -16,9 +16,42 @@ import {
 } from "./frame-codec.js";
 import { appendAndSync } from "./journal-files.js";
 
+export interface JournalCompactionReceipt {
+  beforeBytes: number;
+  afterBytes: number;
+  /** Records in the installed file: the retained prefix plus the caught-up tail. */
+  records: number;
+  retainedCount: number;
+  retiredCount: number;
+  /** Serialized logical bytes of the retired records (informational; the daemon
+   * reports it as `journal.records_retired`). */
+  retiredBytes: number;
+}
+
+export type JournalCompactionDeclineReason =
+  "aborted" | "below_threshold" | "empty" | "capacity" | "no_reclaim";
+
+/** A declined maintenance pass leaves the original file untouched. */
+export interface JournalCompactionDeclined {
+  declined: true;
+  reason: JournalCompactionDeclineReason;
+  logicalBytes?: number;
+  compressedBytes?: number;
+  cap?: number;
+}
+
+export type JournalCompactionOutcome = JournalCompactionReceipt | JournalCompactionDeclined;
+
+export function declinedCompaction(
+  reason: JournalCompactionDeclineReason,
+  detail: Omit<JournalCompactionDeclined, "declined" | "reason"> = {},
+): JournalCompactionDeclined {
+  return { declined: true, reason, ...detail };
+}
+
 export interface JournalCompactionResult {
   path: string;
-  receipt: { beforeBytes: number; afterBytes: number; records: number };
+  receipt: JournalCompactionReceipt;
   records: JournalRecord[];
   epoch: string;
   nextSeq: number;
@@ -104,6 +137,9 @@ export function prepareJournalCompaction(input: {
       beforeBytes: input.knownFileBytes,
       afterBytes: frame.length,
       records: logical.length,
+      retainedCount: logical.length,
+      retiredCount: 0,
+      retiredBytes: 0,
     },
     records,
     epoch,
@@ -174,6 +210,12 @@ export function compactedJournalRecord(
     payload,
     byteOffset: 0,
   };
+}
+
+export function capacityError(kind: string): Error {
+  return Object.assign(new Error(`journal compaction exceeds the existing ${kind} cap`), {
+    code: "journal_compaction_capacity",
+  });
 }
 
 export function isCompactionCapacityError(error: unknown): boolean {
