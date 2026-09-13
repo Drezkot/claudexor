@@ -526,8 +526,25 @@ export async function reviewCandidate(input: ReviewCandidateInput): Promise<Revi
         env: reviewerEnv,
       });
       if (input.onBeforeDispatch)
-        spec.extra["processingAdmission"] = (actual: HarnessRunSpec) =>
-          input.onBeforeDispatch!(index, actual);
+        spec.extra["processingAdmission"] = async (actual: HarnessRunSpec) => {
+          // The adapter resolves the concrete profile/route while preparing
+          // this attempt. Keep billing tied to that current SSOT rather than
+          // the reviewer-level preflight (which may be stale after rotation).
+          const profileKind = actual.credential_profile?.credential_kind;
+          const routeBillingKnowledge =
+            profileKind === "api_key"
+              ? "metered"
+              : profileKind
+                ? "subscription_entitlement"
+                : actual.auth_preference === "api_key"
+                  ? "metered"
+                  : actual.auth_preference === "subscription"
+                    ? "subscription_entitlement"
+                    : undefined;
+          if (routeBillingKnowledge)
+            actual.extra["routeBillingKnowledge"] = routeBillingKnowledge;
+          await input.onBeforeDispatch!(index, actual);
+        };
       writeText(artifact.promptPath, spec.prompt);
       updateReviewerMetadata(artifact, {
         session_id: spec.session_id,

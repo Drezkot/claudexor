@@ -103,8 +103,17 @@ export function reviewerProcessingAdmission(
   const costs = reviewers.map((reviewer) =>
     processingCostEvidence(reviewer.processing, "unknown", [`harness:${reviewer.adapter.id}`]),
   );
+  let paidOrUnknownSeen = false;
   return (index, spec) => {
-    costs[index] = preparedCost(spec, reviewers[index]!.adapter.id);
+    const current = preparedCost(spec, reviewers[index]!.adapter.id);
+    if (!current) return;
+    costs[index] = current;
+    const currentPaid =
+      current.billing !== "proven_zero" && current.billing !== "subscription_entitlement";
+    paidOrUnknownSeen ||= currentPaid;
+    // A later included route must not erase the paid/unknown class already
+    // admitted for this panel lease. The marker remains until settle/cancel.
+    if (!currentPaid && paidOrUnknownSeen) return;
     if (!costs.some(Boolean)) return;
     const included = costs.every(
       (cost) => cost?.billing === "subscription_entitlement" || cost?.billing === "proven_zero",
