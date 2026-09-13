@@ -6097,9 +6097,12 @@ export class Orchestrator {
       this.authPreferenceForHarness(input.repoRoot, harnessId, input.authPreference),
     );
     if (mode) return mode === "api_key" ? "metered" : "subscription_entitlement";
-    return loadHarnessMetrics(globalConfigDir())[harnessId]?.last_auth_mode === "api_key"
+    const lastAuth = loadHarnessMetrics(globalConfigDir())[harnessId]?.last_auth_mode;
+    return lastAuth === "api_key"
       ? "metered"
-      : "subscription_entitlement";
+      : lastAuth === "local_session"
+        ? "subscription_entitlement"
+        : "unknown";
   }
 
   /**
