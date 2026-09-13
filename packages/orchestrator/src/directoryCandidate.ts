@@ -208,7 +208,10 @@ export async function publishDirectoryCandidate(input: {
     kind: "files",
     source_task_id: input.taskId,
     producer_attempt_id: input.attemptId,
-    files: { manifest: files.manifestPath },
+    files: {
+      manifest: files.manifestPath,
+      ...(input.delivery ? { delivery_receipt: "final/delivery_receipt.yaml" } : {}),
+    },
     meta: {
       manifest_sha256: files.manifestSha256,
       result_kind: "files",
@@ -219,8 +222,18 @@ export async function publishDirectoryCandidate(input: {
       execution_root: files.manifest.executionRoot,
       no_changes: files.noChanges,
       applied_paths: input.delivery?.appliedPaths ?? (direct ? files.changedPaths : []),
-      adopted: input.delivery?.applied ?? direct,
-      apply_state: input.delivery?.applied ? "applied" : direct ? "applied" : "not_applied",
+      adopted:
+        !files.manifest.entries.some(
+          (entry) => entry.before === "unknown" && entry.after !== null,
+        ) &&
+        (input.delivery?.applied ?? direct),
+      apply_state:
+        !files.manifest.entries.some(
+          (entry) => entry.before === "unknown" && entry.after !== null,
+        ) &&
+        (input.delivery?.applied || direct)
+          ? "applied"
+          : "not_applied",
     },
   });
   store.writeYaml(join(paths.finalDir, "work_product.yaml"), product);

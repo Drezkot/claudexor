@@ -40,7 +40,9 @@ export function processingCostEvidence(
   if (
     !prepared ||
     prepared.receipt.reason === "processing_control_unavailable" ||
-    (prepared.receipt.requested === null && prepared.receipt.submitted !== "fast")
+    (prepared.receipt.requested === null &&
+      prepared.receipt.submitted !== "fast" &&
+      !(prepared.receipt.submitted === null && prepared.receipt.reason === "native_explicit"))
   )
     return undefined;
   const costBasis =

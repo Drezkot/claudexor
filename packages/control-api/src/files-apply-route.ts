@@ -94,7 +94,15 @@ export async function checkFilesResult(
   const refused = ctx.gateError(record, "", root, verify);
   if (refused) return ControlApplyCheckResponse.parse({ ok: false, code: 1, stderr: refused });
   let alreadyApplied = true;
-  for (const entry of deliverableWorkspaceChanges(candidate.manifest, paths)) {
+  const selected = deliverableWorkspaceChanges(candidate.manifest, paths);
+  const unresolvedUnknown = candidate.manifest.entries.some(
+    (entry) =>
+      entry.before === "unknown" &&
+      entry.after !== null &&
+      (paths === undefined ||
+        paths.some((path) => entry.path === path || entry.path.startsWith(path + "/"))),
+  );
+  for (const entry of selected) {
     const actual = await readWorkspaceFile(await workspaceFilePath(root, entry.path, true));
     if (sameWorkspaceFile(entry.after, actual)) continue;
     alreadyApplied = false;
@@ -105,5 +113,10 @@ export async function checkFilesResult(
         stderr: `Target changed: ${entry.path}`,
       });
   }
-  return ControlApplyCheckResponse.parse({ ok: true, code: 0, stderr: "", alreadyApplied });
+  return ControlApplyCheckResponse.parse({
+    ok: true,
+    code: 0,
+    stderr: unresolvedUnknown ? "Unknown preimage retains custody" : "",
+    alreadyApplied: alreadyApplied && !unresolvedUnknown,
+  });
 }
