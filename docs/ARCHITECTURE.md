@@ -226,7 +226,10 @@ at every wire boundary.
   construction still validates by default. Preparation and post-open activation
   retain their content/path identity checks; required replay still performs
   synchronous work proportional to journal history, while automatic compaction
-  runs separately after admission.
+  runs separately after admission. A command's params are immutable after
+  acceptance: only `command.accepted` carries them, every `command.updated`
+  frame omits them, and replay merges the accepted params back (legacy
+  full-record updates replay unchanged).
 - `packages/cli`: thin command surface plus local host-integration lifecycle
   (`claudexor plugin`) for generated Claude Code/Codex/Cursor/OpenCode
   skill/MCP artifacts and command artifacts where hosts support them. Plugin

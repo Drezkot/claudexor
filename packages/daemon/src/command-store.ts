@@ -35,8 +35,12 @@ interface AcceptedCommand {
   requestDigest: string;
 }
 
+/** Params are immutable after acceptance, so a journaled update omits them and
+ * replay merges the accepted params back. Legacy journals carry full records. */
+type JournaledUpdate = Omit<JobRecord, "params"> & { params?: unknown };
+
 interface CommandUpdate {
-  record: JobRecord;
+  record: JournaledUpdate;
 }
 
 const ACCEPTED = "command.accepted";
@@ -119,8 +123,9 @@ export class CommandStore {
   update(id: string, patch: Partial<JobRecord>): JobRecord {
     const current = this.recordsById.get(id);
     if (!current) throw new Error(`no such job: ${id}`);
-    const next = { ...current, ...structuredClone(patch), id: current.id };
-    this.journal.append<CommandUpdate>(UPDATED, { record: persisted(next) });
+    const next = { ...current, ...structuredClone(patch), id: current.id, params: current.params };
+    const { params: _params, ...journaled } = persisted(next);
+    this.journal.append<CommandUpdate>(UPDATED, { record: journaled });
     this.recordsById.set(id, next);
     return next;
   }
@@ -169,9 +174,14 @@ export class CommandStore {
           requestDigest: payload.requestDigest,
         });
       } else if (entry.type === UPDATED) {
-        const record = (entry.payload as CommandUpdate).record;
-        validateRecord(record);
-        if (!this.recordsById.has(record.id)) throw new Error("command update precedes acceptance");
+        const journaled = (entry.payload as CommandUpdate).record;
+        validateRecord(journaled);
+        const current = this.recordsById.get(journaled.id);
+        if (!current) throw new Error("command update precedes acceptance");
+        const record: JobRecord =
+          "params" in journaled
+            ? (journaled as JobRecord)
+            : { ...journaled, params: current.params };
         this.recordsById.set(record.id, structuredClone(record));
       } else if (entry.type === PRUNED) {
         const ids = (entry.payload as { ids?: unknown }).ids;
@@ -533,7 +543,7 @@ function persisted(record: JobRecord): JobRecord {
   return structuredClone(record);
 }
 
-function validateRecord(record: JobRecord): void {
+function validateRecord(record: Omit<JobRecord, "params">): void {
   if (!record || typeof record !== "object" || !record.id || !record.createdAt) {
     throw new Error("invalid command record");
   }
