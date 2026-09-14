@@ -184,7 +184,7 @@ describe("journal maintenance generations", () => {
     const calls = vi
       .spyOn(DurableJournal.prototype, "compactInBackground")
       .mockRejectedValueOnce(new Error("preparation failed"))
-      .mockResolvedValueOnce({ declined: true, reason: "no_reclaim", logicalBytes: 10, cap: 5 })
+      .mockResolvedValueOnce({ declined: true, reason: "no_reclaim", compressedBytes: 10, cap: 5 })
       .mockResolvedValueOnce({ declined: true, reason: "below_threshold" })
       .mockResolvedValue({
         beforeBytes: 100,
@@ -201,7 +201,7 @@ describe("journal maintenance generations", () => {
     await vi.waitFor(() => expect(calls).toHaveBeenCalledTimes(2));
     expect(warn).toHaveBeenCalledWith(expect.stringContaining("preparation failed"));
     expect(note).toHaveBeenCalledWith(
-      "journal.compaction_declined partition=project:second reason=no_reclaim logicalBytes=10 cap=5",
+      "journal.compaction_declined partition=project:second reason=no_reclaim compressedBytes=10 cap=5",
     );
     // A failed or declined generation is not condemned: the threshold hook
     // re-requests it after the next crossing, and the queue runs it again.
@@ -210,11 +210,38 @@ describe("journal maintenance generations", () => {
     await vi.waitFor(() => expect(calls).toHaveBeenCalledTimes(4));
     expect(note).toHaveBeenCalledTimes(2); // below_threshold stays silent
     expect(note).toHaveBeenLastCalledWith(
-      "journal.records_retired partition=project:second retainedCount=3 retiredCount=7 retiredBytes=60 beforeBytes=100 afterBytes=40",
+      "journal.records_retired partition=project:second retainedCount=3 retiredCount=7 retiredBytes=60 retiredAtReplayCount=0 retiredAtReplayBytes=0 beforeBytes=100 afterBytes=40",
     );
     const third = journal("project:new");
     maintenance.request(third);
     await vi.waitFor(() => expect(calls).toHaveBeenCalledTimes(5));
+  });
+
+  it("hears every threshold crossing: a second crossing after an install runs another pass", async () => {
+    const { maintenance, note } = queue();
+    const { value, slot } = manager("global", maintenance.request);
+    value.start(); // recoverAfterStartup requests once: below threshold, silent
+    maintenance.arm();
+    const journal = slot.current();
+    const big = () => ({ text: "x".repeat(9 * 1024 * 1024) });
+    journal.append("history", big()); // crosses: the journal's hook requests a pass
+    await vi.waitFor(
+      () => expect(note).toHaveBeenCalledWith(expect.stringContaining("journal.records_retired")),
+      { timeout: 20_000 },
+    );
+    expect(note).toHaveBeenLastCalledWith(
+      expect.stringMatching(
+        /^journal\.records_retired partition=global retainedCount=\d+ retiredCount=0 retiredBytes=0 retiredAtReplayCount=0 retiredAtReplayBytes=0 beforeBytes=\d+ afterBytes=\d+$/,
+      ),
+    );
+    const compacted = journal.physicalBytes();
+    expect(compacted).toBeLessThan(9 * 1024 * 1024);
+    // The install re-armed the hook: the next crossing is heard through the
+    // in-flight dedupe and runs one more pass, not swallowed.
+    journal.append("history", big());
+    await vi.waitFor(() => expect(note).toHaveBeenCalledTimes(2), { timeout: 20_000 });
+    expect(journal.physicalBytes()).toBeLessThan(compacted + 9 * 1024 * 1024);
+    expect(journal.atCompactionThreshold()).toBe(false);
   });
 
   it("coalesces requests that arrive while the same generation is in flight into one more pass", async () => {

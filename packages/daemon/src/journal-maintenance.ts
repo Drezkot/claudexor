@@ -91,7 +91,11 @@ export class JournalMaintenance {
           stagingDir: this.stagingDir,
           signal: this.controller.signal,
         });
-        const line = describeCompactionOutcome(journal.options.partition, outcome);
+        const line = describeCompactionOutcome(
+          journal.options.partition,
+          outcome,
+          journal.retiredAtReplay(),
+        );
         if (line) this.note(line);
       } catch (error) {
         this.warnFailure(error);
@@ -120,15 +124,18 @@ export class JournalMaintenance {
 }
 
 /** One log line per maintenance outcome: the typed decline with its reason and
- * bounds, or the `journal.records_retired` receipt. The quiet no-ops (below
- * the threshold, an empty journal) produce no line. */
+ * bounds, or the `journal.records_retired` receipt — compaction-time counts
+ * beside what the fold already retired while replaying this generation at
+ * open (`retiredAtReplay`). The quiet no-ops (below the threshold, an empty
+ * journal) produce no line. */
 export function describeCompactionOutcome(
   partition: string,
   outcome: JournalCompactionOutcome,
+  replay: { count: number; bytes: number } = { count: 0, bytes: 0 },
 ): string | null {
   if ("declined" in outcome) {
     if (outcome.reason === "below_threshold" || outcome.reason === "empty") return null;
-    const bounds = (["logicalBytes", "compressedBytes", "cap"] as const)
+    const bounds = (["compressedBytes", "cap"] as const)
       .filter((key) => outcome[key] !== undefined)
       .map((key) => `${key}=${outcome[key]}`);
     return ["journal.compaction_declined", `partition=${partition}`, `reason=${outcome.reason}`]
@@ -141,6 +148,8 @@ export function describeCompactionOutcome(
     `retainedCount=${outcome.retainedCount}`,
     `retiredCount=${outcome.retiredCount}`,
     `retiredBytes=${outcome.retiredBytes}`,
+    `retiredAtReplayCount=${replay.count}`,
+    `retiredAtReplayBytes=${replay.bytes}`,
     `beforeBytes=${outcome.beforeBytes}`,
     `afterBytes=${outcome.afterBytes}`,
   ].join(" ");
