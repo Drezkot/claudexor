@@ -2,9 +2,13 @@ import type { JobRecord } from "./server.js";
 import { isModelOperation } from "@claudexor/schema";
 
 export function productCommandRecords(records: readonly JobRecord[]): JobRecord[] {
-  return records.filter(
-    ({ id, params }) => !id.startsWith("delivery-") && !isModelOperation(params),
-  );
+  return records.filter((record) => !isDeliveryCommand(record) && !isModelOperation(record.params));
+}
+
+/** Delivery commands persist the full run params of the apply they serve;
+ * they keep their existing age/cap retention and are outside the byte budget. */
+function isDeliveryCommand(record: JobRecord): boolean {
+  return record.id.startsWith("delivery-");
 }
 
 /** A terminal run that still needs a human decision: its lifecycle SUCCEEDED
@@ -23,7 +27,9 @@ function isNeedsDecision(record: JobRecord): boolean {
  * commands (journal sprint owner decision D3, release 1). Prompts stay inline
  * in the command journal, so once their sum passes this bound the OLDEST
  * terminal product commands are pruned regardless of age; the 500/30-day rule
- * is unchanged. Model-operation receipts and needs-decision runs are exempt. */
+ * is unchanged. Model-operation receipts and needs-decision runs are exempt;
+ * delivery commands (`delivery-*`, which carry a copy of the applied run's
+ * params) keep their own age/cap policy and neither count nor get pruned here. */
 export const MAX_RETAINED_COMMAND_PARAMS_BYTES = 256 * 1024 * 1024;
 
 /** Select only expired terminal records (D8: job state is the lifecycle;
@@ -57,14 +63,15 @@ export function prunableCommandIds(
       pruned.add(record.id);
     }
   }
-  // Byte budget over what survives the age/cap rule, oldest first. Only the
-  // records the rule can reach are counted: a needs-decision run is exempt
-  // (model receipts never enter `terminal`), so its params must not push every
-  // reachable command out — the budget bounds exactly what it may prune.
+  // Byte budget over the PRODUCT commands that survive the age/cap rule,
+  // oldest first. Only the records the rule can reach are counted: a
+  // needs-decision run is exempt, a delivery command is outside the rule
+  // (model receipts never enter `terminal`), so their params must not push
+  // every reachable command out — the budget bounds exactly what it may prune.
   let bytes = 0;
   const sizes = new Map<string, number>();
   for (const record of terminal) {
-    if (pruned.has(record.id) || isNeedsDecision(record)) continue;
+    if (pruned.has(record.id) || isNeedsDecision(record) || isDeliveryCommand(record)) continue;
     const size = paramsBytes(record);
     sizes.set(record.id, size);
     bytes += size;

@@ -1625,7 +1625,10 @@ Endpoint semantics beyond the inventory:
   product commands are bounded twice — by the age/cap rule (the newest 500 and
   anything younger than 30 days survive) and by a code constant on their
   serialized params (256 MiB, pruned oldest first regardless of age;
-  needs-decision runs and model receipts are exempt) — applied at normal
+  needs-decision runs and model receipts are exempt, and delivery commands —
+  which carry a copy of the applied run's params — keep their own age/cap
+  policy and neither count against nor are pruned by the byte budget) —
+  applied at normal
   admission and after every terminal, so on a heavy install Exact Retry of the
   oldest, largest prompts can end before the 30-day window. `GET
   /v2/runs/:id/run-again` instead returns an editable draft and explicitly

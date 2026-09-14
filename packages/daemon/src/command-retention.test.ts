@@ -170,6 +170,27 @@ describe("prunableCommandIds retained params byte budget (journal sprint D3)", (
     expect(prunableCommandIds(records, 500, 365 * 24 * HOUR, now, 1000)).toEqual(["old"]);
   });
 
+  it("keeps delivery commands outside the budget: never byte-pruned, never counted, product order unchanged", () => {
+    // A delivery command persists the full params of the run it applied.
+    const delivery = sized("delivery-apply", 1, 4000);
+    const products = [sized("old", 2, 60), sized("mid", 3, 60), sized("new", 4, 60)];
+    // Its 4 KB neither counts against the products' budget (all three fit 1000)...
+    expect(prunableCommandIds([delivery, ...products], 500, 365 * 24 * HOUR, now, 1000)).toEqual(
+      [],
+    );
+    // ...nor gets pruned when the products are over budget: same order as without it.
+    expect(prunableCommandIds([delivery, ...products], 500, 365 * 24 * HOUR, now, 160)).toEqual([
+      "old",
+    ]);
+    expect(prunableCommandIds(products, 500, 365 * 24 * HOUR, now, 160)).toEqual(["old"]);
+    // Its own age/cap retention is untouched (cap 1, everything expired).
+    expect(prunableCommandIds([delivery, ...products], 1, 0, now)).toEqual([
+      "delivery-apply",
+      "old",
+      "mid",
+    ]);
+  });
+
   it("combines with the age/cap rule and reports each id once", () => {
     const records = [sized("old", 1, 60), sized("mid", 2, 60), sized("new", 3, 60)];
     expect(prunableCommandIds(records, 1, HOUR, now, 80)).toEqual(["old", "mid"]);
