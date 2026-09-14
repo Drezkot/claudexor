@@ -29,8 +29,7 @@ function view(type: string, payload: unknown, seq = 1): FoldRecord {
   return { seq, type, time: "2026-09-14T00:00:00.000Z", payload, byteLength: 1 };
 }
 
-/** A fresh policy per verdict: every rule except the quota pair memory is per record. */
-const journalFoldVerdict = (record: FoldRecord) => journalFoldPolicy().verdict(record);
+const journalFoldVerdict = (record: FoldRecord) => journalFoldPolicy.verdict(record);
 
 /**
  * Reference implementation of the journal package's `foldStream` semantics
@@ -153,6 +152,8 @@ const NOW = new Date("2026-09-14T00:05:00.000Z");
 const now = () => NOW;
 const T0 = "2026-09-14T00:00:00.000Z";
 
+type Snapshot = ReturnType<typeof snapshot>;
+
 function snapshot(
   harness: string,
   subjectId: string | null,
@@ -182,6 +183,9 @@ function snapshot(
     freshness: "fresh" as const,
   };
 }
+
+const describeSnapshot = (value: Snapshot) =>
+  `${value.subject.harness}/${value.subject.subject_id}@${value.constraints[0]!.used_ratio}`;
 
 function runEvent(
   runId: string,
@@ -338,8 +342,9 @@ function buildFixture() {
   record(runEvent("run-e", "run.created", { mode: "agent", prompt: "prompt e" }, 1));
   record(runEvent("run-e", "run.completed", { lifecycle: "succeeded" }, 2));
 
-  // Quota: changes, scoped pairs, a cursor pair, a removal and a re-add, then a
-  // raw upsert after the last marker (crash before its marker).
+  // Quota: changes, scoped pairs, a cursor pair, a removal and a re-add, a
+  // scoped pair superseded by a plain upsert (leaves one stale prepare), then
+  // a raw upsert after the last marker (crash before its marker).
   quota.upsert(snapshot("claude", "work", 0.4));
   quota.upsert(snapshot("claude", "work", 0.5));
   quota.upsert(snapshot("claude", null, 0.3, { applies: ["fable"] }));
@@ -351,6 +356,8 @@ function buildFixture() {
   quota.upsert(snapshot("codex", "x", 0.2));
   quota.removeSubject("claude", "work");
   quota.upsert(snapshot("claude", "work", 0.7));
+  quota.upsert(snapshot("claude", "work", 0.75, { applies: ["fable"] }));
+  quota.upsert(snapshot("claude", "work", 0.9));
   journal.append("quota.snapshot.upserted", snapshot("codex", "x", 0.3));
 
   headPing.ping({ threadId: thread.id, projectId: null });
@@ -432,6 +439,12 @@ function observe(
 }
 
 describe("journal fold policy verdicts", () => {
+  it("is one frozen, stateless policy: the same record always gets the same verdict", () => {
+    expect(Object.isFrozen(journalFoldPolicy)).toBe(true);
+    const record = view("quota.snapshot.upserted", snapshot("claude", "work", 0.4), 7);
+    expect(journalFoldVerdict(record)).toEqual(journalFoldVerdict({ ...record, seq: 3 }));
+  });
+
   it("keys commands per id and forgets pruned ids as a pair", () => {
     expect(journalFoldVerdict(view("command.accepted", { record: { id: "job-1" } }))).toEqual({
       slot: "c:job-1:a",
@@ -487,52 +500,40 @@ describe("journal fold policy verdicts", () => {
     ).toEqual({ drop: true, retire: ["i:run-1:q-1", "i:run-1:q-2"] });
   });
 
-  it("keys quota units by the legacy snapshot key, keeps a pair whole, retires per subject", () => {
+  it("keys quota by the legacy snapshot key in two slots per subject and retires per subject", () => {
     expect(journalFoldVerdict(view("quota.projection.updated", {}))).toEqual({ slot: "q:marker" });
     const key = `q:${["claude", "vendor_native", "work", "claude_oauth_usage"].join("\0")}`;
-    // A plain upsert is a unit of its own: it retires the previous unit whole.
     expect(
       journalFoldVerdict(view("quota.snapshot.upserted", snapshot("claude", "work", 0.4))),
-    ).toEqual({ retire: [key], group: key });
-    // A scoped pair: the prepare opens the unit, the ADJACENT upsert joins it,
-    // and a later non-adjacent upsert is a new unit again.
-    const policy = journalFoldPolicy();
+    ).toEqual({ slot: `${key}:u` });
+    // A scoped prepare is keyed by the LEGACY base its commit carries on the
+    // wire, so the prepare slot and the upsert slot share one subject key.
     const scoped = snapshot("cursor", "cur", 0.1, { source: "cursor_rate_limit" });
     const legacyKey = `q:${["cursor", "vendor_native", "cur", "claude_api_retry"].join("\0")}`;
-    const legacy = { ...scoped, source: "claude_api_retry" };
     expect(
-      policy.verdict(
-        view("quota.snapshot.scoped_prepared", { version: 1, base_hash: "x", snapshot: scoped }, 7),
+      journalFoldVerdict(
+        view("quota.snapshot.scoped_prepared", { version: 1, base_hash: "x", snapshot: scoped }),
       ),
-    ).toEqual({ retire: [legacyKey], group: legacyKey });
-    expect(policy.verdict(view("quota.snapshot.upserted", legacy, 8))).toEqual({
-      group: legacyKey,
-    });
-    expect(policy.verdict(view("quota.snapshot.upserted", legacy, 9))).toEqual({
-      retire: [legacyKey],
-      group: legacyKey,
-    });
-    // A new pass (sequence does not advance) forgets the pair memory.
+    ).toEqual({ slot: `${legacyKey}:p` });
     expect(
-      policy.verdict(
-        view("quota.snapshot.scoped_prepared", { version: 1, base_hash: "x", snapshot: scoped }, 7),
+      journalFoldVerdict(
+        view("quota.snapshot.upserted", { ...scoped, source: "claude_api_retry" }),
       ),
-    ).toEqual({ retire: [legacyKey], group: legacyKey });
-    expect(policy.verdict(view("quota.snapshot.upserted", legacy, 1))).toEqual({
-      retire: [legacyKey],
-      group: legacyKey,
-    });
+    ).toEqual({ slot: `${legacyKey}:u` });
     const removed = journalFoldVerdict(
       view("quota.subject.removed", { harness: "claude", subject_id: null }),
     );
     expect(removed.slot).toBe("q:claude\0:removed");
     expect(removed.retire).toHaveLength(
-      CredentialRoute.options.length * QuotaSource.options.length,
+      2 * CredentialRoute.options.length * QuotaSource.options.length,
     );
-    expect(removed.retire).toContain(
-      `q:${["claude", "vendor_native", "", "claude_oauth_usage"].join("\0")}`,
-    );
+    const nullKey = `q:${["claude", "vendor_native", "", "claude_oauth_usage"].join("\0")}`;
+    expect(removed.retire).toContain(`${nullKey}:p`);
+    expect(removed.retire).toContain(`${nullKey}:u`);
     expect(journalFoldVerdict(view("quota.snapshot.upserted", { not: "a snapshot" }))).toEqual({});
+    expect(
+      journalFoldVerdict(view("quota.snapshot.scoped_prepared", { version: 1, snapshot: {} })),
+    ).toEqual({});
   });
 
   it("keeps the latest head ping per thread, keeps setup saves and retires terminal logs", () => {
@@ -573,22 +574,19 @@ describe("journal fold policy verdicts", () => {
     );
     expect(journalFoldVerdict(view("command.accepted", hostile))).toEqual({});
     expect(journalFoldVerdict(view("run.event", null))).toEqual({});
-    expect(journalFoldPolicy().verdict(view("command.accepted", { record: { id: "x" } }))).toEqual({
-      slot: "c:x:a",
-    });
   });
 });
 
 describe("journal fold policy replay equivalence", () => {
   it("replays through the real reader with the policy to the same state as the mirror", () => {
     const f = buildFixture();
-    const folded = applyFold(f.full, journalFoldPolicy());
+    const folded = applyFold(f.full, journalFoldPolicy);
     const fullState = replay(new ListJournal("global", f.full, f.nextSeq).asJournal());
     const prepared = DurableJournal.prepare({
       rootDir: join(f.root, "journal"),
       partition: "global",
       now,
-      fold: journalFoldPolicy(),
+      fold: journalFoldPolicy,
     });
     try {
       expect(prepared.retiredAtReplay().count).toBe(f.full.length - folded.length);
@@ -610,7 +608,7 @@ describe("journal fold policy replay equivalence", () => {
 
   it("replays the folded partition to the same validated state as the full history", () => {
     const f = buildFixture();
-    const folded = applyFold(f.full, journalFoldPolicy());
+    const folded = applyFold(f.full, journalFoldPolicy);
     expect(folded.length).toBeLessThan(f.full.length);
     // The fold only removes: every survivor is the exact original frame.
     const bySeq = new Map(f.full.map((record) => [record.seq, record]));
@@ -659,7 +657,7 @@ describe("journal fold policy replay equivalence", () => {
 
   it("never leaves a partial pair, a headless update or two terminals behind", () => {
     const f = buildFixture();
-    const folded = applyFold(f.full, journalFoldPolicy());
+    const folded = applyFold(f.full, journalFoldPolicy);
     const types = (type: string) => folded.filter((record) => record.type === type);
     const accepted = new Set(
       types("command.accepted").map((r) => (r.payload as { record: { id: string } }).record.id),
@@ -693,21 +691,36 @@ describe("journal fold policy replay equivalence", () => {
         (r) => (r.payload as { interactionId: string }).interactionId,
       ),
     ).toEqual(["int-3"]);
-    // Quota pairs survive whole or not at all: a retained prepare has its
-    // commit upsert at the next seq, a retained commit has its prepare before
-    // it, and only the latest unit per subject remains.
+    // Quota: per subject the latest prepare and the latest upsert survive. A
+    // retained upsert whose disk predecessor was a prepare keeps that prepare
+    // (the pair replays adjacent); a prepare whose commit a later plain upsert
+    // superseded is the one stale frame per subject the scheme tolerates.
     const fullBySeq = new Map(f.full.map((record) => [record.seq, record]));
-    const retained = new Map(folded.map((record) => [record.seq, record]));
-    for (const prepare of types("quota.snapshot.scoped_prepared")) {
-      expect(retained.get(prepare.seq + 1)?.type).toBe("quota.snapshot.upserted");
-    }
-    for (const upsert of types("quota.snapshot.upserted")) {
+    const retainedSeqs = new Set(folded.map((record) => record.seq));
+    const prepares = types("quota.snapshot.scoped_prepared");
+    const upserts = types("quota.snapshot.upserted");
+    const preparedSnapshot = (r: JournalRecord) => (r.payload as { snapshot: Snapshot }).snapshot;
+    expect(prepares.map((r) => describeSnapshot(preparedSnapshot(r)))).toEqual([
+      "claude/null@0.8",
+      "cursor/cur@0.2",
+      "claude/work@0.75",
+    ]);
+    expect(upserts.map((r) => describeSnapshot(r.payload as Snapshot))).toEqual([
+      "claude/null@0.8",
+      "cursor/cur@0.2",
+      "claude/work@0.9",
+      "codex/x@0.3",
+    ]);
+    for (const upsert of upserts) {
       if (fullBySeq.get(upsert.seq - 1)?.type === "quota.snapshot.scoped_prepared") {
-        expect(retained.has(upsert.seq - 1)).toBe(true);
+        expect(retainedSeqs.has(upsert.seq - 1)).toBe(true);
       }
     }
-    expect(types("quota.snapshot.scoped_prepared")).toHaveLength(2); // claude/null + cursor
-    expect(types("quota.snapshot.upserted")).toHaveLength(4); // two pairs, claude/work, codex/x
+    const stale = prepares.filter((prepare) => !retainedSeqs.has(prepare.seq + 1));
+    expect(stale.map((r) => describeSnapshot(preparedSnapshot(r)))).toEqual(["claude/work@0.75"]);
+    for (const prepare of stale) {
+      expect(fullBySeq.get(prepare.seq + 1)?.type).toBe("quota.snapshot.upserted");
+    }
     expect(types("quota.subject.removed")).toHaveLength(1);
     expect(types("quota.projection.updated")).toHaveLength(1);
     expect(types("thread.head.updated")).toHaveLength(1);

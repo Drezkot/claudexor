@@ -3,8 +3,8 @@ import { journalFoldPolicy } from "./journal-fold-policy.js";
 
 /**
  * The daemon's journal options for one manager: every partition replays and
- * compacts through the daemon fold policy (one policy object per manager,
- * valid for every pass over its journal), opts into deferred maintenance
+ * compacts through the daemon fold policy (one frozen policy shared by every
+ * manager and every pass), opts into deferred maintenance
  * whenever a maintenance callback exists, and re-requests maintenance for the
  * live generation when an append crosses the compaction threshold — the
  * journal fires that hook once per crossing and re-arms it on install.
@@ -21,7 +21,7 @@ export function daemonJournalOptions(input: {
     partition: input.partition,
     now: input.now,
     deferCompaction: input.requestMaintenance !== undefined,
-    fold: journalFoldPolicy(),
+    fold: journalFoldPolicy,
     onCompactionThreshold: () => {
       const journal = input.current();
       if (journal) input.requestMaintenance?.(journal);

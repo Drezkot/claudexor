@@ -2,17 +2,13 @@
  * The daemon's journal fold policy: which retained records a partition may
  * forget at replay and at compaction (journal sprint owner decision D1). The
  * journal package stays generic — it applies these verdicts in seq order — and
- * this module decides WHAT is dead, per record type, from the payload.
+ * this module decides WHAT is dead, per record type, from the payload alone.
  *
- * Verdicts depend on the record alone, except for one fact the wire cannot
- * express per record: whether a `quota.snapshot.upserted` frame is the commit
- * half of a scoped prepare+upsert pair (it is exactly when the subject's
- * latest prepare sits at the previous sequence). The policy remembers that
- * per pass; a sequence that does not advance marks a new pass (preparation,
- * activation and compaction each start over) and resets it, so one policy
- * object serves every pass of its journal. An unknown or malformed record is
- * always kept — the fold forgets superseded history, never evidence it cannot
- * classify.
+ * Every verdict is a pure function of the record: no state between records,
+ * so the one frozen policy serves every partition and every pass (read-only
+ * preparation, activation, background compaction). An unknown or malformed
+ * record is always kept — the fold forgets superseded history, never evidence
+ * it cannot classify.
  *
  * Invariants the projections replay under (the equivalence test pins them):
  *   - a command keeps its `command.accepted` and its latest `command.updated`;
@@ -25,11 +21,14 @@
  *     through the resolution (a resolution follows its request, so retiring
  *     on the resolution can never leave a partial pair — an `interrupted` or
  *     `run_terminal` resolution lands AFTER the run's terminal event);
- *   - quota keeps the latest projection marker and, per subject key, the
- *     latest UNIT: a scoped prepare+upsert pair (both members, adjacent at
- *     their original seq) or a plain upsert; a newer unit retires the older
- *     one whole, and `quota.subject.removed` retires every unit of that
- *     (harness, subject_id) across routes and sources;
+ *   - quota keeps the latest projection marker and, per subject key, two
+ *     slots: the latest scoped prepare and the latest upsert. Sequence numbers
+ *     are preserved, so the registry's adjacency check (`upsert.seq ===
+ *     prepare.seq + 1`) commits exactly the pairs that were adjacent on disk;
+ *     a prepare left behind by a later plain upsert is non-adjacent and ignored
+ *     on replay like any orphan prepare today (residual: at most one stale
+ *     prepare frame per subject). `quota.subject.removed` retires both slots
+ *     of that (harness, subject_id) across routes and sources;
  *   - `thread.head.updated` keeps the latest revision per thread;
  *   - `setup.job.saved` is kept whole (the setup reducer validates every
  *     state/phase/evidence transition, so intermediate saves are replay
@@ -48,23 +47,12 @@ const KEEP: FoldVerdict = Object.freeze({});
 const TERMINAL_RUN_EVENTS = new Set(["run.completed", "run.failed", "run.blocked"]);
 const TERMINAL_SETUP_STATES = new Set<string>(TERMINAL_CONTROL_SETUP_JOB_STATES);
 
-/** Per-pass memory: the sequence of each subject's latest scoped prepare. */
-type PreparedPairs = Map<string, number>;
+/** The one frozen policy for every partition and every pass. */
+export const journalFoldPolicy: JournalFold = Object.freeze({
+  verdict: journalFoldVerdict,
+});
 
-/** One policy object per journal, valid for every pass over it. */
-export function journalFoldPolicy(): JournalFold {
-  const pairs: PreparedPairs = new Map();
-  let lastSeq = 0;
-  return {
-    verdict(record) {
-      if (record.seq <= lastSeq) pairs.clear();
-      lastSeq = record.seq;
-      return journalFoldVerdict(record, pairs);
-    },
-  };
-}
-
-function journalFoldVerdict(record: FoldRecord, pairs: PreparedPairs): FoldVerdict {
+function journalFoldVerdict(record: FoldRecord): FoldVerdict {
   try {
     switch (record.type) {
       case "command.accepted":
@@ -82,9 +70,9 @@ function journalFoldVerdict(record: FoldRecord, pairs: PreparedPairs): FoldVerdi
       case "quota.projection.updated":
         return { slot: "q:marker" };
       case "quota.snapshot.scoped_prepared":
-        return scopedPreparedVerdict(record, pairs);
+        return slotOrKeep(scopedPreparedKey(record.payload), (key) => `q:${key}:p`);
       case "quota.snapshot.upserted":
-        return upsertedVerdict(record, pairs);
+        return slotOrKeep(upsertedKey(record.payload), (key) => `q:${key}:u`);
       case "quota.subject.removed":
         return removedSubjectVerdict(record.payload);
       case "thread.head.updated":
@@ -155,7 +143,10 @@ function runEventVerdict(payload: unknown): FoldVerdict {
   const type = stringField(payload, "type");
   if (runId === null || type === null) return KEEP;
   if (TERMINAL_RUN_EVENTS.has(type)) {
-    return { slot: `r:${runId}:t`, retire: [`r:${runId}:live`, `r:${runId}:c`] };
+    return {
+      slot: `r:${runId}:t`,
+      retire: [`r:${runId}:live`, `r:${runId}:c`],
+    };
   }
   if (type === "run.created") return { slot: `r:${runId}:c` };
   return { group: `r:${runId}:live` };
@@ -177,31 +168,18 @@ function interactionResolvedVerdict(payload: unknown): FoldVerdict {
   return { drop: true, retire: interactionIds.map((id) => `i:${runId}:${id}`) };
 }
 
-/** Quota units are keyed by the LEGACY base snapshot, which is the key the
- * committing upsert carries on the wire (sources are harness-specific, so the
- * only legacy remap — cursor_rate_limit to claude_api_retry — never collides
- * with a genuine legacy-source snapshot of the same subject). A prepare opens
- * a new unit: it retires the subject's previous unit whole and remembers its
- * own sequence so the adjacent commit upsert joins it instead of retiring it. */
-function scopedPreparedVerdict(record: FoldRecord, pairs: PreparedPairs): FoldVerdict {
-  const snapshot = QuotaSnapshotSchema.safeParse(object(record.payload)?.snapshot);
-  if (!snapshot.success) return KEEP;
-  const key = `q:${snapshotKey(legacyV320Snapshot(snapshot.data))}`;
-  pairs.set(key, record.seq);
-  return { retire: [key], group: key };
+/** Both quota slots are keyed by the LEGACY base snapshot, which is the key
+ * the committing upsert carries on the wire (sources are harness-specific, so
+ * the only legacy remap — cursor_rate_limit to claude_api_retry — never
+ * collides with a genuine legacy-source snapshot of the same subject). */
+function scopedPreparedKey(payload: unknown): string | null {
+  const snapshot = QuotaSnapshotSchema.safeParse(object(payload)?.snapshot);
+  return snapshot.success ? snapshotKey(legacyV320Snapshot(snapshot.data)) : null;
 }
 
-/** The commit half of a pair joins its prepare's unit; a plain upsert is a
- * unit of its own and retires the previous one (pair or plain) whole. */
-function upsertedVerdict(record: FoldRecord, pairs: PreparedPairs): FoldVerdict {
-  const snapshot = QuotaSnapshotSchema.safeParse(record.payload);
-  if (!snapshot.success) return KEEP;
-  const key = `q:${snapshotKey(snapshot.data)}`;
-  if (pairs.get(key) === record.seq - 1) {
-    pairs.delete(key);
-    return { group: key };
-  }
-  return { retire: [key], group: key };
+function upsertedKey(payload: unknown): string | null {
+  const snapshot = QuotaSnapshotSchema.safeParse(payload);
+  return snapshot.success ? snapshotKey(snapshot.data) : null;
 }
 
 /** `quota.subject.removed` names only (harness, subject_id); the registry
@@ -218,7 +196,8 @@ function removedSubjectVerdict(payload: unknown): FoldVerdict {
   const retire: string[] = [];
   for (const route of CredentialRoute.options) {
     for (const source of QuotaSource.options) {
-      retire.push(`q:${[harness, route, subject, source].join("\0")}`);
+      const key = [harness, route, subject, source].join("\0");
+      retire.push(`q:${key}:p`, `q:${key}:u`);
     }
   }
   return { slot: `q:${harness}\0${subject}:removed`, retire };
