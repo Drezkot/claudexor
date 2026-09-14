@@ -2046,7 +2046,8 @@ runs one more pass after it, and a failed or declined pass never condemns the
 generation; new partitions use the same callback. Maintenance is edge-triggered
 on GROWTH: a crossing is a threshold of bytes appended since the last completed
 pass over the data — an install moves that baseline to the installed size, a
-capacity or no-reclaim decline to the size it declined at, and an immediate
+capacity or no-reclaim decline and a FAILED pass (an unwritable staging
+directory, an ENOSPC window) to the size they settled at, and an immediate
 below-threshold, empty or aborted decline moves nothing — so a partition whose
 retained set alone exceeds the threshold (model receipts kept forever, retained
 params up to the byte cap) is compacted once per threshold of new bytes, never

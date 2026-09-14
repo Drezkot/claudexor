@@ -297,23 +297,18 @@ export class DurableJournal extends JournalCore {
         this.installCompaction(candidate);
         return true;
       },
-    })
-      .then((outcome) => {
-        // A real pass over the data that could not shrink the file still moves
-        // the growth baseline: the next attempt waits for a threshold of NEW
-        // bytes (which may fold) instead of re-running on every append.
-        if (
-          "declined" in outcome &&
-          (outcome.reason === "capacity" || outcome.reason === "no_reclaim")
-        )
-          this.compactionBaselineBytes = this.knownFileBytes;
-        return outcome;
-      })
-      .finally(() => {
-        options.signal?.removeEventListener("abort", abort);
-        if (this.background?.promise === promise) this.background = null;
-        this.thresholdNotified = false;
-      });
+    }).finally(() => {
+      // Every pass that reached the data settles the growth baseline —
+      // install, real decline or failure alike (an install already set it to
+      // the installed size): the next attempt waits for a threshold of NEW
+      // bytes instead of re-folding the whole retained prefix, and failing
+      // again, on every following append (an unwritable staging directory,
+      // an ENOSPC window).
+      this.compactionBaselineBytes = this.knownFileBytes;
+      options.signal?.removeEventListener("abort", abort);
+      if (this.background?.promise === promise) this.background = null;
+      this.thresholdNotified = false;
+    });
     this.background = { controller, promise };
     return promise;
   }

@@ -1,5 +1,6 @@
 import { randomBytes } from "node:crypto";
 import {
+  chmodSync,
   closeSync,
   mkdirSync,
   mkdtempSync,
@@ -372,6 +373,48 @@ describe("fold at replay", () => {
     // trigger of the standalone inline path is unchanged.
     seed(48);
     expect(open({ compactionThresholdBytes: 4096 }).atCompactionThreshold()).toBe(true);
+  });
+
+  it("settles the growth baseline on a failed pass: one failure per crossing, then quiet", async () => {
+    const crossings: number[] = [];
+    const journal = open({
+      compactionThresholdBytes: 4096,
+      onCompactionThreshold: () => crossings.push(journal.physicalBytes()),
+    });
+    const payload = { text: "x".repeat(1500) };
+    for (const type of ["one", "two", "three", "four"]) journal.append(type, payload);
+    await Promise.resolve();
+    expect(crossings).toHaveLength(1);
+    // An unwritable staging directory (the ENOSPC shape): the pass folds the
+    // prefix, fails to create its candidate, and rejects.
+    chmodSync(stagingDir, 0o500);
+    try {
+      await expect(journal.compactInBackground({ stagingDir })).rejects.toThrow(/EACCES/);
+      const failedAt = journal.physicalBytes();
+      expect(journal.atCompactionThreshold()).toBe(false);
+      // The failure settled the baseline: appends worth less than a threshold
+      // stay quiet instead of re-folding and failing on every one of them...
+      journal.append("five", payload);
+      journal.append("six", payload);
+      await Promise.resolve();
+      expect(journal.physicalBytes() - failedAt).toBeLessThan(4096);
+      expect(crossings).toHaveLength(1);
+      // ...and a threshold of NEW bytes costs exactly one more failure.
+      journal.append("seven", payload);
+      await Promise.resolve();
+      expect(journal.physicalBytes() - failedAt).toBeGreaterThanOrEqual(4096);
+      expect(crossings).toHaveLength(2);
+      await expect(journal.compactInBackground({ stagingDir })).rejects.toThrow(/EACCES/);
+      expect(journal.atCompactionThreshold()).toBe(false);
+    } finally {
+      chmodSync(stagingDir, 0o700);
+    }
+    // Writable again: the next crossing installs and resets the edge.
+    for (const type of ["eight", "nine", "ten"]) journal.append(type, payload);
+    await Promise.resolve();
+    expect(crossings).toHaveLength(3);
+    expect(await journal.compactInBackground({ stagingDir })).toMatchObject({ records: 10 });
+    expect(journal.atCompactionThreshold()).toBe(false);
   });
 
   it("never fires the threshold hook after a synchronous close", async () => {

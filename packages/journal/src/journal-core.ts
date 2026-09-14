@@ -21,8 +21,9 @@ export interface DurableJournalOptions {
   epochFactory?: () => string;
   appendAndSync?: (fd: number, bytes: Buffer) => void;
   /** Growth since the last completed maintenance pass that arms a crossing:
-   * the file bytes appended after the last install (or after a real
-   * capacity/no-reclaim decline), never the absolute file size, so a partition
+   * the file bytes appended after the last background pass that reached the
+   * data (an install, a real decline or a failed pass), never the absolute
+   * file size, so a partition
    * whose retained set alone exceeds the threshold is compacted once per
    * threshold of new bytes rather than on every append. Under a fold the
    * replay at open is the first completed pass: the baseline starts at the
@@ -73,8 +74,9 @@ export abstract class JournalCore {
   protected thresholdNotified = false;
   /** File size at the last completed pass over the data: a folded replay
    * sets it to the size minus what it retired (0 without a fold), an install
-   * to the installed size, a capacity/no-reclaim decline to the size it
-   * declined at. `atCompactionThreshold` measures growth from it. */
+   * to the installed size, and any other settled background pass — a real
+   * decline or a failure — to the size it settled at. `atCompactionThreshold`
+   * measures growth from it. */
   protected compactionBaselineBytes = 0;
   protected replayRetired = { count: 0, bytes: 0 };
 
