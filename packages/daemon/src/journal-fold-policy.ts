@@ -16,12 +16,16 @@
  *     and survives itself as the latest tombstone per root set so crash-GC keeps
  *     the pruned commands' project roots (model-operation receipts are never
  *     pruned by retention — INV-064);
- *   - a terminal run keeps exactly its terminal `run.event`; a live run keeps
- *     `run.created` plus its journaled progress events;
+ *   - a terminal run keeps its terminal `run.event` (exactly one in a
+ *     well-formed journal; duplicate terminals all survive, so replay
+ *     validation fails on them as loudly as on an unfolded journal); a live
+ *     run keeps `run.created` plus its journaled progress events;
  *   - a resolved interaction forgets its request AND its resolution as a pair
  *     through the resolution (a resolution follows its request, so retiring
  *     on the resolution can never leave a partial pair — an `interrupted` or
- *     `run_terminal` resolution lands AFTER the run's terminal event);
+ *     `run_terminal` resolution lands AFTER the run's terminal event); a
+ *     pending request is kept per id as a group, so a duplicate request frame
+ *     survives for the InteractionStore's own duplicate check;
  *   - quota keeps the latest projection marker and, per subject key, two
  *     slots: the latest scoped prepare and the latest upsert. Sequence numbers
  *     are preserved, so the registry's adjacency check (`upsert.seq ===
@@ -145,23 +149,27 @@ function prunedVerdict(payload: unknown): FoldVerdict {
 /** A terminal run keeps only its terminal: `run.created` and the journaled
  * progress events are forgotten with it (the macOS app auto-attaches on
  * `run.created` only for live runs; durable terminal recovery reads terminals
- * only; the per-run stream replays `events.jsonl`). */
+ * only; the per-run stream replays `events.jsonl`). Terminals are a GROUP per
+ * run, never a slot: a second terminal for the same run is corruption the
+ * terminal index must still see and refuse, exactly as on an unfolded journal. */
 function runEventVerdict(payload: unknown): FoldVerdict {
   const runId = stringField(payload, "run_id");
   const type = stringField(payload, "type");
   if (runId === null || type === null) return KEEP;
   if (TERMINAL_RUN_EVENTS.has(type)) {
-    return { slot: `r:${runId}:t`, retire: [`r:${runId}:live`, `r:${runId}:c`] };
+    return { group: `r:${runId}:t`, retire: [`r:${runId}:live`, `r:${runId}:c`] };
   }
   if (type === "run.created") return { slot: `r:${runId}:c` };
   return { group: `r:${runId}:live` };
 }
 
+/** A group per id, never a slot: a duplicate request frame must survive for
+ * the InteractionStore's own duplicate check, as on an unfolded journal. */
 function interactionRequestedVerdict(payload: unknown): FoldVerdict {
   const runId = stringField(payload, "runId");
   const interactionId = stringField(payload, "interactionId");
   if (runId === null || interactionId === null) return KEEP;
-  return { slot: `i:${runId}:${interactionId}` };
+  return { group: `i:${runId}:${interactionId}` };
 }
 
 /** The resolution retires exactly the requests it settles and is itself

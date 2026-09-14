@@ -266,9 +266,9 @@ function buildFixture() {
  * the daemon fold, and a byte-identical copy without one — so the journal
  * engine itself, not a mirror of it, is what the proof runs on. `full` and
  * `retained` are the two retained sets as seen at open, before any replay. */
-function openPair(f: ReturnType<typeof buildFixture>, prepare = false) {
-  const source = join(f.root, "journal");
-  const copy = join(f.root, "journal-plain");
+function openPair(root: string, prepare = false) {
+  const source = join(root, "journal");
+  const copy = join(root, "journal-plain");
   cpSync(source, copy, { recursive: true });
   chmodSync(copy, 0o700);
   chmodSync(journalPartitionDirectory(copy, "global"), 0o700);
@@ -284,6 +284,36 @@ function openPair(f: ReturnType<typeof buildFixture>, prepare = false) {
   const plain = new DurableJournal({ ...options, rootDir: copy, fold: undefined });
   journals.push(folded, plain);
   return { folded, plain, full: plain.records(), retained: folded.records() };
+}
+
+/** A partition whose history carries one exact duplicate frame — the
+ * corruption the projections' own integrity checks exist for. */
+function buildDuplicateFixture(kind: "terminal" | "request"): string {
+  const root = realpathSync.native(mkdtempSync(join(tmpdir(), "claudexor-fold-dup-")));
+  roots.push(root);
+  const journal = new DurableJournal({ rootDir: join(root, "journal"), partition: "global", now });
+  const runEvents = new RunEventStore(journal);
+  const interactions = new InteractionStore(journal);
+  runEvents.record(journaledRunEventCopy(runEvent("run-x", "run.created", { mode: "ask" }, 1)));
+  if (kind === "terminal") {
+    const terminal = runEvent("run-x", "run.completed", { lifecycle: "succeeded" }, 2);
+    runEvents.record(terminal);
+    runEvents.record(terminal);
+  } else {
+    interactions.request({
+      runId: "run-x",
+      taskId: "task-run-x",
+      attemptId: "a01",
+      harnessId: "fake",
+      request: { interaction_id: "int-x", source_tool: "AskUserQuestion", questions: [] },
+      requestedAt: T0,
+      timeoutAt: null,
+    });
+    const [requested] = journal.records(0, ["interaction.requested"]);
+    journal.append("interaction.requested", requested!.payload);
+  }
+  journal.close();
+  return root;
 }
 
 function replay(journal: DurableJournal) {
@@ -401,10 +431,10 @@ describe("journal fold policy verdicts", () => {
     expect(journalFoldVerdict(view("command.pruned", { ids: [] }))).toEqual({});
   });
 
-  it("keeps only the terminal of a finished run and groups live progress", () => {
+  it("keeps a run's terminal frames as a group (never a slot) and groups live progress", () => {
     for (const type of ["run.completed", "run.failed", "run.blocked"]) {
       expect(journalFoldVerdict(view("run.event", { run_id: "run-1", type }))).toEqual({
-        slot: "r:run-1:t",
+        group: "r:run-1:t",
         retire: ["r:run-1:live", "r:run-1:c"],
       });
     }
@@ -424,7 +454,7 @@ describe("journal fold policy verdicts", () => {
   it("forgets a resolved interaction pair through its resolution", () => {
     expect(
       journalFoldVerdict(view("interaction.requested", { runId: "run-1", interactionId: "q-1" })),
-    ).toEqual({ slot: "i:run-1:q-1" });
+    ).toEqual({ group: "i:run-1:q-1" });
     expect(
       journalFoldVerdict(
         view("interaction.resolved", {
@@ -516,7 +546,7 @@ describe("journal fold policy verdicts", () => {
 describe("journal fold policy replay equivalence", () => {
   it("replays the folded partition to the same validated state as the full history", () => {
     const f = buildFixture();
-    const { folded, plain, full, retained } = openPair(f);
+    const { folded, plain, full, retained } = openPair(f.root);
     expect(retained.length).toBeLessThan(full.length);
     expect(folded.retiredAtReplay().count).toBe(full.length - retained.length);
     expect(folded.retiredAtReplay().bytes).toBeGreaterThan(0);
@@ -560,7 +590,7 @@ describe("journal fold policy replay equivalence", () => {
 
   it("prepares read-only, then activates, to the same retained set and state", () => {
     const f = buildFixture();
-    const { folded, plain, full, retained } = openPair(f, true);
+    const { folded, plain, full, retained } = openPair(f.root, true);
     const shape = (records: readonly { seq: number; type: string }[]) =>
       records.map((record) => [record.seq, record.type]);
     expect(folded.retiredAtReplay().count).toBe(full.length - retained.length);
@@ -575,9 +605,39 @@ describe("journal fold policy replay equivalence", () => {
     expect(foldedState.commands.prunedScopeRoots()).toEqual([f.projectRoot]);
   });
 
+  it("keeps duplicate terminal and request frames so a folded replay fails as loudly as the plain one", () => {
+    const failure = (open: () => unknown) => {
+      try {
+        open();
+      } catch (error) {
+        return { name: (error as Error).constructor.name, message: (error as Error).message };
+      }
+      throw new Error("expected the projection to refuse the duplicate");
+    };
+    {
+      const { folded, plain, retained } = openPair(buildDuplicateFixture("terminal"));
+      expect(
+        ofType(retained, "run.event").map((r) => (r.payload as { type: string }).type),
+      ).toEqual(["run.completed", "run.completed"]);
+      const expected = failure(() => new RunEventStore(plain));
+      expect(expected).toEqual({
+        name: "Error",
+        message: "multiple durable terminal events for run run-x",
+      });
+      expect(failure(() => new RunEventStore(folded))).toEqual(expected);
+    }
+    {
+      const { folded, plain, retained } = openPair(buildDuplicateFixture("request"));
+      expect(ofType(retained, "interaction.requested")).toHaveLength(2);
+      const expected = failure(() => new InteractionStore(plain));
+      expect(expected).toEqual({ name: "Error", message: "duplicate interaction request history" });
+      expect(failure(() => new InteractionStore(folded))).toEqual(expected);
+    }
+  });
+
   it("never leaves a partial pair, a headless update, two terminals or a pruned run behind", () => {
     const f = buildFixture();
-    const { full, retained } = openPair(f);
+    const { full, retained } = openPair(f.root);
     const types = (type: string) => ofType(retained, type);
     const accepted = new Set(
       types("command.accepted").map((r) => (r.payload as { record: { id: string } }).record.id),
