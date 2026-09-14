@@ -15,7 +15,7 @@ import {
 } from "@claudexor/schema";
 import type { OperationDraft } from "./operation-draft.js";
 import { queryParam } from "./operation-parameters.js";
-import { assertOnlyQueryParams, singleQuery } from "./query.js";
+import { assertOnlyQueryParams, optionalBooleanQuery, singleQuery } from "./query.js";
 import { requiredIdempotencyKey } from "./run-start.js";
 import { routeValue, serviceResponse } from "./route-stages.js";
 import { writeBinaryResponse } from "./binary-response.js";
@@ -30,7 +30,11 @@ export interface ModelRouteServices {
     requestedModel?: string,
   ): Promise<unknown>;
   modelAccountCatalog(source: string, credentialProfileId?: string): Promise<unknown>;
-  createModelOperation(request: ModelPayloadRef, idempotencyKey: string): Promise<unknown>;
+  createModelOperation(
+    request: ModelPayloadRef,
+    idempotencyKey: string,
+    captureFailureEvidence?: boolean,
+  ): Promise<unknown>;
   getModelOperation(id: string): Promise<unknown>;
   readModelResult(id: string): Promise<{ bytes: Buffer; sha256: string }>;
   acknowledgeModelResult(id: string, sha256: string): Promise<unknown>;
@@ -111,10 +115,16 @@ export async function handleModelRoute(
     const input = await routeValue(ctx, res, 400, async () => ({
       key: requiredIdempotencyKey(req),
       body: ControlModelOperationCreateRequest.parse(await ctx.readBody(req)),
+      capture: optionalBooleanQuery(
+        new URL(req.url ?? "/", "http://localhost"),
+        "captureFailureEvidence",
+      ),
     }));
     if (!input.ok) return true;
     const value = await routeValue(ctx, res, 500, () =>
-      services.createModelOperation!(input.value.body.request, input.value.key),
+      input.value.capture === true
+        ? services.createModelOperation!(input.value.body.request, input.value.key, true)
+        : services.createModelOperation!(input.value.body.request, input.value.key),
     );
     if (!value.ok) return true;
     return serviceResponse(ctx, res, "createModelOperation", () =>
@@ -252,6 +262,14 @@ export const MODEL_OPERATION_DRAFTS: OperationDraft[] = [
     responseSchema: "ControlModelOperationDetail",
     responseKind: "json",
     summary: "Accept one idempotent model generation without an agent run.",
+    parameters: [
+      queryParam({
+        name: "captureFailureEvidence",
+        enum: ["true", "false"],
+        description:
+          "Retain exact failed-response bytes and exception details in the private result. Omitted or false preserves the legacy result shape.",
+      }),
+    ],
     idempotency: "key_required",
     completion: "durable_handle",
   },

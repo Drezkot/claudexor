@@ -54,6 +54,12 @@ bytes support result recovery, while compact receipts retain operation identity.
 The calling application remains responsible for conversation history. This narrow
 content boundary does not change the protections on Agent tasks and attachments.
 
+A caller can retain failed-response source evidence in that same private exchange,
+so a lost connection and a local interpretation failure remain reconstructible.
+The evidence describes only bytes actually received. Provider completion and the
+ability to use its message are separate facts: rejecting a message does not erase
+the provider's terminal outcome or reported usage, and it never implies a retry.
+
 ## One Conversation, Many Executors
 
 Continuity is the flagship concept. A Thread is ONE conversation owned by

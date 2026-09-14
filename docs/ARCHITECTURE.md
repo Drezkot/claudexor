@@ -1398,6 +1398,27 @@ death are separate facts. A crash after response bytes are published but before
 the command's terminal journal commit retains an unknown outcome; uncommitted
 bytes cannot certify a completed response and are reclaimed as crash residue.
 
+Callers may request `captureFailureEvidence=true` on the existing model-operation
+POST, discovered through that operation's query descriptor. Omission and false
+retain the legacy command identity and strict result shape; true is bound to the
+same idempotency key and cannot change during a create rejoin. This is transport
+evidence intent, not a provider generation option.
+For failed, incomplete or locally rejected processing, the optional private
+`failureEvidence` in `ModelCallResult` contains every byte returned to the reader,
+encoded reversibly, plus the original exception, causes and aggregate members. SSE, non-success
+inference HTTP bodies and post-dispatch fetch errors share the same capture owner.
+An absent response contributes zero body bytes. `bodyComplete` means observed
+reader EOF, independently of provider terminal framing; an unreceived suffix is
+never claimed captured. Successful completed results carry no duplicate wire.
+The evidence follows the existing result resource, GET, ACK and expiry; only
+compact structural diagnostics enter the problem, journal and status.
+Coherent provider terminal facts precede message conversion: unusable completed
+or incomplete output retains its provider outcome and usage, with null message,
+`response_rejected`, `response_received` dispatch and failed operation lifecycle.
+Provider failures retain their typed problem even when irrelevant output is
+malformed. A caller must distinguish this known rejection from unknown dispatch;
+neither result authorizes an engine retry or a never-sent/free claim.
+
 An opted-in advisory request may return `processing_unavailable` with context
 `generationStarted: false`, `processingFallback: "standard"`, and
 `processingRefusal: "capacity" | "unsupported"`. This is restricted to a

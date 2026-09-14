@@ -289,7 +289,20 @@
       "summary": "Accept one idempotent model generation without an agent run.",
       "auth": "loopback_bearer",
       "request_schema": "ControlModelOperationCreateRequest",
-      "parameters": [],
+      "parameters": [
+        {
+          "name": "captureFailureEvidence",
+          "in": "query",
+          "required": false,
+          "repeatable": false,
+          "enum": [
+            "true",
+            "false"
+          ],
+          "schema_ref": null,
+          "description": "Retain exact failed-response bytes and exception details in the private result. Omitted or false preserves the legacy result shape."
+        }
+      ],
       "response_schema": "ControlModelOperationDetail",
       "error_schema": "ControlProblem"
     },

@@ -117,6 +117,7 @@ async function fixture(
   };
   return {
     root,
+    journal,
     store,
     resources,
     operations,
@@ -132,6 +133,205 @@ async function fixture(
 }
 
 describe("model operations over the existing daemon command substrate", () => {
+  it("binds capture intent while retaining historical false/omitted idempotency", async () => {
+    const captures: Array<boolean | undefined> = [];
+    const f = await fixture(async (_input, context) => {
+      captures.push(context.captureFailureEvidence);
+      await context.onDispatch(route);
+      return result();
+    });
+    const legacy = await f.operations.create(f.upload(), "legacy-capture");
+    await f.terminal(legacy.id);
+    expect(f.store.get(legacy.id)!.params).not.toHaveProperty("captureFailureEvidence");
+    expect((await f.operations.create(f.upload(), "legacy-capture", false)).id).toBe(legacy.id);
+    await expect(f.operations.create(f.upload(), "legacy-capture", true)).rejects.toMatchObject({
+      code: "idempotency_conflict",
+    });
+    const modern = await f.operations.create(f.upload(), "modern-capture", true);
+    await f.terminal(modern.id);
+    expect(f.store.get(modern.id)!.params).toHaveProperty("captureFailureEvidence", true);
+    expect((await f.operations.create(f.upload(), "modern-capture", true)).id).toBe(modern.id);
+    await expect(f.operations.create(f.upload(), "modern-capture")).rejects.toMatchObject({
+      code: "idempotency_conflict",
+    });
+    expect(captures).toEqual([undefined, true]);
+  });
+
+  it("carries a large real adapter failure through HTTP, journal restart, ACK and expiry in one result", async () => {
+    const wire = Buffer.from(
+      `data: {private-wire-marker}\n\n${"received suffix 🦉".repeat(40_000)}`,
+    );
+    expect(wire.length).toBeGreaterThan(256 * 1024);
+    const posts = vi.fn();
+    const adapter = createCodexModelAdapter({
+      readAuthFile: async () =>
+        JSON.stringify({
+          tokens: {
+            access_token: `fixture.${Buffer.from('{"exp":2100000000}').toString("base64url")}.signature`,
+            account_id: "fixture",
+          },
+        }),
+      refresh: async () => {
+        throw new Error("no auth refresh in this fixture");
+      },
+      fetch: async (_url, init) => {
+        if (init?.method === "POST") {
+          posts();
+          return new Response(wire, { headers: { "x-request-id": "retained-failure" } });
+        }
+        return Response.json({ models: [{ slug: "test-model" }] });
+      },
+    });
+    const f = await fixture((input, context) =>
+      adapter.invoke(input, {
+        ...context,
+        profile: {
+          ...context.profile,
+          isolation_locator: join(process.env.CLAUDEXOR_CONFIG_DIR!, "profiles", "fixture"),
+        },
+      }),
+    );
+    const api = new DaemonControlApiServer({
+      token: "fixture-control",
+      daemon: f.client,
+      services: {
+        createModelOperation: f.operations.create.bind(f.operations),
+        getModelOperation: async (id) => f.operations.inspect(id),
+        readModelResult: async (id) => f.operations.readResult(id),
+        acknowledgeModelResult: async (id, digest) => f.operations.acknowledge(id, digest),
+      },
+    });
+    const address = await api.start();
+    cleanup.push(() => api.stop());
+    const endpoint = `http://${address.host}:${address.port}/v2/model-operations`;
+    const headers = {
+      Authorization: "Bearer fixture-control",
+      "X-Claudexor-Protocol-Major": "3",
+      "Content-Type": "application/json",
+      "Idempotency-Key": "large-failure",
+    };
+    const createdResponse = await fetch(`${endpoint}?captureFailureEvidence=true`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ request: f.upload() }),
+    });
+    expect(createdResponse.status).toBe(202);
+    const created = ControlModelOperationDetail.parse(await createdResponse.json());
+    const done = await f.terminal(created.id);
+    expect(done).toMatchObject({
+      state: "interrupted",
+      dispatch: { state: "unknown" },
+      response: { state: "ready" },
+      problem: { context: { stage: "json", receivedBytes: wire.length } },
+    });
+    const response = await fetch(`${endpoint}/${created.id}/result`, { headers });
+    expect(response.status).toBe(200);
+    const bytes = Buffer.from(await response.arrayBuffer());
+    expect(response.headers.get("content-length")).toBe(String(bytes.length));
+    const captured = ModelCallResult.parse(JSON.parse(bytes.toString()));
+    expect(Buffer.from(captured.failureEvidence!.bodyBase64, "base64").equals(wire)).toBe(true);
+    expect(captured.failureEvidence!.errors[0].name).toBe("SyntaxError");
+    expect(JSON.stringify(done)).not.toContain("private-wire-marker");
+    expect(JSON.stringify(f.store.records())).not.toContain(captured.failureEvidence!.bodyBase64);
+    expect(f.resources.listModelResources()).toHaveLength(1);
+    expect((await f.operations.create(f.upload(), "large-failure", true)).id).toBe(created.id);
+    expect(f.operations.readResult(created.id).bytes.equals(bytes)).toBe(true);
+    await api.stop();
+    await f.server.stop();
+    f.operations.close();
+    f.journal.close();
+
+    const journal = new DurableJournal({ rootDir: join(f.root, "journal"), partition: "global" });
+    const store = new CommandStore(journal);
+    const resources = new ResourceStore(join(f.root, "resources"));
+    let now = new Date();
+    const reopened = new ModelOperations({
+      commands: { current: () => store },
+      resources: () => resources,
+      now: () => now,
+      enqueue: async () => {
+        throw new Error("replay cannot enqueue");
+      },
+      cancel: async () => {
+        throw new Error("replay cannot cancel");
+      },
+      resolve: async () => {
+        throw new Error("replay cannot resolve a provider");
+      },
+    });
+    cleanup.push(async () => {
+      reopened.close();
+      journal.close();
+    });
+    expect(reopened.readResult(created.id).bytes.equals(bytes)).toBe(true);
+    expect(reopened.reconcileResources().released).toEqual([]);
+    const ref = ModelOperationParams.parse(store.get(created.id)!.params).request;
+    expect((await reopened.create(ref, "large-failure", true)).id).toBe(created.id);
+    const digest = reopened.readResult(created.id).sha256;
+    expect(reopened.acknowledge(created.id, digest).response.state).toBe("acknowledged");
+    expect(resources.listModelResources()).toEqual([]);
+    expect((await reopened.create(ref, "large-failure", true)).response.state).toBe("acknowledged");
+    expect(posts).toHaveBeenCalledTimes(1);
+
+    // The same evidence-bearing resource follows ordinary unacknowledged expiry.
+    const pendingRef = resources.publishModel(bytes);
+    const pending = structuredClone(store.get(created.id)!);
+    pending.id = "expiry-failure";
+    store.accept({
+      id: pending.id,
+      params: pending.params,
+      idempotencyKey: pending.id,
+      clientId: "fixture",
+    });
+    const expiresAt = new Date(now.getTime() + 1000).toISOString();
+    store.update(pending.id, {
+      state: "interrupted",
+      result: {
+        ...(pending.result as object),
+        response: { state: "ready", ref: pendingRef, readyAt: now.toISOString(), expiresAt },
+      },
+    });
+    expect(reopened.readResult(pending.id).bytes.equals(bytes)).toBe(true);
+    now = new Date(expiresAt);
+    expect(reopened.inspect(pending.id).response.state).toBe("expired");
+    expect(reopened.reconcileResources().errors).toEqual([]);
+    expect(resources.listModelResources()).toEqual([]);
+  });
+
+  it.each(["completed", "incomplete"] as const)(
+    "keeps %s provider finality but fails an unusable message",
+    async (outcome) => {
+      const f = await fixture(async (_input, context) => {
+        await context.onDispatch(route);
+        return {
+          ...result(),
+          outcome,
+          message: null,
+          problem: {
+            code: "response_rejected",
+            message: "Message could not be used",
+            context: { stage: "message" },
+            retryable: false,
+            fieldErrors: {},
+            requiredActions: [],
+            evidenceRefs: [],
+          },
+        };
+      });
+      const created = await f.operations.create(f.upload(), `rejected-${outcome}`);
+      expect(await f.terminal(created.id)).toMatchObject({
+        state: "failed",
+        dispatch: { state: "response_received" },
+        usage: { input_tokens: 3, output_tokens: 2 },
+      });
+      expect(JSON.parse(f.operations.readResult(created.id).bytes.toString())).toMatchObject({
+        outcome,
+        message: null,
+        problem: { code: "response_rejected" },
+      });
+    },
+  );
+
   it("retains a confirmed processing refusal as a physically sent response and never starts Standard itself", async () => {
     const posts = vi.fn();
     const fetcher = vi.fn<typeof fetch>(async (_url, init) => {

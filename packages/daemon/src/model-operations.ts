@@ -101,15 +101,24 @@ export class ModelOperations {
   async create(
     request: ModelPayloadRef,
     idempotencyKey: string,
+    captureFailureEvidence?: boolean,
   ): Promise<ControlModelOperationDetail> {
     if (this.closed) throw operationError("daemon_stopping", "Model operations are stopping", 503);
+    // Omission and false retain the historical command and idempotency bytes.
+    const capture =
+      captureFailureEvidence === true ? { captureFailureEvidence: true as const } : {};
     const envelope = {
-      request: ModelOperationParams.parse({ kind: "model", request }),
+      request: ModelOperationParams.parse({ kind: "model", request, ...capture }),
       operation: MODEL_OPERATION_ID,
       idempotencyKey,
       clientId: "control-api",
       // Uploaded copies of identical bytes are the same idempotent request.
-      idempotencyRequest: { kind: "model", sha256: request.sha256, sizeBytes: request.sizeBytes },
+      idempotencyRequest: {
+        kind: "model",
+        sha256: request.sha256,
+        sizeBytes: request.sizeBytes,
+        ...capture,
+      },
     };
     const replay = findAcceptedCommand(this.deps.commands, envelope);
     let id = replay?.id;
@@ -139,6 +148,7 @@ export class ModelOperations {
         await adapter.invoke(request, {
           profile,
           signal: ctx.signal,
+          ...(params.captureFailureEvidence ? { captureFailureEvidence: true } : {}),
           onDispatch: async (route) => {
             ctx.signal.throwIfAborted();
             if (evidence.dispatch.state !== "not_started") {
@@ -174,11 +184,13 @@ export class ModelOperations {
       // are different facts; a later cancel cannot rewrite a committed receipt.
       const lifecycle = ctx.signal.aborted
         ? "cancelled"
-        : result.outcome === "completed"
-          ? "succeeded"
-          : result.outcome === "unknown" || result.outcome === "incomplete"
-            ? "interrupted"
-            : "failed";
+        : result.problem?.code === "response_rejected" && result.message === null
+          ? "failed"
+          : result.outcome === "completed"
+            ? "succeeded"
+            : result.outcome === "unknown" || result.outcome === "incomplete"
+              ? "interrupted"
+              : "failed";
       const ref = this.deps.resources().publishModel(Buffer.from(JSON.stringify(result), "utf8"));
       const ready = this.now();
       evidence.response = {
