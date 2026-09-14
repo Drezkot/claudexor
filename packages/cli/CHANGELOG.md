@@ -1,5 +1,39 @@
 # @claudexor/cli
 
+## 3.12.0
+
+### Minor Changes
+
+- 217d53f: The daemon stops writing dead history into its journal and forgets it on replay. Per-token harness deltas no longer reach the journal (the per-run event log and the live stream keep them), the journaled `run.created` carries the prompt's digest instead of its text, `command.updated` frames omit the immutable params, quota snapshots are journaled only when their evidence changes and the projection marker carries a digest, and the retained params of terminal commands are capped by a code constant. Every partition replays and compacts through the daemon's fold policy, so startup memory follows the retained state rather than the file (a resolved question and its request are forgotten together, so answering an already-resolved question after a restart reports `not_found` rather than `already_resolved` — both non-delivery statuses; within one process life `already_resolved` is unchanged); crash-GC reads project roots from the already prepared command projection instead of replaying the journal a second time, journaled run events are validated once per generation, and journal maintenance re-requests itself when the file crosses the threshold again while logging typed declines and `journal.records_retired` receipts. An engine from before this change refuses a served root loudly. A restart on an already-compacted partition no longer rewrites it to reclaim nothing, and the daemon reports its own memory (rss, heap, external) on the normal-admission line and on every maintenance receipt. Legacy `command.pruned` tombstones carry no run ids, so terminals of runs pruned before this release stay retained (none on the acceptance root); runs that never received a journaled terminal keep their pre-release progress frames until their command is pruned (then the tombstone's run_ids retire them — bounded by the 500 / 30-day / 256 MiB rule); two such runs hold about 3.1k `harness.event` frames on the acceptance root.
+
+### Patch Changes
+
+- Updated dependencies [217d53f]
+- Updated dependencies [1b1476c]
+  - @claudexor/daemon@3.12.0
+  - @claudexor/schema@3.12.0
+  - @claudexor/journal@3.12.0
+  - @claudexor/acp-server@3.12.0
+  - @claudexor/config@3.12.0
+  - @claudexor/control-api@3.12.0
+  - @claudexor/core@3.12.0
+  - @claudexor/delivery@3.12.0
+  - @claudexor/gateway@3.12.0
+  - @claudexor/harness-agy@3.12.0
+  - @claudexor/harness-claude@3.12.0
+  - @claudexor/harness-codex@3.12.0
+  - @claudexor/harness-cursor@3.12.0
+  - @claudexor/harness-fake@3.12.0
+  - @claudexor/harness-opencode@3.12.0
+  - @claudexor/harness-raw-api@3.12.0
+  - @claudexor/mcp-server@3.12.0
+  - @claudexor/orchestrator@3.12.0
+  - @claudexor/review@3.12.0
+  - @claudexor/workspace@3.12.0
+  - @claudexor/artifact-store@3.12.0
+  - @claudexor/secrets@3.12.0
+  - @claudexor/util@3.12.0
+
 ## 3.11.0
 
 ### Minor Changes
