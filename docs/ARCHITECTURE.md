@@ -236,15 +236,16 @@ at every wire boundary.
   path. The daemon
   opts into deferred maintenance and streams compaction after normal admission;
   see the lifecycle section below. Projection reads select exact record types
-  before payload copying without changing full-history reads, sequence numbers
-  or cursors.
+  before payload copying; every read sees the retained set, and sequence
+  numbers and cursors are the original ones.
 - `packages/daemon`: durable local queue (Unix socket on POSIX, named pipe on win32) and journal projections for commands, projects, and threads.
   Project projections select their own record types; run-event history is validated
   once per projection creation through its descriptor. Direct RunEventStore
   construction still validates by default. Preparation and post-open activation
   retain their content/path identity checks; required replay still performs
-  synchronous work proportional to journal history, while automatic compaction
-  runs separately after admission. A command's params are immutable after
+  synchronous work proportional to the retained record set (the file is read
+  frame by frame, never whole), while automatic compaction runs separately
+  after admission. A command's params are immutable after
   acceptance: only `command.accepted` carries them, every `command.updated`
   frame omits them, and replay merges the accepted params back (legacy
   full-record updates replay unchanged). Every partition replays and compacts
