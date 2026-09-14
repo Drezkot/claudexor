@@ -362,6 +362,7 @@ function buildFixture() {
   const nextSeq = journal.currentSequence() + 1;
   journal.close();
   return {
+    root,
     full,
     nextSeq,
     commandKeys,
@@ -579,6 +580,34 @@ describe("journal fold policy verdicts", () => {
 });
 
 describe("journal fold policy replay equivalence", () => {
+  it("replays through the real reader with the policy to the same state as the mirror", () => {
+    const f = buildFixture();
+    const folded = applyFold(f.full, journalFoldPolicy());
+    const fullState = replay(new ListJournal("global", f.full, f.nextSeq).asJournal());
+    const prepared = DurableJournal.prepare({
+      rootDir: join(f.root, "journal"),
+      partition: "global",
+      now,
+      fold: journalFoldPolicy(),
+    });
+    try {
+      expect(prepared.retiredAtReplay().count).toBe(f.full.length - folded.length);
+      expect(prepared.retiredAtReplay().bytes).toBeGreaterThan(0);
+      const shape = (records: readonly { seq: number; type: string }[]) =>
+        records.map((record) => [record.seq, record.type]);
+      expect(shape(prepared.records())).toEqual(shape(folded));
+      prepared.activatePrepared();
+      expect(shape(prepared.records())).toEqual(shape(folded));
+      // Chain state comes from the disk, not from the last retained record.
+      expect(prepared.currentSequence()).toBe(f.nextSeq - 1);
+      const realState = replay(prepared);
+      expect(observe(realState, f)).toEqual(observe(fullState, f));
+      expect(realState.commands.prunedScopeRoots()).toEqual([f.projectRoot]);
+    } finally {
+      prepared.close();
+    }
+  });
+
   it("replays the folded partition to the same validated state as the full history", () => {
     const f = buildFixture();
     const folded = applyFold(f.full, journalFoldPolicy());
