@@ -286,7 +286,8 @@ function openPair(root: string, prepare = false) {
   return { folded, plain, full: plain.records(), retained: folded.records() };
 }
 
-/** A partition whose history carries one exact duplicate frame — the
+/** A partition whose history carries one duplicate frame — exact for a
+ * terminal and a request, a conflicting-digest twin for an acceptance — the
  * corruption the projections' own integrity checks exist for. */
 function buildDuplicateFixture(kind: "terminal" | "request" | "accepted"): string {
   const root = realpathSync.native(mkdtempSync(join(tmpdir(), "claudexor-fold-dup-")));
