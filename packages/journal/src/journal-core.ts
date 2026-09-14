@@ -1,4 +1,3 @@
-import { randomUUID } from "node:crypto";
 import { closeSync, fstatSync, renameSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fsyncDirectory } from "@claudexor/util";
@@ -27,8 +26,10 @@ export interface DurableJournalOptions {
   /** Applied at replay and at background compaction; the retained set is what
    * `records()` sees while epoch/seq/chain state always follow the disk. */
   fold?: JournalFold;
-  /** Fired at most once per threshold crossing after an append; re-armed by a
-   * successful compaction install. No timers, no persisted state. */
+  /** Fired at most once per threshold crossing after an append; re-armed when
+   * a maintenance pass completes (install or typed decline), so a daemon that
+   * dedupes in-flight requests sees every new crossing. Never fires after
+   * `close()`. No timers, no persisted state. */
   onCompactionThreshold?: () => void;
 }
 
@@ -75,14 +76,16 @@ export abstract class JournalCore {
     );
   }
 
-  protected recover(): void {
+  /** Replay the file into the retained set and disk chain state. Returns the
+   * pending-suffix bytes recovery discarded; the caller journals that fact. */
+  protected recover(): number {
     let result: ReturnType<typeof recoverJournal>;
     try {
       result = recoverJournal(this.fd, this.path, this.options, this.intentPath());
     } catch (error) {
       if (!(error instanceof JournalRecoveryRequiredError)) throw error;
       this.recovery = error.recovery;
-      return;
+      return 0;
     }
     this.entries = result.retained;
     this.replayRetired = { count: result.retiredCount, bytes: result.retiredBytes };
@@ -90,20 +93,10 @@ export abstract class JournalCore {
     this.nextSeq = result.nextSeq;
     this.previousFrameHash = result.previousFrameHash;
     this.knownFileBytes = result.knownFileBytes;
-    if (result.discardedBytes > 0) {
+    if (result.discardedBytes > 0)
       this.recovery = { status: "ready", discardedTailBytes: result.discardedBytes };
-      this.appendRecovered("journal.recovery_tail_discarded", {
-        recoveryId: randomUUID(),
-        discardedBytes: result.discardedBytes,
-        validBytes: result.knownFileBytes,
-        originalBytes: result.knownFileBytes + result.discardedBytes,
-        detectedAt: this.now().toISOString(),
-      });
-    }
+    return result.discardedBytes;
   }
-
-  /** The recovery audit record rides the ordinary append path of the subclass. */
-  protected abstract appendRecovered(type: string, payload: unknown): void;
 
   protected intentPath(): string {
     return join(this.partitionDir, "append.pending.json");

@@ -241,7 +241,7 @@ describe("fold at replay", () => {
     expect(open().retiredAtReplay()).toEqual({ count: 0, bytes: 0 });
   });
 
-  it("fires the threshold hook once per crossing and re-arms after a successful install", async () => {
+  it("fires the threshold hook once per crossing and re-arms after any completed pass", async () => {
     const crossings: number[] = [];
     const journal = open({
       compactionThresholdBytes: 4096,
@@ -257,11 +257,29 @@ describe("fold at replay", () => {
     journal.append("four", payload);
     await Promise.resolve();
     expect(crossings).toHaveLength(1);
-    expect(journal.atCompactionThreshold()).toBe(true);
-    expect(await journal.compactInBackground({ stagingDir })).toMatchObject({ records: 4 });
+    // A typed decline completes the pass and re-arms the hook while the file stays over.
+    expect(await journal.compactInBackground({ stagingDir, signal: AbortSignal.abort() })).toEqual({
+      declined: true,
+      reason: "aborted",
+    });
+    journal.append("five", payload);
+    journal.append("six", payload);
+    await Promise.resolve();
+    expect(crossings).toHaveLength(2);
+    expect(await journal.compactInBackground({ stagingDir })).toMatchObject({ records: 6 });
     expect(journal.atCompactionThreshold()).toBe(false);
     for (let n = 0; n < 4; n += 1) journal.append("again", payload);
     await Promise.resolve();
-    expect(crossings).toHaveLength(2);
+    expect(crossings).toHaveLength(3);
+  });
+
+  it("never fires the threshold hook after a synchronous close", async () => {
+    const hook = vi.fn();
+    const journal = open({ compactionThresholdBytes: 1, onCompactionThreshold: hook });
+    journal.append("cross", { n: 1 });
+    journal.close();
+    await Promise.resolve();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(hook).not.toHaveBeenCalled();
   });
 });

@@ -2044,13 +2044,15 @@ repeated requests — a request that arrives during a generation's own flight
 runs one more pass after it, and a failed or declined pass never condemns the
 generation; new partitions use the same callback. Maintenance is edge-triggered
 on the byte threshold: the journal's `onCompactionThreshold` hook fires at most
-once per crossing after an append and is re-armed by a successful install, so a
-long-lived daemon requests another pass when the file grows past the threshold
-again. Every pass ends in one daemon-log line that also lands in the startup
+once per crossing after an append and is re-armed when a pass completes,
+install or typed decline, so a long-lived daemon that dedupes in-flight
+requests hears about every new crossing (and never after the journal is
+closed). Every pass ends in one daemon-log line that also lands in the startup
 diagnostics record: `journal.records_retired` (`retainedCount`, `retiredCount`,
-`retiredBytes` beside the byte counts) or `journal.compaction_declined` with
-its typed reason and bounds; below-threshold and empty passes stay silent, and
-no control-API field carries this yet. There is no maintenance job, persisted
+`retiredBytes` beside the byte counts, plus the replay-time retirement the
+generation folded away at open) or `journal.compaction_declined` with its
+typed reason and bounds; below-threshold and empty passes stay silent, and no
+control-API field carries this yet. There is no maintenance job, persisted
 retry state, or manual upkeep requirement. The existing byte threshold remains
 unchanged.
 

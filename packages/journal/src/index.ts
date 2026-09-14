@@ -7,6 +7,8 @@ import { ZERO_HASH, type JournalRecord } from "./frame-codec.js";
 import {
   declinedCompaction,
   prepareJournalCompaction,
+  type JournalCompactionDeclineReason,
+  type JournalCompactionDeclined,
   type JournalCompactionOutcome,
 } from "./journal-compaction.js";
 import {
@@ -97,7 +99,7 @@ export class DurableJournal extends JournalCore {
     ensureCanonicalPrivateDirectory(this.partitionDir);
     ensurePrivateFile(this.path);
     this.openWriter();
-    this.recover();
+    this.replay();
     this.compactAtThreshold();
   }
 
@@ -143,7 +145,7 @@ export class DurableJournal extends JournalCore {
       this.knownFileBytes = 0;
       this.recovery = { status: "ready", discardedTailBytes: 0 };
       this.openWriter();
-      this.recover();
+      this.replay();
       const activatedRecovery = this.state();
       if (activatedRecovery.status === "recovery_required") {
         throw new JournalRecoveryRequiredError(activatedRecovery);
@@ -243,10 +245,9 @@ export class DurableJournal extends JournalCore {
     if (this.background) return this.background.promise;
     this.assertReadable();
     this.assertWritable();
-    if (options.signal?.aborted) return Promise.resolve(declinedCompaction("aborted"));
-    if (!this.atCompactionThreshold())
-      return Promise.resolve(declinedCompaction("below_threshold"));
-    if (this.nextSeq <= 1) return Promise.resolve(declinedCompaction("empty"));
+    if (options.signal?.aborted) return Promise.resolve(this.declined("aborted"));
+    if (!this.atCompactionThreshold()) return Promise.resolve(this.declined("below_threshold"));
+    if (this.nextSeq <= 1) return Promise.resolve(this.declined("empty"));
     const controller = new AbortController();
     const abort = () => controller.abort();
     options.signal?.addEventListener("abort", abort, { once: true });
@@ -298,6 +299,7 @@ export class DurableJournal extends JournalCore {
     }).finally(() => {
       options.signal?.removeEventListener("abort", abort);
       if (this.background?.promise === promise) this.background = null;
+      this.thresholdNotified = false;
     });
     this.background = { controller, promise };
     return promise;
@@ -368,17 +370,35 @@ export class DurableJournal extends JournalCore {
     return batch.records.map((record) => ({ ...record, payload: cloneJson(record.payload) }));
   }
 
-  protected appendRecovered(type: string, payload: unknown): void {
-    this.append(type, payload);
+  /** Replay, then journal a discarded pending suffix through the ordinary append path. */
+  private replay(): void {
+    const discardedBytes = this.recover();
+    if (discardedBytes === 0) return;
+    this.append("journal.recovery_tail_discarded", {
+      recoveryId: randomUUID(),
+      discardedBytes,
+      validBytes: this.knownFileBytes,
+      originalBytes: this.knownFileBytes + discardedBytes,
+      detectedAt: this.now().toISOString(),
+    });
   }
 
   /** Edge-triggered: one notification per crossing, decoupled from the ACK
-   * already returned to the appender; a successful install re-arms it. */
+   * already returned to the appender and silent once the journal is closed;
+   * any completed maintenance pass re-arms it. */
   private notifyThreshold(): void {
     const hook = this.options.onCompactionThreshold;
     if (!hook || this.thresholdNotified || !this.atCompactionThreshold()) return;
     this.thresholdNotified = true;
-    queueMicrotask(hook);
+    queueMicrotask(() => {
+      if (!this.closed) hook();
+    });
+  }
+
+  /** An immediate decline is a completed pass too: it re-arms the hook. */
+  private declined(reason: JournalCompactionDeclineReason): JournalCompactionDeclined {
+    this.thresholdNotified = false;
+    return declinedCompaction(reason);
   }
 
   /** A fold implies deferred, seq-preserving background compaction: the
