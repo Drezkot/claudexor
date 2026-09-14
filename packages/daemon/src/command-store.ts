@@ -135,10 +135,13 @@ export class CommandStore {
 
   prune(ids: readonly string[]): void {
     if (ids.length === 0) return;
-    // The tombstone keeps the pruned commands' project roots so the startup
-    // orphan sweep still reaches a root whose every command was pruned.
-    const roots = commandScopeRoots(ids.map((id) => this.recordsById.get(id)));
-    this.journal.append(PRUNED, { ids: [...ids], roots });
+    // The tombstone keeps the pruned commands' project roots (the startup
+    // orphan sweep still reaches a root whose every command was pruned) and
+    // their run ids (the fold retires those runs' journaled events with them).
+    const records = ids.map((id) => this.recordsById.get(id));
+    const roots = commandScopeRoots(records);
+    const runIds = records.flatMap((record) => (record?.runId ? [record.runId] : []));
+    this.journal.append(PRUNED, { ids: [...ids], roots, run_ids: runIds });
     this.drop(ids);
     for (const root of roots) this.prunedRoots.add(root);
   }

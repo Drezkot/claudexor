@@ -117,6 +117,11 @@ describe("CommandStore journaled updates (D1: params are immutable after accepta
       scope: { kind: "project", root: r },
     });
     store.accept({ id: "job-p1", params: scoped("/tmp/p1"), idempotencyKey: "k1", clientId: "t" });
+    store.update("job-p1", {
+      state: "succeeded",
+      runId: "run-p1",
+      finishedAt: "2026-09-14T00:00:00.000Z",
+    });
     store.accept({ id: "job-p2", params: scoped("/tmp/p2"), idempotencyKey: "k2", clientId: "t" });
     store.accept({ id: "job-none", params: { mode: "ask" }, idempotencyKey: "k3", clientId: "t" });
     store.prune(["job-p1", "job-none"]);
@@ -124,6 +129,7 @@ describe("CommandStore journaled updates (D1: params are immutable after accepta
     expect(journal.records(0, ["command.pruned"])[0]?.payload).toEqual({
       ids: ["job-p1", "job-none"],
       roots: ["/tmp/p1"],
+      run_ids: ["run-p1"],
     });
     // A legacy tombstone (no roots) still prunes and adds nothing.
     journal.append("command.pruned", { ids: ["job-p2"] });

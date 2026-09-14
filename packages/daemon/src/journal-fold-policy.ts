@@ -12,9 +12,10 @@
  *
  * Invariants the projections replay under (the equivalence test pins them):
  *   - a command keeps its `command.accepted` and its latest `command.updated`;
- *     `command.pruned` forgets both and survives itself as the latest tombstone
- *     per root set, so crash-GC keeps the pruned commands' project roots
- *     (model-operation receipts are never pruned by retention — INV-064);
+ *     `command.pruned` forgets both plus the pruned runs' journaled run events,
+ *     and survives itself as the latest tombstone per root set so crash-GC keeps
+ *     the pruned commands' project roots (model-operation receipts are never
+ *     pruned by retention — INV-064);
  *   - a terminal run keeps exactly its terminal `run.event`; a live run keeps
  *     `run.created` plus its journaled progress events;
  *   - a resolved interaction forgets its request AND its resolution as a pair
@@ -48,9 +49,7 @@ const TERMINAL_RUN_EVENTS = new Set(["run.completed", "run.failed", "run.blocked
 const TERMINAL_SETUP_STATES = new Set<string>(TERMINAL_CONTROL_SETUP_JOB_STATES);
 
 /** The one frozen policy for every partition and every pass. */
-export const journalFoldPolicy: JournalFold = Object.freeze({
-  verdict: journalFoldVerdict,
-});
+export const journalFoldPolicy: JournalFold = Object.freeze({ verdict: journalFoldVerdict });
 
 function journalFoldVerdict(record: FoldRecord): FoldVerdict {
   try {
@@ -119,18 +118,27 @@ function commandId(payload: unknown): string | null {
   return stringField(object(payload)?.record, "id");
 }
 
-/** A prune tombstone retires its commands' records and is itself kept — the
- * latest per set of project roots it names — because crash-GC reads the roots
- * of pruned commands from it (a root whose every command was pruned would
- * otherwise vanish from the sweep). Legacy tombstones without roots share one
- * slot; their ids are dead weight either way. */
+/** Every run event of a run is keyed under its run id; the terminal retires
+ * the live group and the created slot, and a prune tombstone retires all three. */
+function runEventNames(runId: string): string[] {
+  return [`r:${runId}:t`, `r:${runId}:live`, `r:${runId}:c`];
+}
+
+/** A prune tombstone retires its commands' records AND every journaled run
+ * event of the runs those commands owned (`run_ids`, written since this
+ * change; legacy tombstones without it retire the commands only), and is
+ * itself kept — the latest per set of project roots it names — because
+ * crash-GC reads the roots of pruned commands from it. Ids in a superseded
+ * tombstone are dead weight: its retire already ran when it was folded. */
 function prunedVerdict(payload: unknown): FoldVerdict {
-  const ids = stringList(object(payload)?.ids);
+  const value = object(payload);
+  const ids = stringList(value?.ids);
   if (!ids) return KEEP;
-  const roots = stringList(object(payload)?.roots) ?? [];
+  const roots = stringList(value?.roots) ?? [];
+  const runIds = stringList(value?.run_ids) ?? [];
   return {
     slot: `c:pruned:${[...roots].sort().join("\0")}`,
-    retire: ids.flatMap((id) => [`c:${id}:a`, `c:${id}:u`]),
+    retire: [...ids.flatMap((id) => [`c:${id}:a`, `c:${id}:u`]), ...runIds.flatMap(runEventNames)],
   };
 }
 
@@ -143,10 +151,7 @@ function runEventVerdict(payload: unknown): FoldVerdict {
   const type = stringField(payload, "type");
   if (runId === null || type === null) return KEEP;
   if (TERMINAL_RUN_EVENTS.has(type)) {
-    return {
-      slot: `r:${runId}:t`,
-      retire: [`r:${runId}:live`, `r:${runId}:c`],
-    };
+    return { slot: `r:${runId}:t`, retire: [`r:${runId}:live`, `r:${runId}:c`] };
   }
   if (type === "run.created") return { slot: `r:${runId}:c` };
   return { group: `r:${runId}:live` };

@@ -445,7 +445,7 @@ describe("journal fold policy verdicts", () => {
     expect(journalFoldVerdict(record)).toEqual(journalFoldVerdict({ ...record, seq: 3 }));
   });
 
-  it("keys commands per id and forgets pruned ids as a pair", () => {
+  it("keys commands per id; a prune tombstone forgets the ids and their runs, and survives per root set", () => {
     expect(journalFoldVerdict(view("command.accepted", { record: { id: "job-1" } }))).toEqual({
       slot: "c:job-1:a",
     });
@@ -453,11 +453,26 @@ describe("journal fold policy verdicts", () => {
       slot: "c:job-1:u",
     });
     expect(
-      journalFoldVerdict(view("command.pruned", { ids: ["job-1", "job-2"], roots: ["/b", "/a"] })),
+      journalFoldVerdict(
+        view("command.pruned", {
+          ids: ["job-1", "job-2"],
+          roots: ["/b", "/a"],
+          run_ids: ["run-1"],
+        }),
+      ),
     ).toEqual({
       slot: "c:pruned:/a\0/b",
-      retire: ["c:job-1:a", "c:job-1:u", "c:job-2:a", "c:job-2:u"],
+      retire: [
+        "c:job-1:a",
+        "c:job-1:u",
+        "c:job-2:a",
+        "c:job-2:u",
+        "r:run-1:t",
+        "r:run-1:live",
+        "r:run-1:c",
+      ],
     });
+    // A legacy tombstone (no roots, no run ids) forgets the commands only.
     expect(journalFoldVerdict(view("command.pruned", { ids: ["job-3"] }))).toEqual({
       slot: "c:pruned:",
       retire: ["c:job-3:a", "c:job-3:u"],
@@ -655,7 +670,7 @@ describe("journal fold policy replay equivalence", () => {
     expect(foldedState.interactions.status("run-a", "int-1")).toBe("missing");
   });
 
-  it("never leaves a partial pair, a headless update or two terminals behind", () => {
+  it("never leaves a partial pair, a headless update, two terminals or a pruned run behind", () => {
     const f = buildFixture();
     const folded = applyFold(f.full, journalFoldPolicy);
     const types = (type: string) => folded.filter((record) => record.type === type);
@@ -666,15 +681,17 @@ describe("journal fold policy replay equivalence", () => {
       expect(accepted.has((update.payload as { record: { id: string } }).record.id)).toBe(true);
     }
     expect([...accepted].sort()).toEqual(["job-a", "job-c", "job-e", "job-m"]);
-    // The prune tombstone survives with the pruned commands' roots for crash-GC.
+    // The prune tombstone survives with the pruned commands' roots (crash-GC)
+    // and run ids (the runs' journaled events go with the commands).
     expect(types("command.pruned").map((r) => r.payload)).toEqual([
-      { ids: ["job-b", "job-d"], roots: [f.projectRoot] },
+      { ids: ["job-b", "job-d"], roots: [f.projectRoot], run_ids: ["run-b", "run-d"] },
     ]);
     const terminals = types("run.event")
       .map((r) => r.payload as { run_id: string; type: string })
       .filter((e) => ["run.completed", "run.failed", "run.blocked"].includes(e.type));
     expect(new Set(terminals.map((e) => e.run_id)).size).toBe(terminals.length);
-    // A finished run keeps exactly its terminal; a live run keeps its progress.
+    // A finished run keeps exactly its terminal; a live run keeps its
+    // progress; a pruned command's run keeps nothing.
     const eventsOf = (run: string) =>
       types("run.event")
         .map((r) => r.payload as { run_id: string; type: string })
@@ -683,6 +700,8 @@ describe("journal fold policy replay equivalence", () => {
     expect(eventsOf("run-a")).toEqual(["run.completed"]);
     expect(eventsOf("run-e")).toEqual(["run.completed"]);
     expect(eventsOf("run-c")).toEqual(["run.created", "interaction.requested", "output.ready"]);
+    expect(eventsOf("run-b")).toEqual([]);
+    expect(eventsOf("run-d")).toEqual([]);
     // Interaction pairs: no resolution survives, and every surviving request is
     // one the full history still had pending.
     expect(types("interaction.resolved")).toEqual([]);
