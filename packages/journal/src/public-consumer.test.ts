@@ -2,7 +2,8 @@ import { mkdirSync, mkdtempSync, realpathSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-// Public self-reference resolves the built package's exported index.d.ts, not src.
+// Public self-reference resolves the BUILT package's exported index.d.ts and
+// dist, not src: run `pnpm --filter @claudexor/journal build` before this test.
 import {
   DurableJournal,
   JournalRecoveryRequiredError,
@@ -28,13 +29,11 @@ describe("published journal API", () => {
     const root = realpathSync.native(mkdtempSync(join(tmpdir(), "journal-consumer-")));
     const stagingDir = join(root, "stage");
     mkdirSync(stagingDir);
-    const fold: JournalFold = { verdict: verdictFor };
     const journal = new DurableJournal({
       rootDir: join(root, "journal"),
       partition: "global",
       deferCompaction: true,
       compactionThresholdBytes: 0,
-      fold,
     });
     try {
       journal.append("example", { text: "repeated ".repeat(1024) });
@@ -65,6 +64,31 @@ describe("published journal API", () => {
       }
       const closed: void = journal.close();
       expect(closed).toBeUndefined();
+    } finally {
+      journal.close();
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("refuses the lossless synchronous writer on a folded journal", async () => {
+    const root = realpathSync.native(mkdtempSync(join(tmpdir(), "journal-consumer-fold-")));
+    const stagingDir = join(root, "stage");
+    mkdirSync(stagingDir);
+    const fold: JournalFold = { verdict: verdictFor };
+    const journal = new DurableJournal({
+      rootDir: join(root, "journal"),
+      partition: "global",
+      deferCompaction: true,
+      compactionThresholdBytes: 0,
+      fold,
+    });
+    try {
+      journal.append("example", { text: "repeated ".repeat(1024) });
+      expect(() => journal.compact()).toThrow(/synchronous compaction is unavailable/);
+      expect(journal.retiredAtReplay()).toEqual({ count: 0, bytes: 0 });
+      const outcome: JournalCompactionOutcome = await journal.compactInBackground({ stagingDir });
+      expect(outcome).toMatchObject({ records: 1, retainedCount: 1, retiredCount: 0 });
+      expect(journal.currentSequence()).toBe(1);
     } finally {
       journal.close();
       rmSync(root, { recursive: true, force: true });
