@@ -3,6 +3,7 @@ import { join } from "node:path";
 import {
   DaemonClient,
   commandProjection,
+  commandScopeRoots,
   interactionProjection,
   operatorDecisionProjection,
   runEventProjection,
@@ -65,7 +66,6 @@ import { runStopIfRequested } from "./runtime-replacement-stop.js";
 import { createDaemonAgentRunner } from "./daemon-agent-runner.js";
 import { createModelServices } from "./model-services.js";
 import { isModelOperation } from "@claudexor/schema";
-const NO_PROJECT_ROOT = noProjectRepoRoot();
 
 export async function main(): Promise<void> {
   // Probe and identity-proven stop must run before any durable startup.
@@ -86,8 +86,10 @@ export async function main(): Promise<void> {
   let releaseWriterLease = true;
   let lifecycle: ReturnType<typeof armDaemonLifecycle> | null = null;
   let quotaPoller: ReturnType<typeof createDaemonQuotaPoller> | null = null;
+  // Maintenance failures, typed declines and `journal.records_retired`
+  // receipts land in the daemon log and the startup diagnostics record.
   const journalMaintenance = new JournalMaintenance(daemonDir(), (message) =>
-    logLine(logPath(), redactSecrets(message)),
+    startupDiagnostics.log("journal_maintenance", message),
   );
   try {
     const token = ensureToken();
@@ -225,7 +227,7 @@ export async function main(): Promise<void> {
     bindDelegationDaemon(server);
 
     const authReadiness = new AuthReadinessService(buildGateway({ includeFakes: false }), {
-      cwd: NO_PROJECT_ROOT,
+      cwd: noProjectRepoRoot(),
     });
     const setupBinding = new SetupLifecycleBinding(setupStoreSlot, (store) =>
       createSetupJobManager({
@@ -300,6 +302,10 @@ export async function main(): Promise<void> {
       global: journalManager,
       partitions: threads,
       diagnostics: startupDiagnostics,
+      knownProjectRoots: () => {
+        const commands = commandStoreSlot.prepared();
+        return [...commandScopeRoots(commands.records()), ...commands.prunedScopeRoots()];
+      },
       normalPlane: {
         requested: () => shutdownRuntime!.requested(),
         armQuotaPolling: () => quotaPoller!.arm(),
@@ -316,6 +322,7 @@ export async function main(): Promise<void> {
             logPath: logPath(),
             shuttingDown: () => shutdownRuntime!.requested(),
           }),
+        pruneCommandHistory: () => server.pruneHistory(),
         armJournalMaintenance: () => journalMaintenance.arm(),
       },
     });

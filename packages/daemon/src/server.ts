@@ -161,9 +161,9 @@ export class DaemonServer {
     await this.opts.startupBarrier?.("before_registry_load");
     if (this.stopping) throw this.stoppingError("daemon startup was cancelled before listen");
     // With product admission closed (issue #165 D5 stage 3) the command
-    // projections are not activated yet; the registry materializes lazily
-    // once normal admission opens.
-    if (servingModeOf(this.opts.servingMode) === "normal") commandStores(this.opts.commands);
+    // projections are not activated yet; the registry materializes (and its
+    // history is pruned) once normal admission opens — see pruneHistory().
+    if (servingModeOf(this.opts.servingMode) === "normal") this.pruneHistory();
     await this.opts.startupBarrier?.("after_registry_load");
     if (this.stopping) throw this.stoppingError("daemon startup was cancelled after registry load");
     if (!pipeEndpoint) clearStaleUnixSocketPath(this.opts.socketPath);
@@ -428,7 +428,8 @@ export class DaemonServer {
     return Object.assign(new Error(message), { code: "daemon_stopping", status: 503 });
   }
 
-  private pruneHistory(): void {
+  /** Age/cap and params-byte command retention: at normal admission and after every terminal. */
+  pruneHistory(): void {
     const removed = prunableCommandIds(
       this.allRecords(),
       this.opts.maxHistory ?? 500,

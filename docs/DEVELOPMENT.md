@@ -281,7 +281,12 @@ Tests and local smokes must never touch real user state:
   the real prompt consumers, and inspect the affected Council receipt visually.
 - Journal maintenance tests preserve synchronous `compact()` consumer coverage
   and separately exercise streamed compaction with concurrent acknowledged
-  batches, cursor continuity, cancellation and installation faults. Run daemon
+  batches, cursor continuity, cancellation and installation faults, plus the
+  fold contract: positional-reader equivalence with whole-buffer replay,
+  receipt byte-identity, disk chain state when a fold drops the last frame,
+  fold boundary arithmetic under streaming appends, and multi-frame
+  seq-preserving snapshot roundtrips. `scripts/journal-bench.mjs` is the opt-in
+  preparation benchmark against a copied journal root. Run daemon
   responsiveness/SSE acceptance in an empty fixture config without provider
   profiles; rebuilding candidate source never requires restarting a live daemon
   used by other work.

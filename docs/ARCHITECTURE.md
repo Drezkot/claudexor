@@ -210,23 +210,64 @@ at every wire boundary.
   temporary non-append descriptor verified against the canonical writer's file
   identity. It closes that descriptor after truncate/fsync and before removing
   the intent; ordinary writes retain their append descriptor and ACK discipline.
-  Compacted snapshots keep their gzip framing but replay logical records one at
-  a time. Replay bounds decompressed output, and opportunistic compaction leaves
-  the existing frames untouched when a replacement cannot be materialized within
-  that bound, so a large valid history remains readable and startup stays ready.
-  Compression also stops at the existing frame output cap; the base64/JSON
-  envelope is checked separately. Library constructor and prepared-activation
-  triggers remain synchronous by default. The daemon opts into deferred
-  maintenance and streams compaction after normal admission; see the lifecycle
-  section below. Projection reads select exact record types before payload copying
-  without changing full-history reads, sequence numbers or cursors.
+  Replay is a positional frame-at-a-time read over the descriptor with bounded
+  buffers: the journal file is never loaded whole, the read-only preparation
+  fingerprint streams the same bytes through its content hash, and memory is
+  proportional to the retained record set rather than the file. A caller may
+  supply a `fold` (`JournalFold`: per-record drop / single-holder slot /
+  multi-holder group / retire verdicts, applied in sequence order); the journal
+  stays generic and never decides what is dead. The fold runs at replay and at
+  background compaction, so `records()` is the retained set while epoch, next
+  sequence, and hash chain always come from the last frame on disk, even when
+  that frame was folded away. Compacted snapshots keep their gzip framing but
+  replay logical records one at a time; a snapshot may be a chain of several
+  `journal.compacted_snapshot` frames whose records carry their original `seq`
+  (`count <= logicalSpan`, chunks cut by logical bytes so each fits the frame
+  payload cap), and the legacy dense single-frame layout still decodes. Replay
+  bounds decompressed output per frame. A maintenance pass that cannot produce
+  a smaller file returns a typed decline (`aborted`, `below_threshold`, `empty`,
+  `capacity`, `no_reclaim`) and leaves the existing frames untouched, so a large
+  valid history remains readable and startup stays ready. Library constructor
+  and prepared-activation triggers remain synchronous by default; a journal
+  constructed with a fold never uses the lossless single-frame writer at all:
+  threshold compaction is skipped and an explicit `compact()` call is refused,
+  because that legacy snapshot would let an older engine read the folded set
+  as a complete history. A fold implies the deferred seq-preserving background
+  path. The daemon
+  opts into deferred maintenance and streams compaction after normal admission;
+  see the lifecycle section below. Projection reads select exact record types
+  before payload copying; every read sees the retained set, and sequence
+  numbers and cursors are the original ones.
 - `packages/daemon`: durable local queue (Unix socket on POSIX, named pipe on win32) and journal projections for commands, projects, and threads.
   Project projections select their own record types; run-event history is validated
   once per projection creation through its descriptor. Direct RunEventStore
   construction still validates by default. Preparation and post-open activation
   retain their content/path identity checks; required replay still performs
-  synchronous work proportional to journal history, while automatic compaction
-  runs separately after admission.
+  synchronous work proportional to the retained record set (the file is read
+  frame by frame, never whole), while automatic compaction runs separately
+  after admission. A command's params are immutable after
+  acceptance: only `command.accepted` carries them, every `command.updated`
+  frame omits them, and replay merges the accepted params back (legacy
+  full-record updates replay unchanged). Every partition replays and compacts
+  through the daemon's fold policy (`journal-fold-policy.ts`), which decides
+  what a partition may forget: a command keeps its acceptance and its latest
+  update; a prune tombstone forgets both, retires the pruned runs' journaled
+  events, and survives as the latest tombstone per root set so crash-GC keeps
+  those project roots (model-operation receipts are never pruned); a finished
+  run keeps only its terminal event; a resolved question forgets its request
+  and resolution together (answering an already-resolved question after a
+  restart reports `not_found` rather than `already_resolved` — both
+  non-delivery statuses; within one process life `already_resolved` is
+  unchanged); duplicate acceptance, terminal or request frames survive the
+  fold until their pair or prune tombstone retires the whole group, so replay
+  validation refuses them as loudly as on an unfolded journal; quota keeps the
+  latest projection marker and, per
+  subject, the latest scoped prepare and the latest upsert (adjacency on disk
+  still decides which pair commits; at most one stale prepare frame per subject
+  survives); thread pings keep the latest revision; setup saves are kept whole
+  and a terminal save forgets the job's log lines; everything else — and
+  anything the policy cannot classify — is kept. Startup memory therefore
+  follows the retained set, not the file.
 - `packages/cli`: thin command surface plus local host-integration lifecycle
   (`claudexor plugin`) for generated Claude Code/Codex/Cursor/OpenCode
   skill/MCP artifacts and command artifacts where hosts support them. Plugin
@@ -1580,7 +1621,16 @@ Endpoint semantics beyond the inventory:
   have a run, have no recorded refusal, or still have an active job (409).
 - Run-level `POST /v2/runs/:id/retry` is Exact Retry for any settled run: it
   creates a new command/turn, links `retryOf`, reuses the immutable original
-  request, and performs fresh normalization/preflight. `GET
+  request, and performs fresh normalization/preflight. Retained terminal
+  product commands are bounded twice — by the age/cap rule (the newest 500 and
+  anything younger than 30 days survive) and by a code constant on their
+  serialized params (256 MiB, pruned oldest first regardless of age;
+  needs-decision runs and model receipts are exempt, and delivery commands —
+  which carry a copy of the applied run's params — keep their own age/cap
+  policy and neither count against nor are pruned by the byte budget) —
+  applied at normal
+  admission and after every terminal, so on a heavy install Exact Retry of the
+  oldest, largest prompts can end before the 30-day window. `GET
   /v2/runs/:id/run-again` instead returns an editable draft and explicitly
   lists server-owned fields omitted from that draft. The CLI projects these as
   `claudexor retry` and `claudexor run-again`. Durable idempotent replay is
@@ -1802,15 +1852,24 @@ while its complete assistant flush remains a complete message.
 
 Every `RunEvent` carries a monotonic per-run `seq` stamped by the engine's
 EventLog at emit time (control-api audit appends continue the same sequence).
-In the daemon composition root, each emitted event is also appended to its
-owning global/project journal partition before live bus publication; scoped
-journal streams therefore replay run progress after restart. A journal sink
-failure fails the producer/run instead of being swallowed as a live-only gap.
+In the daemon composition root, the lifecycle-significant events — `run.created`
+(journaled with the prompt's sha256 digest and byte length in place of the
+prompt text), `interaction.requested`, `interaction.answered`,
+`interaction.timeout`, `output.ready` and the terminal
+`run.completed|run.failed|run.blocked` — are also appended to the run's owning
+global/project journal partition before live bus publication. Per-token
+`harness.event` deltas and every other progress event reach only the per-run
+`events.jsonl` and the in-process bus, so scoped journal streams replay the run
+LIFECYCLE after restart, never token-level progress. A journal sink failure for a
+journaled event fails the producer/run instead of being swallowed as a live-only
+gap; an event outside the journaled set is never a sink failure.
 `GET /v2/runs/:id` returns the snapshot together with `lastSeq` — the highest seq
 already reflected in that snapshot — so a client subscribes to
 `GET /v2/runs/:id/events` with `Last-Event-ID: <lastSeq>` and applies deltas with
-no gaps and no duplicates. The per-run stream replays from the rebuildable run
-artifact projection `events.jsonl` (old pre-seq fixture lines fall back to
+no gaps and no duplicates. The per-run stream replays from the run's
+`events.jsonl` — the one complete per-run event record; the journal partition
+holds only the lifecycle subset above, so it can restore a run's terminal tail
+but never rebuild the full stream — (old pre-seq fixture lines fall back to
 line-number ids) and is
 push-driven by the daemon's in-process run-event bus, with a file-tail poll as
 fallback; `output.ready` is guaranteed to precede the terminal
@@ -1905,6 +1964,21 @@ intact and recover with a compatible newer reader. A pre-update backup must not
 automatically replace later work. This boundary uses the existing runtime version
 floor and recovery plane; it adds no alternate journal or compatibility shim.
 
+The folded journal is the same kind of boundary. Once this engine has served a
+root, its partitions may hold seq-preserving multi-frame snapshots
+(`count < logicalSpan`), `command.updated` frames without params, digest-only
+quota markers and replay-folded history. The 3.11.0 reader decodes a folded
+snapshot as a record-count mismatch and enters the recovery plane loudly, and
+it would replay a params-less update as a record without params; neither is a
+supported rollback of that state. The root-authority semantic floor is the
+enforcement: the first successful serve of the release that ships the fold
+advances the floor to that version, after which the older engine refuses the
+root typed (`root_authority_floor_regression`) — no second mechanism. A first
+start on a legacy (unfolded) journal folds at replay, so its startup memory
+already follows the retained set; the first background compaction rewrites the
+partition file at that start when the folded replay retired at least a
+threshold's worth of bytes, and otherwise after a threshold of new bytes.
+
 Every shutdown trigger — SIGTERM/SIGINT, the `claudexor.shutdown` socket RPC,
 a startup failure — enters ONE state machine (`DaemonRuntimeShutdown
 .beginShutdown(reason)`): abort in-flight runs, complete their journaled
@@ -1977,32 +2051,75 @@ existing Connecting loop — no adoption, no hydration, no reconciliation, no
 fallback launch — until admission opens.
 
 Automatic journal compaction is cancellable maintenance after normal admission.
-Every daemon-owned JournalManager opts into `deferCompaction` and requests one
+Every daemon-owned JournalManager opts into `deferCompaction` and requests an
 attempt after its generation opens or recovers. A process-local pending set and
-one in-flight promise serialize global and project partitions; new partitions
-use the same callback. There is no maintenance job, persisted retry state, or
-manual upkeep requirement. The existing byte threshold remains unchanged.
+one in-flight promise serialize global and project partitions and coalesce
+repeated requests — a request that arrives during a generation's own flight
+runs one more pass after it, and a failed or declined pass never condemns the
+generation; new partitions use the same callback. Maintenance is edge-triggered
+on GROWTH: a crossing is a threshold of bytes appended since the last completed
+pass over the data — an install moves that baseline to the installed size, a
+capacity or no-reclaim decline and a FAILED pass (an unwritable staging
+directory, an ENOSPC window) to the size they settled at, and an immediate
+below-threshold, empty or aborted decline moves nothing — so a partition whose
+retained set alone exceeds the threshold (model receipts kept forever, retained
+params up to the byte cap) is compacted once per threshold of new bytes, never
+on every append, and a partition that declined re-runs only after a threshold
+of new bytes. Under a fold the replay at open is itself the first completed
+pass — the baseline starts at the file size minus what the fold retired while
+replaying — so a restart on an already-compacted partition above the threshold
+does not rewrite it to reclaim nothing, while a legacy partition whose replay
+retires a threshold's worth is compacted on its first start. The journal's `onCompactionThreshold` hook fires at most once
+per crossing after an append and is re-armed when a pass completes — install,
+typed decline or a failed pass — so a long-lived daemon that dedupes in-flight
+requests hears
+about every new crossing (and never after the journal is closed). Every pass ends in one daemon-log line that also lands in the startup
+diagnostics record: `journal.records_retired` (`retainedCount`, `retiredCount`,
+`retiredBytes` beside the byte counts, plus the replay-time retirement the
+generation folded away at open) or `journal.compaction_declined` with its
+typed reason and bounds (`compressedBytes`, plus the `cap` that fired for a
+capacity decline). Both lines end with the process memory (`rssMb`,
+`heapUsedMb`, `externalMb`), as does the normal-admission line in the startup
+diagnostics, so the retained-set memory class is observable on every install.
+Below-threshold and empty passes stay silent, and no control-API field carries
+this yet. There is no maintenance job, persisted
+retry state, or manual upkeep requirement. The threshold value is unchanged;
+its meaning is growth since the last pass.
 
 `compactInBackground({stagingDir, signal?})` captures an immutable logical prefix,
-streams individual records through asynchronous gzip with bounded output, then
-re-encodes the acknowledged tail against the new physical hash chain. Preparation
-writes one private candidate under `daemon/journal-compaction/`, outside the
-partition directory. Appends continue through the existing intent/fsync-before-ACK
-writer. Publication catches up every acknowledged batch, validates the current
-writer/file identity and generation, and uses the same short close/rename/reopen
-installer as synchronous compaction. Full logical history, sequence numbers and
-the current epoch survive this background rewrite, so live journal cursors keep
-their suffix without a compaction-induced resnapshot.
+applies the journal's `fold` to it, streams the retained records through
+asynchronous gzip into a chain of seq-preserving snapshot frames, then re-encodes
+the acknowledged tail against the new physical hash chain with its original
+sequence numbers. The boundary it publishes against is disk state (next sequence,
+chain hash, file bytes), not the in-memory entry count, because a fold at replay
+makes the two differ. Preparation writes one private candidate under
+`daemon/journal-compaction/`, outside the partition directory. Appends continue
+through the existing intent/fsync-before-ACK writer. Publication catches up every
+acknowledged batch, validates the current writer/file identity and generation,
+and uses the same short close/rename/reopen installer as synchronous compaction.
+The retained working set, every sequence number and the current epoch survive
+this background rewrite, so live journal cursors keep their suffix without a
+compaction-induced resnapshot; records the supplied fold judged dead are gone
+from the file, and the receipt reports `retainedCount`, `retiredCount` and
+`retiredBytes` beside the byte counts.
+
+Rollback rule: a runtime from before seq-preserving snapshots decodes a folded
+snapshot (`count < logicalSpan`) as a record-count mismatch and enters the
+recovery plane loudly; it never reads a partial world. A snapshot whose chunks
+each hold exactly their span still decodes there, because the extra `seq`
+field is ignored and the tail frames chain by sequence. Returning to such a
+runtime after a fold has run is therefore not a supported rollback of that
+state; the root-authority version floor enforces it.
 
 The public `compact()` still returns a receipt or null immediately and creates a
 new epoch on success; default library construction/activation keeps that behavior.
 Explicit synchronous compaction cancels any background candidate before proceeding.
 Close, quarantine and generation replacement likewise prevent late publication.
 Shutdown fences and aborts maintenance at its synchronous start and drains candidate
-cleanup before journals close. Capacity/no-reclaim results preserve the original
-file, while uncertain installation follows the existing recovery-required path.
-Record serialization and the final filesystem metadata operations remain
-synchronous; this is not a hard realtime latency guarantee.
+cleanup before journals close. Capacity/no-reclaim results are typed declines that
+preserve the original file, while uncertain installation follows the existing
+recovery-required path. Record serialization and the final filesystem metadata
+operations remain synchronous; this is not a hard realtime latency guarantee.
 
 Termination, local and remote runtime replacement, and the real-harness
 battery consume the same strict owner classification. They recheck the exact
@@ -2703,6 +2820,15 @@ serial. Both `/v2/quota` and the atomic Accounts response decorate snapshots
 with the same server-owned model-aware availability projection. Raw journal
 records and projection signatures remain undecorated, and clients never promote
 a model-scoped exhausted window into an account-wide percentage or block.
+A refresh journals a subject's snapshot only when its evidence changed
+(everything except `observed_at`; a freshness flip counts): an unchanged
+re-observation keeps the fresh observation time in memory, and the projection
+marker still publishes it. After a restart a replayed snapshot therefore
+carries the observation time of its last journaled change until the first
+admission poll (immediate on arm, then every 60 s) re-observes it — it may read
+stale, or past the 24-hour window drop out of the projection, for up to one poll
+interval. The marker's `projection_signature` is the sha256 digest of the
+projection (snapshots plus absences), compared only for equality.
 Runtime-update rollback remains backward-readable: a scoped snapshot — or one
 whose source postdates v3.2.0's strict enum (`cursor_rate_limit`) — is first
 prepared under a typed record that an older engine ignores, then committed by
