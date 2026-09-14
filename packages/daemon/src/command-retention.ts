@@ -75,10 +75,25 @@ export function prunableCommandIds(
   return [...pruned];
 }
 
+/** Serialized UTF-8 size of a command's params, measured once: params are
+ * pinned at acceptance (`update()` keeps the same object), so the size keyed by
+ * that object never goes stale, and a prune pass never re-serializes history. */
+const paramsByteCache = new WeakMap<object, number>();
+
 function paramsBytes(record: JobRecord): number {
-  try {
-    return JSON.stringify(record.params)?.length ?? 0;
-  } catch {
-    return 0;
+  const params = record.params;
+  const cacheable = typeof params === "object" && params !== null;
+  if (cacheable) {
+    const known = paramsByteCache.get(params);
+    if (known !== undefined) return known;
   }
+  let size = 0;
+  try {
+    const serialized = JSON.stringify(params);
+    size = serialized === undefined ? 0 : Buffer.byteLength(serialized, "utf8");
+  } catch {
+    size = 0;
+  }
+  if (cacheable) paramsByteCache.set(params, size);
+  return size;
 }
