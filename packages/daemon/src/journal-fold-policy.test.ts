@@ -438,9 +438,15 @@ describe("journal fold policy verdicts", () => {
     expect(journalFoldVerdict(view("command.updated", { record: { id: "job-1" } }))).toEqual({
       slot: "c:job-1:u",
     });
-    expect(journalFoldVerdict(view("command.pruned", { ids: ["job-1", "job-2"] }))).toEqual({
-      drop: true,
+    expect(
+      journalFoldVerdict(view("command.pruned", { ids: ["job-1", "job-2"], roots: ["/b", "/a"] })),
+    ).toEqual({
+      slot: "c:pruned:/a\0/b",
       retire: ["c:job-1:a", "c:job-1:u", "c:job-2:a", "c:job-2:u"],
+    });
+    expect(journalFoldVerdict(view("command.pruned", { ids: ["job-3"] }))).toEqual({
+      slot: "c:pruned:",
+      retire: ["c:job-3:a", "c:job-3:u"],
     });
     expect(journalFoldVerdict(view("command.pruned", { ids: [] }))).toEqual({});
   });
@@ -633,7 +639,10 @@ describe("journal fold policy replay equivalence", () => {
       expect(accepted.has((update.payload as { record: { id: string } }).record.id)).toBe(true);
     }
     expect([...accepted].sort()).toEqual(["job-a", "job-c", "job-e", "job-m"]);
-    expect(types("command.pruned")).toEqual([]);
+    // The prune tombstone survives with the pruned commands' roots for crash-GC.
+    expect(types("command.pruned").map((r) => r.payload)).toEqual([
+      { ids: ["job-b", "job-d"], roots: [f.projectRoot] },
+    ]);
     const terminals = types("run.event")
       .map((r) => r.payload as { run_id: string; type: string })
       .filter((e) => ["run.completed", "run.failed", "run.blocked"].includes(e.type));

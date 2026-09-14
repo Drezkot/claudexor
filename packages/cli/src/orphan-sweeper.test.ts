@@ -14,7 +14,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { processStartTime, WorkspaceManager } from "@claudexor/workspace";
 import { projectRuntimeDir } from "@claudexor/util";
-import { commandScopeRoots, sweepOrphanWorkspaces } from "./orphan-sweeper.js";
+import { commandScopeRoots } from "@claudexor/daemon";
+import { sweepOrphanWorkspaces } from "./orphan-sweeper.js";
 
 function initRepo(): string {
   const dir = mkdtempSync(join(tmpdir(), "claudexor-sweep-"));

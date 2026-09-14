@@ -67,7 +67,7 @@ function runtimeFixture(initialBlocked: string[]) {
       log: vi.fn(),
       close: vi.fn(),
     },
-    commandRecords: () => [],
+    knownProjectRoots: () => [],
     normalPlane,
   });
   return {

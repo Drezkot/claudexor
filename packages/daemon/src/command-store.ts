@@ -21,6 +21,7 @@ import {
 } from "@claudexor/schema";
 import { fsyncDirectory, hashJson } from "@claudexor/util";
 import { parse as parseYaml, stringify as stringifyYaml } from "yaml";
+import { commandScopeRoots } from "./command-scope-roots.js";
 import { idempotencyWireProjection } from "./idempotency-wire-projection.js";
 import { durableTerminalRunEvents } from "./run-event-terminal-index.js";
 import { JOB_STATES, type JobRecord } from "./server.js";
@@ -52,6 +53,7 @@ const PRUNED = "command.pruned";
 export class CommandStore {
   private readonly recordsById = new Map<string, JobRecord>();
   private readonly idByKeyDigest = new Map<string, { id: string; requestDigest: string }>();
+  private readonly prunedRoots = new Set<string>();
 
   constructor(
     private readonly journal: DurableJournal,
@@ -133,8 +135,17 @@ export class CommandStore {
 
   prune(ids: readonly string[]): void {
     if (ids.length === 0) return;
-    this.journal.append(PRUNED, { ids: [...ids] });
+    // The tombstone keeps the pruned commands' project roots so the startup
+    // orphan sweep still reaches a root whose every command was pruned.
+    const roots = commandScopeRoots(ids.map((id) => this.recordsById.get(id)));
+    this.journal.append(PRUNED, { ids: [...ids], roots });
     this.drop(ids);
+    for (const root of roots) this.prunedRoots.add(root);
+  }
+
+  /** Project roots of commands this store pruned, across restarts and folds. */
+  prunedScopeRoots(): string[] {
+    return [...this.prunedRoots];
   }
 
   /**
@@ -185,11 +196,16 @@ export class CommandStore {
             : { ...journaled, params: current.params };
         this.recordsById.set(record.id, structuredClone(record));
       } else if (entry.type === PRUNED) {
-        const ids = (entry.payload as { ids?: unknown }).ids;
+        const { ids, roots } = entry.payload as { ids?: unknown; roots?: unknown };
         if (!Array.isArray(ids) || ids.some((id) => typeof id !== "string")) {
           throw new Error("invalid command prune record");
         }
         this.drop(ids);
+        // Legacy tombstones carry no roots; a malformed roots list adds nothing.
+        if (Array.isArray(roots)) {
+          for (const root of roots)
+            if (typeof root === "string" && root) this.prunedRoots.add(root);
+        }
       }
     }
   }

@@ -16,8 +16,9 @@
  *
  * Invariants the projections replay under (the equivalence test pins them):
  *   - a command keeps its `command.accepted` and its latest `command.updated`;
- *     `command.pruned` forgets both (model-operation receipts are never pruned
- *     by retention, so they survive forever — INV-064);
+ *     `command.pruned` forgets both and survives itself as the latest tombstone
+ *     per root set, so crash-GC keeps the pruned commands' project roots
+ *     (model-operation receipts are never pruned by retention — INV-064);
  *   - a terminal run keeps exactly its terminal `run.event`; a live run keeps
  *     `run.created` plus its journaled progress events;
  *   - a resolved interaction forgets its request AND its resolution as a pair
@@ -130,10 +131,19 @@ function commandId(payload: unknown): string | null {
   return stringField(object(payload)?.record, "id");
 }
 
+/** A prune tombstone retires its commands' records and is itself kept — the
+ * latest per set of project roots it names — because crash-GC reads the roots
+ * of pruned commands from it (a root whose every command was pruned would
+ * otherwise vanish from the sweep). Legacy tombstones without roots share one
+ * slot; their ids are dead weight either way. */
 function prunedVerdict(payload: unknown): FoldVerdict {
   const ids = stringList(object(payload)?.ids);
   if (!ids) return KEEP;
-  return { drop: true, retire: ids.flatMap((id) => [`c:${id}:a`, `c:${id}:u`]) };
+  const roots = stringList(object(payload)?.roots) ?? [];
+  return {
+    slot: `c:pruned:${[...roots].sort().join("\0")}`,
+    retire: ids.flatMap((id) => [`c:${id}:a`, `c:${id}:u`]),
+  };
 }
 
 /** A terminal run keeps only its terminal: `run.created` and the journaled

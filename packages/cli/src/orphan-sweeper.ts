@@ -65,18 +65,6 @@ function knownProjectRoots(read: () => readonly string[]): string[] {
   }
 }
 
-/** Scope roots of accepted commands — the only journal fact the sweep needs.
- * The composition root feeds it the prepared global CommandStore's records. */
-export function commandScopeRoots(records: Iterable<{ params?: unknown }>): string[] {
-  const roots = new Set<string>();
-  for (const record of records) {
-    const scope = (record.params as { scope?: { kind?: unknown; root?: unknown } } | undefined)
-      ?.scope;
-    if (scope && scope.kind === "project" && typeof scope.root === "string") roots.add(scope.root);
-  }
-  return [...roots];
-}
-
 /** Isolated-thread worktrees live in the external per-project runtime namespace. */
 function threadTreesUnder(root: string): string[] {
   const threadsDir = join(projectRuntimeDir(root), "threads");

@@ -18,6 +18,7 @@ export * from "./journal-manager.js";
 export * from "./journal-maintenance.js";
 export * from "./journal-fold-policy.js";
 export * from "./command-store.js";
+export * from "./command-scope-roots.js";
 export * from "./command-authority.js";
 export * from "./resource-store.js";
 export * from "./quota-registry.js";

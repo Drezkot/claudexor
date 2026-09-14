@@ -108,6 +108,32 @@ describe("CommandStore journaled updates (D1: params are immutable after accepta
     expect(update?.payload.record).not.toHaveProperty("params");
   });
 
+  it("keeps the pruned commands' project roots in the tombstone across restarts", () => {
+    const { root, journal } = openJournal();
+    const store = new CommandStore(journal);
+    const scoped = (r: string) => ({
+      mode: "agent",
+      prompt: "p",
+      scope: { kind: "project", root: r },
+    });
+    store.accept({ id: "job-p1", params: scoped("/tmp/p1"), idempotencyKey: "k1", clientId: "t" });
+    store.accept({ id: "job-p2", params: scoped("/tmp/p2"), idempotencyKey: "k2", clientId: "t" });
+    store.accept({ id: "job-none", params: { mode: "ask" }, idempotencyKey: "k3", clientId: "t" });
+    store.prune(["job-p1", "job-none"]);
+    expect(store.prunedScopeRoots()).toEqual(["/tmp/p1"]);
+    expect(journal.records(0, ["command.pruned"])[0]?.payload).toEqual({
+      ids: ["job-p1", "job-none"],
+      roots: ["/tmp/p1"],
+    });
+    // A legacy tombstone (no roots) still prunes and adds nothing.
+    journal.append("command.pruned", { ids: ["job-p2"] });
+    journal.close();
+    const reopened = new CommandStore(openJournal(root).journal);
+    expect(reopened.prunedScopeRoots()).toEqual(["/tmp/p1"]);
+    expect(reopened.get("job-p2")).toBeUndefined();
+    expect(reopened.records()).toEqual([]);
+  });
+
   it("still refuses an update that precedes its acceptance", () => {
     const { root, journal } = openJournal();
     journal.append("command.updated", {

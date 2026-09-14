@@ -3,6 +3,7 @@ import { join } from "node:path";
 import {
   DaemonClient,
   commandProjection,
+  commandScopeRoots,
   interactionProjection,
   operatorDecisionProjection,
   runEventProjection,
@@ -301,7 +302,10 @@ export async function main(): Promise<void> {
       global: journalManager,
       partitions: threads,
       diagnostics: startupDiagnostics,
-      commandRecords: () => commandStoreSlot.prepared().records(),
+      knownProjectRoots: () => {
+        const commands = commandStoreSlot.prepared();
+        return [...commandScopeRoots(commands.records()), ...commands.prunedScopeRoots()];
+      },
       normalPlane: {
         requested: () => shutdownRuntime!.requested(),
         armQuotaPolling: () => quotaPoller!.arm(),
