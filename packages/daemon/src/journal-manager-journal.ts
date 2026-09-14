@@ -7,7 +7,8 @@ import { journalFoldPolicy } from "./journal-fold-policy.js";
  * manager and every pass), opts into deferred maintenance
  * whenever a maintenance callback exists, and re-requests maintenance for the
  * live generation when an append crosses the compaction threshold — the
- * journal fires that hook once per crossing and re-arms it on install.
+ * journal fires that hook once per crossing and re-arms it when the pass
+ * settles (install, typed decline or a failed pass).
  */
 export function daemonJournalOptions(input: {
   rootDir: string;

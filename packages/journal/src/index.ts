@@ -299,11 +299,12 @@ export class DurableJournal extends JournalCore {
       },
     }).finally(() => {
       // Every pass that reached the data settles the growth baseline —
-      // install, real decline or failure alike (an install already set it to
-      // the installed size): the next attempt waits for a threshold of NEW
-      // bytes instead of re-folding the whole retained prefix, and failing
-      // again, on every following append (an unwritable staging directory,
-      // an ENOSPC window).
+      // install, real decline, a pass aborted in flight (it resolves as a
+      // declined `aborted` through this promise) or failure alike (an install
+      // already set it to the installed size): the next attempt waits for a
+      // threshold of NEW bytes instead of re-folding the whole retained
+      // prefix, and failing again, on every following append (an unwritable
+      // staging directory, an ENOSPC window).
       this.compactionBaselineBytes = this.knownFileBytes;
       options.signal?.removeEventListener("abort", abort);
       if (this.background?.promise === promise) this.background = null;

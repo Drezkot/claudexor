@@ -23,9 +23,9 @@ export interface DurableJournalOptions {
   /** Growth since the last completed maintenance pass that arms a crossing:
    * the file bytes appended after the last background pass that reached the
    * data (an install, a real decline or a failed pass), never the absolute
-   * file size, so a partition
-   * whose retained set alone exceeds the threshold is compacted once per
-   * threshold of new bytes rather than on every append. Under a fold the
+   * file size, so a partition whose retained set alone exceeds the threshold
+   * is compacted once per threshold of new bytes rather than on every append.
+   * Under a fold the
    * replay at open is the first completed pass: the baseline starts at the
    * file size minus what the fold retired while replaying, so a restart on an
    * already-compacted partition waits for a threshold of new bytes while a
@@ -40,8 +40,9 @@ export interface DurableJournalOptions {
   fold?: JournalFold;
   /** Fired at most once per threshold crossing after an append — a crossing
    * being `compactionThresholdBytes` of growth since the last completed pass —
-   * and re-armed when a maintenance pass completes (install or typed decline),
-   * so a daemon that dedupes in-flight requests sees every new crossing and a
+   * and re-armed when a maintenance pass completes (install, typed decline or
+   * a failed pass), so a daemon that dedupes in-flight requests sees every
+   * new crossing and a
    * file that stays large never re-fires on every append. Never fires after
    * `close()`. No timers, no persisted state. */
   onCompactionThreshold?: () => void;
