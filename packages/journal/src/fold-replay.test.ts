@@ -1,3 +1,4 @@
+import { randomBytes } from "node:crypto";
 import {
   closeSync,
   mkdirSync,
@@ -271,6 +272,39 @@ describe("fold at replay", () => {
     for (let n = 0; n < 4; n += 1) journal.append("again", payload);
     await Promise.resolve();
     expect(crossings).toHaveLength(3);
+  });
+
+  it("re-fires only after a threshold of NEW bytes once an install left the file large", async () => {
+    const crossings: number[] = [];
+    const journal = open({
+      compactionThresholdBytes: 4096,
+      onCompactionThreshold: () => crossings.push(journal.physicalBytes()),
+    });
+    // Incompressible retained history well above the threshold, plus one
+    // compressible record so the pass still reclaims bytes and installs.
+    for (let n = 0; n < 8; n += 1) {
+      journal.append("keep", { blob: randomBytes(1024).toString("base64") });
+    }
+    journal.append("fluff", { text: "x".repeat(16 * 1024) });
+    await Promise.resolve();
+    expect(crossings).toHaveLength(1);
+    expect(await journal.compactInBackground({ stagingDir })).toMatchObject({ records: 9 });
+    const installed = journal.physicalBytes();
+    expect(installed).toBeGreaterThan(4096); // still over the absolute size
+    expect(journal.atCompactionThreshold()).toBe(false);
+    // Appends worth less than a threshold of growth stay quiet — the absolute
+    // edge re-fired (and re-compacted) on every one of these.
+    const small = { text: "y".repeat(1000) };
+    journal.append("a", small);
+    journal.append("b", small);
+    await Promise.resolve();
+    expect(journal.physicalBytes() - installed).toBeLessThan(4096);
+    expect(crossings).toHaveLength(1);
+    journal.append("c", small);
+    journal.append("d", small);
+    await Promise.resolve();
+    expect(journal.physicalBytes() - installed).toBeGreaterThanOrEqual(4096);
+    expect(crossings).toHaveLength(2);
   });
 
   it("never fires the threshold hook after a synchronous close", async () => {

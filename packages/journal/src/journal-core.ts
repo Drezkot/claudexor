@@ -20,15 +20,22 @@ export interface DurableJournalOptions {
   now?: () => Date;
   epochFactory?: () => string;
   appendAndSync?: (fd: number, bytes: Buffer) => void;
+  /** Growth since the last completed maintenance pass that arms a crossing:
+   * the file bytes appended after the last install (or after a real
+   * capacity/no-reclaim decline), never the absolute file size, so a partition
+   * whose retained set alone exceeds the threshold is compacted once per
+   * threshold of new bytes rather than on every append. */
   compactionThresholdBytes?: number;
   /** The daemon opts into after-admission maintenance; standalone callers keep inline compaction. */
   deferCompaction?: boolean;
   /** Applied at replay and at background compaction; the retained set is what
    * `records()` sees while epoch/seq/chain state always follow the disk. */
   fold?: JournalFold;
-  /** Fired at most once per threshold crossing after an append; re-armed when
-   * a maintenance pass completes (install or typed decline), so a daemon that
-   * dedupes in-flight requests sees every new crossing. Never fires after
+  /** Fired at most once per threshold crossing after an append — a crossing
+   * being `compactionThresholdBytes` of growth since the last completed pass —
+   * and re-armed when a maintenance pass completes (install or typed decline),
+   * so a daemon that dedupes in-flight requests sees every new crossing and a
+   * file that stays large never re-fires on every append. Never fires after
    * `close()`. No timers, no persisted state. */
   onCompactionThreshold?: () => void;
 }
@@ -58,6 +65,10 @@ export abstract class JournalCore {
   protected writable = false;
   protected closed = false;
   protected thresholdNotified = false;
+  /** File size at the last completed pass over the data (0 at open): an
+   * install sets it to the installed size, a capacity/no-reclaim decline to
+   * the size it declined at. `atCompactionThreshold` measures growth from it. */
+  protected compactionBaselineBytes = 0;
   protected replayRetired = { count: 0, bytes: 0 };
 
   protected constructor(options: DurableJournalOptions) {
@@ -69,9 +80,11 @@ export abstract class JournalCore {
     this.path = join(this.partitionDir, "journal.bin");
   }
 
+  /** Growth-since-last-pass edge: true once the file grew by the threshold
+   * beyond the size the last completed pass left (or observed). */
   atCompactionThreshold(): boolean {
     return (
-      this.knownFileBytes >=
+      this.knownFileBytes - this.compactionBaselineBytes >=
       (this.options.compactionThresholdBytes ?? DEFAULT_COMPACTION_THRESHOLD_BYTES)
     );
   }
@@ -144,6 +157,7 @@ export abstract class JournalCore {
     this.nextSeq = result.nextSeq;
     this.previousFrameHash = result.previousFrameHash;
     this.knownFileBytes = result.knownFileBytes;
+    this.compactionBaselineBytes = result.knownFileBytes;
     this.thresholdNotified = false;
   }
 
@@ -165,6 +179,7 @@ export abstract class JournalCore {
     this.nextSeq = 1;
     this.previousFrameHash = ZERO_HASH;
     this.knownFileBytes = 0;
+    this.compactionBaselineBytes = 0;
     const recovery =
       error instanceof JournalRecoveryRequiredError
         ? error.recovery

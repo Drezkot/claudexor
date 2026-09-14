@@ -2043,18 +2043,23 @@ one in-flight promise serialize global and project partitions and coalesce
 repeated requests — a request that arrives during a generation's own flight
 runs one more pass after it, and a failed or declined pass never condemns the
 generation; new partitions use the same callback. Maintenance is edge-triggered
-on the byte threshold: the journal's `onCompactionThreshold` hook fires at most
-once per crossing after an append and is re-armed when a pass completes,
-install or typed decline, so a long-lived daemon that dedupes in-flight
-requests hears about every new crossing (and never after the journal is
-closed). Every pass ends in one daemon-log line that also lands in the startup
+on GROWTH: a crossing is a threshold of bytes appended since the last completed
+pass over the data — an install moves that baseline to the installed size, a
+capacity or no-reclaim decline to the size it declined at, and an immediate
+below-threshold, empty or aborted decline moves nothing — so a partition whose
+retained set alone exceeds the threshold (model receipts kept forever, retained
+params up to the byte cap) is compacted once per threshold of new bytes, never
+on every append. The journal's `onCompactionThreshold` hook fires at most once
+per crossing after an append and is re-armed when a pass completes, install or
+typed decline, so a long-lived daemon that dedupes in-flight requests hears
+about every new crossing (and never after the journal is closed). Every pass ends in one daemon-log line that also lands in the startup
 diagnostics record: `journal.records_retired` (`retainedCount`, `retiredCount`,
 `retiredBytes` beside the byte counts, plus the replay-time retirement the
 generation folded away at open) or `journal.compaction_declined` with its
 typed reason and bounds; below-threshold and empty passes stay silent, and no
 control-API field carries this yet. There is no maintenance job, persisted
-retry state, or manual upkeep requirement. The existing byte threshold remains
-unchanged.
+retry state, or manual upkeep requirement. The threshold value is unchanged;
+its meaning is growth since the last pass.
 
 `compactInBackground({stagingDir, signal?})` captures an immutable logical prefix,
 applies the journal's `fold` to it, streams the retained records through

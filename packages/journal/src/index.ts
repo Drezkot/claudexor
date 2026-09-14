@@ -296,11 +296,23 @@ export class DurableJournal extends JournalCore {
         this.installCompaction(candidate);
         return true;
       },
-    }).finally(() => {
-      options.signal?.removeEventListener("abort", abort);
-      if (this.background?.promise === promise) this.background = null;
-      this.thresholdNotified = false;
-    });
+    })
+      .then((outcome) => {
+        // A real pass over the data that could not shrink the file still moves
+        // the growth baseline: the next attempt waits for a threshold of NEW
+        // bytes (which may fold) instead of re-running on every append.
+        if (
+          "declined" in outcome &&
+          (outcome.reason === "capacity" || outcome.reason === "no_reclaim")
+        )
+          this.compactionBaselineBytes = this.knownFileBytes;
+        return outcome;
+      })
+      .finally(() => {
+        options.signal?.removeEventListener("abort", abort);
+        if (this.background?.promise === promise) this.background = null;
+        this.thresholdNotified = false;
+      });
     this.background = { controller, promise };
     return promise;
   }
@@ -395,7 +407,9 @@ export class DurableJournal extends JournalCore {
     });
   }
 
-  /** An immediate decline is a completed pass too: it re-arms the hook. */
+  /** An immediate decline is a completed pass too: it re-arms the hook. It
+   * never moves the growth baseline — nothing was observed over the data, and
+   * moving it on a below-threshold request would delay the first crossing. */
   private declined(reason: JournalCompactionDeclineReason): JournalCompactionDeclined {
     this.thresholdNotified = false;
     return declinedCompaction(reason);

@@ -56,6 +56,42 @@ describe("background compaction capacity", () => {
     }
   });
 
+  it("moves the growth baseline on a capacity decline so the next attempt waits for new bytes", async () => {
+    const crossings: number[] = [];
+    const journal = new DurableJournal({
+      rootDir: join(root, "journal"),
+      partition: "global",
+      deferCompaction: true,
+      compactionThresholdBytes: 4096,
+      now: () => new Date("2026-01-01T00:00:00Z"),
+      onCompactionThreshold: () => crossings.push(journal.physicalBytes()),
+    });
+    const row = () => ({ blob: randomBytes(768).toString("base64") });
+    try {
+      journal.appendBatch(Array.from({ length: 24 }, () => ({ type: "row", payload: row() })));
+      await Promise.resolve();
+      expect(crossings).toHaveLength(1);
+      expect(await journal.compactInBackground({ stagingDir })).toMatchObject({
+        declined: true,
+        reason: "capacity",
+      });
+      // The decline observed the file at this size: the hook is re-armed but a
+      // crossing now needs a threshold of NEW bytes, not the same large file.
+      const observed = journal.physicalBytes();
+      expect(journal.atCompactionThreshold()).toBe(false);
+      journal.append("more", row());
+      await Promise.resolve();
+      expect(journal.physicalBytes() - observed).toBeLessThan(4096);
+      expect(crossings).toHaveLength(1);
+      for (let n = 0; n < 4; n += 1) journal.append("more", row());
+      await Promise.resolve();
+      expect(journal.physicalBytes() - observed).toBeGreaterThanOrEqual(4096);
+      expect(crossings).toHaveLength(2);
+    } finally {
+      journal.close();
+    }
+  });
+
   it("compacts the same shape when it compresses under the cap", async () => {
     const journal = fixture((n) => ({ n, blob: "x".repeat(1024) }));
     try {
