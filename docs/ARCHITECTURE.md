@@ -251,14 +251,17 @@ at every wire boundary.
   full-record updates replay unchanged). Every partition replays and compacts
   through the daemon's fold policy (`journal-fold-policy.ts`), which decides
   what a partition may forget: a command keeps its acceptance and its latest
-  update (pruned ids forget both; model-operation receipts are never pruned), a
-  finished run keeps only its terminal event, a resolved question forgets its
-  request and resolution together, quota keeps the latest projection marker and
-  the latest unit per subject (a scoped prepare plus its adjacent upsert is one
-  unit), thread pings keep the latest revision, setup saves are kept whole and
-  a terminal save forgets the job's log lines; everything else — and anything
-  the policy cannot classify — is kept. Startup memory therefore follows the
-  retained set, not the file.
+  update; a prune tombstone forgets both, retires the pruned runs' journaled
+  events, and survives as the latest tombstone per root set so crash-GC keeps
+  those project roots (model-operation receipts are never pruned); a finished
+  run keeps only its terminal event; a resolved question forgets its request
+  and resolution together; quota keeps the latest projection marker and, per
+  subject, the latest scoped prepare and the latest upsert (adjacency on disk
+  still decides which pair commits; at most one stale prepare frame per subject
+  survives); thread pings keep the latest revision; setup saves are kept whole
+  and a terminal save forgets the job's log lines; everything else — and
+  anything the policy cannot classify — is kept. Startup memory therefore
+  follows the retained set, not the file.
 - `packages/cli`: thin command surface plus local host-integration lifecycle
   (`claudexor plugin`) for generated Claude Code/Codex/Cursor/OpenCode
   skill/MCP artifacts and command artifacts where hosts support them. Plugin
@@ -1963,8 +1966,9 @@ enforcement: the first successful serve of the release that ships the fold
 advances the floor to that version, after which the older engine refuses the
 root typed (`root_authority_floor_regression`) — no second mechanism. A first
 start on a legacy (unfolded) journal folds at replay, so its startup memory
-already follows the retained set; the first background compaction then
-rewrites the partition file.
+already follows the retained set; the first background compaction rewrites the
+partition file at that start when the folded replay retired at least a
+threshold's worth of bytes, and otherwise after a threshold of new bytes.
 
 Every shutdown trigger — SIGTERM/SIGINT, the `claudexor.shutdown` socket RPC,
 a startup failure — enters ONE state machine (`DaemonRuntimeShutdown
