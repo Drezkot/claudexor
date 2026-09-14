@@ -18,10 +18,9 @@ export class JournalMaintenance {
 
   constructor(
     rootDir: string,
-    private readonly warn: (message: string) => void,
-    /** Receives the typed decline / `journal.records_retired` lines (daemon log
-     * plus startup diagnostics in the composition root); defaults to `warn`. */
-    private readonly note: (message: string) => void = warn,
+    /** One sink for failures, typed declines and `journal.records_retired`
+     * receipts (the daemon log plus startup diagnostics in the composition root). */
+    private readonly log: (message: string) => void,
   ) {
     this.stagingDir = join(rootDir, "journal-compaction");
   }
@@ -96,7 +95,7 @@ export class JournalMaintenance {
           outcome,
           journal.retiredAtReplay(),
         );
-        if (line) this.note(line);
+        if (line) this.log(line);
       } catch (error) {
         this.warnFailure(error);
       }
@@ -117,7 +116,7 @@ export class JournalMaintenance {
   }
 
   private warnFailure(error: unknown): void {
-    this.warn(
+    this.log(
       `journal maintenance failed: ${error instanceof Error ? error.message : String(error)}`,
     );
   }

@@ -30,11 +30,12 @@ afterEach(async () => {
   rmSync(root, { recursive: true, force: true });
 });
 function queue() {
-  const warn = vi.fn();
-  const note = vi.fn();
-  const maintenance = new JournalMaintenance(root, warn, note);
+  const log = vi.fn<(message: string) => void>();
+  const maintenance = new JournalMaintenance(root, log);
   queues.push(maintenance);
-  return { maintenance, warn, note };
+  const lines = (prefix: string) =>
+    log.mock.calls.map(([m]) => m).filter((m) => m.startsWith(prefix));
+  return { maintenance, log, lines };
 }
 /** A small seed, or a legacy-shaped large one: 9 MiB of run progress the
  * daemon fold retires once the terminal follows, so a first start over it
@@ -208,52 +209,53 @@ describe("journal maintenance generations", () => {
         retiredCount: 7,
         retiredBytes: 60,
       });
-    const { maintenance, warn, note } = queue();
+    const { maintenance, log, lines } = queue();
     maintenance.request(first);
     maintenance.request(second);
     maintenance.arm();
     await vi.waitFor(() => expect(calls).toHaveBeenCalledTimes(2));
-    expect(warn).toHaveBeenCalledWith(expect.stringContaining("preparation failed"));
-    expect(note).toHaveBeenCalledWith(
+    expect(lines("journal maintenance failed")).toEqual([
+      expect.stringContaining("preparation failed"),
+    ]);
+    expect(lines("journal.compaction_declined")).toEqual([
       "journal.compaction_declined partition=project:second reason=no_reclaim compressedBytes=10 cap=5",
-    );
+    ]);
     // A failed or declined generation is not condemned: the threshold hook
     // re-requests it after the next crossing, and the queue runs it again.
     maintenance.request(first);
     maintenance.request(second);
     await vi.waitFor(() => expect(calls).toHaveBeenCalledTimes(4));
-    expect(note).toHaveBeenCalledTimes(2); // below_threshold stays silent
-    expect(note).toHaveBeenLastCalledWith(
+    expect(log).toHaveBeenCalledTimes(3); // below_threshold stays silent
+    expect(lines("journal.records_retired")).toEqual([
       "journal.records_retired partition=project:second retainedCount=3 retiredCount=7 retiredBytes=60 retiredAtReplayCount=0 retiredAtReplayBytes=0 beforeBytes=100 afterBytes=40",
-    );
+    ]);
     const third = journal("project:new");
     maintenance.request(third);
     await vi.waitFor(() => expect(calls).toHaveBeenCalledTimes(5));
   });
 
   it("hears every threshold crossing: a second crossing after an install runs another pass", async () => {
-    const { maintenance, note } = queue();
+    const { maintenance, lines } = queue();
     const { value, slot } = manager("global", maintenance.request);
     value.start(); // recoverAfterStartup requests once: below threshold, silent
     maintenance.arm();
     const journal = slot.current();
     const big = () => ({ text: "x".repeat(9 * 1024 * 1024) });
     journal.append("history", big()); // crosses: the journal's hook requests a pass
-    await vi.waitFor(
-      () => expect(note).toHaveBeenCalledWith(expect.stringContaining("journal.records_retired")),
-      { timeout: 20_000 },
-    );
-    expect(note).toHaveBeenLastCalledWith(
-      expect.stringMatching(
-        /^journal\.records_retired partition=global retainedCount=\d+ retiredCount=0 retiredBytes=0 retiredAtReplayCount=0 retiredAtReplayBytes=0 beforeBytes=\d+ afterBytes=\d+$/,
-      ),
+    await vi.waitFor(() => expect(lines("journal.records_retired")).toHaveLength(1), {
+      timeout: 20_000,
+    });
+    expect(lines("journal.records_retired")[0]).toMatch(
+      /^journal\.records_retired partition=global retainedCount=\d+ retiredCount=0 retiredBytes=0 retiredAtReplayCount=0 retiredAtReplayBytes=0 beforeBytes=\d+ afterBytes=\d+$/,
     );
     const compacted = journal.physicalBytes();
     expect(compacted).toBeLessThan(9 * 1024 * 1024);
     // The install re-armed the hook: the next crossing is heard through the
     // in-flight dedupe and runs one more pass, not swallowed.
     journal.append("history", big());
-    await vi.waitFor(() => expect(note).toHaveBeenCalledTimes(2), { timeout: 20_000 });
+    await vi.waitFor(() => expect(lines("journal.records_retired")).toHaveLength(2), {
+      timeout: 20_000,
+    });
     expect(journal.physicalBytes()).toBeLessThan(compacted + 9 * 1024 * 1024);
     expect(journal.atCompactionThreshold()).toBe(false);
   });
