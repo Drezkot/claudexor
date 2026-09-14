@@ -18,9 +18,9 @@ import {
   type JournalManagerPreparation,
   type ProjectPartitionsPreparation,
   type RootAuthorityGrant,
+  processMemoryFields,
 } from "@claudexor/daemon";
 import { JournalRecoveryRequiredError } from "@claudexor/journal";
-import { processMemoryFields } from "@claudexor/util";
 import { CONTROL_PROTOCOL_MAJOR } from "@claudexor/schema";
 
 /** Single canonical admission snapshot; both transports read the SAME fact. */

@@ -303,17 +303,3 @@ function runDirectoryFlushOwnershipCheck(): void {
   walk(packages);
   expect(owners).toEqual(["util/src/index.ts"]);
 }
-
-describe("processMemoryFields", () => {
-  it("prints whole mebibytes for the three footprint numbers", async () => {
-    const { processMemoryFields } = await import("./process-memory.js");
-    expect(
-      processMemoryFields({
-        rss: 412 * 1024 * 1024 + 1,
-        heapUsed: 180.4 * 1024 * 1024,
-        external: 0,
-      }),
-    ).toBe("rssMb=412 heapUsedMb=180 externalMb=0");
-    expect(processMemoryFields()).toMatch(/^rssMb=\d+ heapUsedMb=\d+ externalMb=\d+$/);
-  });
-});

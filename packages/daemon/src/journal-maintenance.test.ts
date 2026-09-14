@@ -13,7 +13,11 @@ import { setImmediate } from "node:timers/promises";
 import { DurableJournal } from "@claudexor/journal";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { JournalManager } from "./journal-manager.js";
-import { describeCompactionOutcome, JournalMaintenance } from "./journal-maintenance.js";
+import {
+  describeCompactionOutcome,
+  JournalMaintenance,
+  processMemoryFields,
+} from "./journal-maintenance.js";
 
 let root: string;
 const managers: JournalManager[] = [];
@@ -373,5 +377,18 @@ describe("describeCompactionOutcome", () => {
         describeCompactionOutcome("global", { declined: true, reason }, replay, memory),
       ).toBeNull();
     }
+  });
+});
+
+describe("processMemoryFields", () => {
+  it("prints whole mebibytes for the three footprint numbers", () => {
+    expect(
+      processMemoryFields({
+        rss: 412 * 1024 * 1024 + 1,
+        heapUsed: 180.4 * 1024 * 1024,
+        external: 0,
+      }),
+    ).toBe("rssMb=412 heapUsedMb=180 externalMb=0");
+    expect(processMemoryFields()).toMatch(/^rssMb=\d+ heapUsedMb=\d+ externalMb=\d+$/);
   });
 });
