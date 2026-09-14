@@ -427,8 +427,9 @@ describe("Codex native SSE outcomes", () => {
       ),
       route,
     );
-    expect(result.outcome).toBe("unknown");
+    expect(result.outcome).toBe("completed");
     expect(result.message).toBeNull();
+    expect(result.problem?.code).toBe("response_rejected");
   });
   it("rejects a contradictory terminal status and malformed UTF-8", async () => {
     const contradictory = await readResponsesStream(

@@ -525,6 +525,82 @@
             }
           ]
         },
+        "failureEvidence": {
+          "type": "object",
+          "properties": {
+            "bodyBase64": {
+              "type": "string"
+            },
+            "receivedBytes": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "bodyComplete": {
+              "type": "boolean",
+              "description": "True only when the response reader observed EOF."
+            },
+            "stage": {
+              "$ref": "#/definitions/ModelCallResult/properties/message/anyOf/0/properties/tool_calls/items/properties/function/properties/name"
+            },
+            "errors": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "message": {
+                    "type": "string"
+                  },
+                  "stack": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "code": {
+                    "anyOf": [
+                      {
+                        "type": [
+                          "string",
+                          "number"
+                        ]
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                },
+                "required": [
+                  "name",
+                  "message",
+                  "stack",
+                  "code"
+                ],
+                "additionalProperties": false
+              },
+              "description": "Original exception followed by causes and AggregateError members in depth-first order; empty when none was thrown."
+            },
+            "causeCycle": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "bodyBase64",
+            "receivedBytes",
+            "bodyComplete",
+            "stage",
+            "errors",
+            "causeCycle"
+          ],
+          "additionalProperties": false,
+          "description": "Private failed-response evidence: every byte returned to the reader, never an unreceived suffix. Retained only inside the model result resource when requested."
+        },
         "nativeContinuation": {
           "anyOf": [
             {

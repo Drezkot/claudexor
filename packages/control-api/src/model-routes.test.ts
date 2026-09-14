@@ -52,6 +52,50 @@ async function fixture(services: DaemonControlApiOptions["services"], recovery =
 }
 
 describe("raw model operation HTTP surface", () => {
+  it("negotiates exact failure capture without changing the body or unrelated query compatibility", async () => {
+    const createModelOperation = vi.fn(async () => detail());
+    const f = await fixture({ createModelOperation });
+    const headers = { "Idempotency-Key": "capture" };
+    for (const suffix of ["", "?captureFailureEvidence=false", "?unrelated=ignored"]) {
+      expect(
+        (await f.request(`/model-operations${suffix}`, { request: ref }, headers)).status,
+      ).toBe(202);
+      expect(createModelOperation).toHaveBeenLastCalledWith(ref, "capture");
+    }
+    expect(
+      (
+        await f.request(
+          "/model-operations?captureFailureEvidence=true&unrelated=ignored",
+          { request: ref },
+          headers,
+        )
+      ).status,
+    ).toBe(202);
+    expect(createModelOperation).toHaveBeenLastCalledWith(ref, "capture", true);
+    for (const value of ["", "1", "TRUE", "true&captureFailureEvidence=false"]) {
+      expect(
+        (
+          await f.request(
+            `/model-operations?captureFailureEvidence=${value}`,
+            { request: ref },
+            headers,
+          )
+        ).status,
+      ).toBe(400);
+    }
+    expect(createModelOperation).toHaveBeenCalledTimes(4);
+    expect(
+      OPERATION_CATALOG.operations.find(
+        (op) => op.method === "POST" && op.path === "/v2/model-operations",
+      )?.parameters,
+    ).toContainEqual(
+      expect.objectContaining({
+        name: "captureFailureEvidence",
+        location: "query",
+        enum: ["true", "false"],
+      }),
+    );
+  });
   it("requires idempotency before accepting refs and never enqueues an Agent Run", async () => {
     const createModelOperation = vi.fn(async () => detail());
     const f = await fixture({ createModelOperation });

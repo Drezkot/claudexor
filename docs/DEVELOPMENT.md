@@ -266,6 +266,13 @@ Tests and local smokes must never touch real user state:
 - Managed secrets always use the daemon-owned v2 0600 file store, so a
   disposable `CLAUDEXOR_CONFIG_DIR` fully contains test secret I/O. The public
   CLI cannot select a storage backend.
+- Model-response changes exercise the actual adapter through the model-operation
+  and resource/HTTP owners with injected provider I/O. Pin byte-faithful failed
+  SSE and HTTP-body evidence, original exception causes, legacy query/result
+  compatibility and same-key replay, plus terminal usage when message conversion
+  fails. Test public receipts separately from private result bytes, including a
+  large failed result through restart, GET and ACK/expiry. The contract lives in
+  [Caller-owned model operations](ARCHITECTURE.md#caller-owned-model-operations).
 - Setup-job/runner tests inject filesystem, clock, launcher, process identity,
   signal, and timer dependencies and use temp roots only. They checksum the
   legacy registry before/after, exercise PID reuse and symlink/path fences, and

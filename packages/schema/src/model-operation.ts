@@ -151,6 +151,34 @@ export const ModelCostEvidence = CostEvidence.extend({
 );
 export type ModelCostEvidence = z.infer<typeof ModelCostEvidence>;
 
+export const ModelFailureEvidence = z
+  .object({
+    bodyBase64: z.string(),
+    receivedBytes: z.number().int().nonnegative(),
+    bodyComplete: z.boolean().describe("True only when the response reader observed EOF."),
+    stage: NonBlankString,
+    errors: z
+      .array(
+        z
+          .object({
+            name: z.string().nullable(),
+            message: z.string(),
+            stack: z.string().nullable(),
+            code: z.union([z.string(), z.number()]).nullable(),
+          })
+          .strict(),
+      )
+      .describe(
+        "Original exception followed by causes and AggregateError members in depth-first order; empty when none was thrown.",
+      ),
+    causeCycle: z.boolean(),
+  })
+  .strict()
+  .describe(
+    "Private failed-response evidence: every byte returned to the reader, never an unreceived suffix. Retained only inside the model result resource when requested.",
+  );
+export type ModelFailureEvidence = z.infer<typeof ModelFailureEvidence>;
+
 export const ModelCallResult = z
   .object({
     outcome: z.enum(["completed", "incomplete", "failed", "unknown"]),
@@ -161,6 +189,7 @@ export const ModelCallResult = z
     appliedOptions: ModelCallOptions,
     processing: ProcessingReceipt.optional(),
     problem: ControlProblem.nullable(),
+    failureEvidence: ModelFailureEvidence.optional(),
     nativeContinuation: ModelNativeContinuation.nullable()
       .optional()
       .describe(
@@ -312,7 +341,11 @@ export const ModelResponseCustody = z
 export type ModelResponseCustody = z.infer<typeof ModelResponseCustody>;
 
 export const ModelOperationParams = z
-  .object({ kind: z.literal("model"), request: ModelPayloadRef })
+  .object({
+    kind: z.literal("model"),
+    request: ModelPayloadRef,
+    captureFailureEvidence: z.literal(true).optional(),
+  })
   .strict();
 export type ModelOperationParams = z.infer<typeof ModelOperationParams>;
 

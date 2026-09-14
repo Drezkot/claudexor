@@ -31,6 +31,7 @@ import {
 } from "./responses.js";
 import { CODEX_VENDOR_CLI_VERSION } from "./vendor-cli-version.js";
 import { processingAdmissionProblem } from "./processing-refusal.js";
+import { ResponseFailureCapture } from "./failure-evidence.js";
 
 const ENDPOINT = "https://chatgpt.com/backend-api/codex";
 const CLIENT = "claudexor";
@@ -229,6 +230,7 @@ export function createCodexModelAdapter(deps: CodexModelAdapterDeps = {}): Model
         model: request.model,
       };
       let dispatched = false;
+      const capture = new ResponseFailureCapture(context.captureFailureEvidence);
       let processing: ProcessingReceipt | undefined;
       let nativeContinuation: ModelNativeContinuation | null | undefined =
         request.nativeContinuation === undefined ? undefined : null;
@@ -343,18 +345,13 @@ export function createCodexModelAdapter(deps: CodexModelAdapterDeps = {}): Model
         });
         if (!response.ok) {
           const result = emptyModelResult({ ...route, model: null });
-          let error: unknown = null;
-          try {
-            error = await response.json();
-          } catch {
-            /* HTTP status remains an authoritative refusal. */
-          }
+          const error = await capture.readRefusal(response);
           result.problem = processingAdmissionProblem(
             authenticatedProblem(response, error, auth, now()),
             request.options,
             processing,
           );
-          return withTurnState(result);
+          return withTurnState(capture.finish(result));
         }
         // Capture before reading the stream. A truncated body still owns this
         // same turn, and an already captured first header wins on later calls.
@@ -362,7 +359,9 @@ export function createCodexModelAdapter(deps: CodexModelAdapterDeps = {}): Model
         if (nativeContinuation === null && turnState) {
           nativeContinuation = { route, format: TURN_FORMAT, payload: { turnState } };
         }
-        return withTurnState(await readResponsesStream(response, route));
+        return withTurnState(
+          await readResponsesStream(response, route, context.captureFailureEvidence),
+        );
       } catch (error) {
         const result = emptyModelResult({ ...route, model: null });
         result.outcome = dispatched ? "unknown" : "failed";
@@ -381,7 +380,8 @@ export function createCodexModelAdapter(deps: CodexModelAdapterDeps = {}): Model
                     ? "The model operation was cancelled before dispatch."
                     : "The Codex model request could not be prepared.",
               ).problem;
-        return withTurnState(result);
+        if (dispatched) capture.caught(error);
+        return withTurnState(dispatched ? capture.finish(result) : result);
       }
     },
   };
