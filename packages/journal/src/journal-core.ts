@@ -24,7 +24,13 @@ export interface DurableJournalOptions {
    * the file bytes appended after the last install (or after a real
    * capacity/no-reclaim decline), never the absolute file size, so a partition
    * whose retained set alone exceeds the threshold is compacted once per
-   * threshold of new bytes rather than on every append. */
+   * threshold of new bytes rather than on every append. Under a fold the
+   * replay at open is the first completed pass: the baseline starts at the
+   * file size minus what the fold retired while replaying, so a restart on an
+   * already-compacted partition waits for a threshold of new bytes while a
+   * legacy partition whose replay retires a threshold's worth fires at once.
+   * Without a fold the baseline starts at zero and the inline open-time
+   * compaction keeps its absolute-size trigger. */
   compactionThresholdBytes?: number;
   /** The daemon opts into after-admission maintenance; standalone callers keep inline compaction. */
   deferCompaction?: boolean;
@@ -65,9 +71,10 @@ export abstract class JournalCore {
   protected writable = false;
   protected closed = false;
   protected thresholdNotified = false;
-  /** File size at the last completed pass over the data (0 at open): an
-   * install sets it to the installed size, a capacity/no-reclaim decline to
-   * the size it declined at. `atCompactionThreshold` measures growth from it. */
+  /** File size at the last completed pass over the data: a folded replay
+   * sets it to the size minus what it retired (0 without a fold), an install
+   * to the installed size, a capacity/no-reclaim decline to the size it
+   * declined at. `atCompactionThreshold` measures growth from it. */
   protected compactionBaselineBytes = 0;
   protected replayRetired = { count: 0, bytes: 0 };
 
@@ -106,9 +113,18 @@ export abstract class JournalCore {
     this.nextSeq = result.nextSeq;
     this.previousFrameHash = result.previousFrameHash;
     this.knownFileBytes = result.knownFileBytes;
+    this.compactionBaselineBytes = this.replayBaselineBytes();
     if (result.discardedBytes > 0)
       this.recovery = { status: "ready", discardedTailBytes: result.discardedBytes };
     return result.discardedBytes;
+  }
+
+  /** A folded replay is a completed pass: what it retired is the growth still
+   * to reclaim (the retired bytes are logical sizes, so the result is clamped
+   * at zero). Without a fold nothing was evaluated and the baseline stays 0. */
+  protected replayBaselineBytes(): number {
+    if (!this.options.fold) return 0;
+    return Math.max(0, this.knownFileBytes - this.replayRetired.bytes);
   }
 
   protected intentPath(): string {

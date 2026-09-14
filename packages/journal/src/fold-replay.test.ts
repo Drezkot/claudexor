@@ -13,7 +13,12 @@ import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { COMPACTED_SNAPSHOT, replayFrames } from "./frame-codec.js";
 import { readFrames } from "./frame-reader.js";
-import { DurableJournal, type DurableJournalOptions, type JournalFold } from "./index.js";
+import {
+  DurableJournal,
+  keepEverything,
+  type DurableJournalOptions,
+  type JournalFold,
+} from "./index.js";
 
 // Small chunks so a few kilobytes of history span several snapshot frames.
 vi.mock("./frame-codec.js", async (original) => ({
@@ -305,6 +310,68 @@ describe("fold at replay", () => {
     await Promise.resolve();
     expect(journal.physicalBytes() - installed).toBeGreaterThanOrEqual(4096);
     expect(crossings).toHaveLength(2);
+  });
+
+  it("reopens an already-compacted partition quiet: the folded replay is a completed pass", async () => {
+    const seeded = open({ fold: keepEverything, compactionThresholdBytes: 4096 });
+    for (let n = 0; n < 8; n += 1) {
+      seeded.append("keep", { blob: randomBytes(1024).toString("base64") });
+    }
+    seeded.append("fluff", { text: "x".repeat(16 * 1024) });
+    expect(await seeded.compactInBackground({ stagingDir })).toMatchObject({ records: 9 });
+    const installed = seeded.physicalBytes();
+    expect(installed).toBeGreaterThan(4096);
+    seeded.close();
+    // A restart on the installed file (still over the absolute size) must not
+    // rewrite it again to reclaim nothing: the replay retired nothing, so the
+    // baseline is the file itself and only a threshold of NEW bytes crosses.
+    const crossings: number[] = [];
+    const reopened = open({
+      fold: keepEverything,
+      compactionThresholdBytes: 4096,
+      onCompactionThreshold: () => crossings.push(reopened.physicalBytes()),
+    });
+    expect(reopened.physicalBytes()).toBe(installed);
+    expect(reopened.retiredAtReplay()).toEqual({ count: 0, bytes: 0 });
+    expect(reopened.atCompactionThreshold()).toBe(false);
+    expect(await reopened.compactInBackground({ stagingDir })).toEqual({
+      declined: true,
+      reason: "below_threshold",
+    });
+    const small = { text: "y".repeat(1000) };
+    reopened.append("a", small);
+    reopened.append("b", small);
+    await Promise.resolve();
+    expect(crossings).toEqual([]);
+    reopened.append("c", small);
+    reopened.append("d", small);
+    await Promise.resolve();
+    expect(crossings).toHaveLength(1);
+    expect(await reopened.compactInBackground({ stagingDir })).toMatchObject({ records: 13 });
+    expect(reopened.atCompactionThreshold()).toBe(false);
+  });
+
+  it("fires once at reopen when the folded replay retires a threshold's worth of bytes", async () => {
+    seed(48);
+    const journal = open({ fold: dropHistory, compactionThresholdBytes: 4096 });
+    expect(journal.retiredAtReplay().count).toBe(47);
+    expect(journal.retiredAtReplay().bytes).toBeGreaterThanOrEqual(4096);
+    expect(journal.atCompactionThreshold()).toBe(true);
+    expect(await journal.compactInBackground({ stagingDir })).toMatchObject({
+      records: 1,
+      retainedCount: 1,
+    });
+    expect(journal.physicalBytes()).toBeLessThan(4096);
+    expect(journal.atCompactionThreshold()).toBe(false);
+    expect(await journal.compactInBackground({ stagingDir })).toEqual({
+      declined: true,
+      reason: "below_threshold",
+    });
+    journal.close();
+    // Without a fold nothing was evaluated at replay: the absolute-size
+    // trigger of the standalone inline path is unchanged.
+    seed(48);
+    expect(open({ compactionThresholdBytes: 4096 }).atCompactionThreshold()).toBe(true);
   });
 
   it("never fires the threshold hook after a synchronous close", async () => {

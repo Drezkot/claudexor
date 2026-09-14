@@ -92,6 +92,7 @@ export class DurableJournal extends JournalCore {
       this.previousFrameHash = prepared.previousFrameHash;
       this.knownFileBytes = prepared.knownFileBytes;
       this.replayRetired = { count: prepared.retiredCount, bytes: prepared.retiredBytes };
+      this.compactionBaselineBytes = this.replayBaselineBytes();
       return;
     }
     ensureCanonicalPrivateDirectory(options.rootDir);

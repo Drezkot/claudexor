@@ -2050,7 +2050,12 @@ capacity or no-reclaim decline to the size it declined at, and an immediate
 below-threshold, empty or aborted decline moves nothing — so a partition whose
 retained set alone exceeds the threshold (model receipts kept forever, retained
 params up to the byte cap) is compacted once per threshold of new bytes, never
-on every append. The journal's `onCompactionThreshold` hook fires at most once
+on every append, and a partition that declined re-runs only after a threshold
+of new bytes. Under a fold the replay at open is itself the first completed
+pass — the baseline starts at the file size minus what the fold retired while
+replaying — so a restart on an already-compacted partition above the threshold
+does not rewrite it to reclaim nothing, while a legacy partition whose replay
+retires a threshold's worth is compacted on its first start. The journal's `onCompactionThreshold` hook fires at most once
 per crossing after an append and is re-armed when a pass completes, install or
 typed decline, so a long-lived daemon that dedupes in-flight requests hears
 about every new crossing (and never after the journal is closed). Every pass ends in one daemon-log line that also lands in the startup

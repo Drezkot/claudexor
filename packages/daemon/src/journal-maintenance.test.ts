@@ -36,6 +36,9 @@ function queue() {
   queues.push(maintenance);
   return { maintenance, warn, note };
 }
+/** A small seed, or a legacy-shaped large one: 9 MiB of run progress the
+ * daemon fold retires once the terminal follows, so a first start over it
+ * measures a threshold of reclaimable growth at replay. */
 function journal(partition: string, large = false) {
   const value = new DurableJournal({
     rootDir: join(root, "journal"),
@@ -43,7 +46,18 @@ function journal(partition: string, large = false) {
     deferCompaction: true,
   });
   journals.push(value);
-  value.append("history", { text: large ? "x".repeat(9 * 1024 * 1024) : "small" });
+  if (!large) {
+    value.append("history", { text: "small" });
+    return value;
+  }
+  const event = (type: string, payload: unknown) => ({
+    run_id: "run-seed",
+    task_id: "task-seed",
+    type,
+    payload,
+  });
+  value.append("run.event", event("output.ready", { text: "x".repeat(9 * 1024 * 1024) }));
+  value.append("run.event", event("run.completed", { lifecycle: "succeeded" }));
   return value;
 }
 function manager(partition: string, requestMaintenance?: (journal: DurableJournal) => void) {
@@ -119,7 +133,7 @@ describe("journal maintenance generations", () => {
     expect(active.physicalBytes()).toBeGreaterThanOrEqual(before);
     maintenance.arm();
     await vi.waitFor(() => expect(active.physicalBytes()).toBeLessThan(before));
-    expect(active.sequenceAfter(cursor)).toBe(2);
+    expect(active.sequenceAfter(cursor)).toBe(3);
     const defaultSeed = journal("project:default", true);
     defaultSeed.close();
     const inline = manager("project:default");
