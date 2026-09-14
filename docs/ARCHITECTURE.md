@@ -255,7 +255,10 @@ at every wire boundary.
   events, and survives as the latest tombstone per root set so crash-GC keeps
   those project roots (model-operation receipts are never pruned); a finished
   run keeps only its terminal event; a resolved question forgets its request
-  and resolution together; quota keeps the latest projection marker and, per
+  and resolution together (answering an already-resolved question after a
+  restart reports `not_found` rather than `already_resolved` — both
+  non-delivery statuses; within one process life `already_resolved` is
+  unchanged); quota keeps the latest projection marker and, per
   subject, the latest scoped prepare and the latest upsert (adjacency on disk
   still decides which pair commits; at most one stale prepare frame per subject
   survives); thread pings keep the latest revision; setup saves are kept whole
