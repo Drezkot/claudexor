@@ -288,14 +288,28 @@ function openPair(root: string, prepare = false) {
 
 /** A partition whose history carries one exact duplicate frame — the
  * corruption the projections' own integrity checks exist for. */
-function buildDuplicateFixture(kind: "terminal" | "request"): string {
+function buildDuplicateFixture(kind: "terminal" | "request" | "accepted"): string {
   const root = realpathSync.native(mkdtempSync(join(tmpdir(), "claudexor-fold-dup-")));
   roots.push(root);
   const journal = new DurableJournal({ rootDir: join(root, "journal"), partition: "global", now });
   const runEvents = new RunEventStore(journal);
   const interactions = new InteractionStore(journal);
   runEvents.record(journaledRunEventCopy(runEvent("run-x", "run.created", { mode: "ask" }, 1)));
-  if (kind === "terminal") {
+  if (kind === "accepted") {
+    // Same id and idempotency key, conflicting request digest.
+    const commands = new CommandStore(journal, now);
+    commands.accept({
+      id: "job-x",
+      params: { mode: "ask" },
+      idempotencyKey: "key-x",
+      clientId: "t",
+    });
+    const [accepted] = journal.records<{ requestDigest: string }>(0, ["command.accepted"]);
+    journal.append("command.accepted", {
+      ...accepted!.payload,
+      requestDigest: `sha256:${"f".repeat(64)}`,
+    });
+  } else if (kind === "terminal") {
     const terminal = runEvent("run-x", "run.completed", { lifecycle: "succeeded" }, 2);
     runEvents.record(terminal);
     runEvents.record(terminal);
@@ -396,9 +410,9 @@ describe("journal fold policy verdicts", () => {
     expect(journalFoldVerdict(record)).toEqual(journalFoldVerdict({ ...record, seq: 3 }));
   });
 
-  it("keys commands per id; a prune tombstone forgets the ids and their runs, and survives per root set", () => {
+  it("groups acceptances per id, slots updates; a prune tombstone forgets the ids and their runs, and survives per root set", () => {
     expect(journalFoldVerdict(view("command.accepted", { record: { id: "job-1" } }))).toEqual({
-      slot: "c:job-1:a",
+      group: "c:job-1:a",
     });
     expect(journalFoldVerdict(view("command.updated", { record: { id: "job-1" } }))).toEqual({
       slot: "c:job-1:u",
@@ -632,6 +646,18 @@ describe("journal fold policy replay equivalence", () => {
       const expected = failure(() => new InteractionStore(plain));
       expect(expected).toEqual({ name: "Error", message: "duplicate interaction request history" });
       expect(failure(() => new InteractionStore(folded))).toEqual(expected);
+    }
+    {
+      const { folded, plain, retained } = openPair(buildDuplicateFixture("accepted"));
+      expect(ofType(retained, "command.accepted")).toHaveLength(2);
+      const replayCommands = (journal: DurableJournal) => () =>
+        new CommandStore(journal, now).validateProjection();
+      const expected = failure(replayCommands(plain));
+      expect(expected).toEqual({
+        name: "Error",
+        message: "conflicting command idempotency history",
+      });
+      expect(failure(replayCommands(folded))).toEqual(expected);
     }
   });
 

@@ -11,21 +11,27 @@
  * it cannot classify.
  *
  * Invariants the projections replay under (the equivalence test pins them):
- *   - a command keeps its `command.accepted` and its latest `command.updated`;
+ *   - a command keeps its `command.accepted` (a group per id, so a duplicate
+ *     acceptance survives) and its latest `command.updated`;
  *     `command.pruned` forgets both plus the pruned runs' journaled run events,
  *     and survives itself as the latest tombstone per root set so crash-GC keeps
  *     the pruned commands' project roots (model-operation receipts are never
  *     pruned by retention — INV-064);
  *   - a terminal run keeps its terminal `run.event` (exactly one in a
- *     well-formed journal; duplicate terminals all survive, so replay
- *     validation fails on them as loudly as on an unfolded journal); a live
- *     run keeps `run.created` plus its journaled progress events;
+ *     well-formed journal; duplicate terminals survive until the run's prune
+ *     tombstone retires the whole group, so replay validation fails on them
+ *     as loudly as on an unfolded journal); a live run keeps `run.created`
+ *     plus its journaled progress events;
  *   - a resolved interaction forgets its request AND its resolution as a pair
  *     through the resolution (a resolution follows its request, so retiring
  *     on the resolution can never leave a partial pair — an `interrupted` or
  *     `run_terminal` resolution lands AFTER the run's terminal event); a
  *     pending request is kept per id as a group, so a duplicate request frame
- *     survives for the InteractionStore's own duplicate check;
+ *     survives for the InteractionStore's own duplicate check until its
+ *     resolution retires the whole group. Every `interaction.resolved` frame
+ *     is dropped, so an orphan or duplicate resolution the unfolded replay
+ *     refuses ("interaction resolution precedes request") is forgotten on the
+ *     folded path — inherent in the pair rule, disclosed;
  *   - quota keeps the latest projection marker and, per subject key, two
  *     slots: the latest scoped prepare and the latest upsert. Sequence numbers
  *     are preserved, so the registry's adjacency check (`upsert.seq ===
@@ -59,7 +65,10 @@ function journalFoldVerdict(record: FoldRecord): FoldVerdict {
   try {
     switch (record.type) {
       case "command.accepted":
-        return slotOrKeep(commandId(record.payload), (id) => `c:${id}:a`);
+        // A group per id, never a slot: a duplicate acceptance (same id,
+        // conflicting digest) must survive for the CommandStore's own
+        // idempotency-history check, as on an unfolded journal.
+        return groupOrKeep(commandId(record.payload), (id) => `c:${id}:a`);
       case "command.updated":
         return slotOrKeep(commandId(record.payload), (id) => `c:${id}:u`);
       case "command.pruned":
@@ -151,7 +160,8 @@ function prunedVerdict(payload: unknown): FoldVerdict {
  * `run.created` only for live runs; durable terminal recovery reads terminals
  * only; the per-run stream replays `events.jsonl`). Terminals are a GROUP per
  * run, never a slot: a second terminal for the same run is corruption the
- * terminal index must still see and refuse, exactly as on an unfolded journal. */
+ * terminal index must still see and refuse, exactly as on an unfolded journal,
+ * until the run's prune tombstone retires the whole group. */
 function runEventVerdict(payload: unknown): FoldVerdict {
   const runId = stringField(payload, "run_id");
   const type = stringField(payload, "type");

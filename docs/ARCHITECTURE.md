@@ -258,9 +258,10 @@ at every wire boundary.
   and resolution together (answering an already-resolved question after a
   restart reports `not_found` rather than `already_resolved` — both
   non-delivery statuses; within one process life `already_resolved` is
-  unchanged); duplicate terminal or request frames all survive the fold, so
-  replay validation refuses them as loudly as on an unfolded journal; quota
-  keeps the latest projection marker and, per
+  unchanged); duplicate acceptance, terminal or request frames survive the
+  fold until their pair or prune tombstone retires the whole group, so replay
+  validation refuses them as loudly as on an unfolded journal; quota keeps the
+  latest projection marker and, per
   subject, the latest scoped prepare and the latest upsert (adjacency on disk
   still decides which pair commits; at most one stale prepare frame per subject
   survives); thread pings keep the latest revision; setup saves are kept whole
