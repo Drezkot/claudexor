@@ -1,10 +1,11 @@
-import { mkdirSync, mkdtempSync, realpathSync, rmSync } from "node:fs";
+import { chmodSync, cpSync, mkdirSync, mkdtempSync, realpathSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   DurableJournal,
+  journalPartitionDirectory,
+  type DurableJournalOptions,
   type FoldRecord,
-  type JournalFold,
   type JournalRecord,
 } from "@claudexor/journal";
 import { CredentialRoute, QuotaSource, type RunEvent } from "@claudexor/schema";
@@ -21,7 +22,9 @@ import { ThreadHeadPingEmitter } from "./thread-head-ping.js";
 import { ThreadStore } from "./threads.js";
 
 const roots: string[] = [];
+const journals: DurableJournal[] = [];
 afterEach(() => {
+  for (const journal of journals.splice(0)) journal.close();
   for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true });
 });
 
@@ -30,123 +33,6 @@ function view(type: string, payload: unknown, seq = 1): FoldRecord {
 }
 
 const journalFoldVerdict = (record: FoldRecord) => journalFoldPolicy.verdict(record);
-
-/**
- * Reference implementation of the journal package's `foldStream` semantics
- * (retire first, slot supersede, then drop-or-register). The engine itself is
- * package-internal; this mirror keeps the daemon's equivalence proof local.
- */
-function applyFold<T extends { seq: number; type: string; time: string; payload: unknown }>(
-  records: readonly T[],
-  fold: JournalFold,
-): T[] {
-  const held = new Map<number, { record: T; slot?: string; group?: string }>();
-  const slots = new Map<string, number>();
-  const groups = new Map<string, Set<number>>();
-  let next = 0;
-  const drop = (id: number): void => {
-    const entry = held.get(id);
-    if (!entry) return;
-    held.delete(id);
-    if (entry.slot !== undefined && slots.get(entry.slot) === id) slots.delete(entry.slot);
-    if (entry.group !== undefined) groups.get(entry.group)?.delete(id);
-  };
-  for (const record of records) {
-    const verdict = fold.verdict({
-      seq: record.seq,
-      type: record.type,
-      time: record.time,
-      payload: record.payload,
-      byteLength: Buffer.byteLength(JSON.stringify(record.payload ?? null)),
-    });
-    for (const name of verdict.retire ?? []) {
-      const holder = slots.get(name);
-      if (holder !== undefined) drop(holder);
-      for (const id of [...(groups.get(name) ?? [])]) drop(id);
-    }
-    if (verdict.slot !== undefined) {
-      const holder = slots.get(verdict.slot);
-      if (holder !== undefined) drop(holder);
-    }
-    if (verdict.drop) continue;
-    const id = next;
-    next += 1;
-    held.set(id, { record, slot: verdict.slot, group: verdict.group });
-    if (verdict.slot !== undefined) slots.set(verdict.slot, id);
-    if (verdict.group !== undefined) {
-      const members = groups.get(verdict.group) ?? new Set<number>();
-      members.add(id);
-      groups.set(verdict.group, members);
-    }
-  }
-  return [...held.values()].map((entry) => entry.record);
-}
-
-/** A journal view over a fixed retained record list plus the disk chain state
- * (nextSeq from the last frame on disk, never from the last retained record),
- * exactly what a folded replay sees. */
-class ListJournal {
-  readonly options: { partition: string; rootDir: string };
-  private readonly entries: JournalRecord[];
-  private nextSeq: number;
-  private readonly initialLength: number;
-  constructor(partition: string, entries: readonly JournalRecord[], nextSeq: number) {
-    this.options = { partition, rootDir: "" };
-    this.entries = [...entries];
-    this.nextSeq = nextSeq;
-    this.initialLength = this.entries.length;
-  }
-  records<T = unknown>(afterSeq = 0, types?: readonly string[]): JournalRecord<T>[] {
-    return this.entries
-      .filter((record) => record.seq > afterSeq && (!types || types.includes(record.type)))
-      .map((record) => ({ ...record, payload: JSON.parse(JSON.stringify(record.payload)) as T }));
-  }
-  append<T>(type: string, payload: T): JournalRecord<T> {
-    return this.appendBatch([{ type, payload }])[0] as JournalRecord<T>;
-  }
-  appendBatch(records: readonly { type: string; payload: unknown }[]): JournalRecord[] {
-    return records.map(({ type, payload }) => {
-      const record: JournalRecord = {
-        partition: this.options.partition,
-        epoch: "epoch",
-        seq: this.nextSeq,
-        previousFrameHash: "",
-        frameHash: "",
-        time: "2026-09-14T00:00:00.000Z",
-        type,
-        payload: JSON.parse(JSON.stringify(payload)),
-        byteOffset: 0,
-      };
-      this.nextSeq += 1;
-      this.entries.push(record);
-      return { ...record, payload: JSON.parse(JSON.stringify(record.payload)) };
-    });
-  }
-  cursorFor(record: Pick<JournalRecord, "partition" | "epoch" | "seq">): string {
-    return `${record.partition}:${record.epoch}:${record.seq}`;
-  }
-  cursorAt(seq: number): string {
-    return `${this.options.partition}:epoch:${seq}`;
-  }
-  currentSequence(): number {
-    return this.nextSeq - 1;
-  }
-  currentCursor(): string {
-    return this.cursorAt(this.nextSeq - 1);
-  }
-  sequenceAfter(cursor: string | null | undefined): number {
-    return cursor ? Number(cursor.split(":").at(-1)) : 0;
-  }
-  state() {
-    return { status: "ready" as const, discardedTailBytes: 0 };
-  }
-  appended(): Array<[string, unknown]> {
-    return this.entries.slice(this.initialLength).map((record) => [record.type, record.payload]);
-  }
-  asJournal(): DurableJournal {
-    return this as unknown as DurableJournal;
-  }
-}
 
 const NOW = new Date("2026-09-14T00:05:00.000Z");
 const now = () => NOW;
@@ -364,14 +250,9 @@ function buildFixture() {
   headPing.ping({ threadId: thread.id, projectId: null });
   journal.append("future.unknown", { keep: true });
   journal.append("journal.partition_quarantined", { schemaVersion: 1 });
-
-  const full = journal.records();
-  const nextSeq = journal.currentSequence() + 1;
   journal.close();
   return {
     root,
-    full,
-    nextSeq,
     commandKeys,
     runs: ["run-a", "run-b", "run-c", "run-d", "run-e"],
     threadId: thread.id,
@@ -379,6 +260,30 @@ function buildFixture() {
     projectId: p1.id,
     projectRoot: projectRoots[0]!,
   };
+}
+
+/** The fixture partition through the REAL reader twice: the written file with
+ * the daemon fold, and a byte-identical copy without one — so the journal
+ * engine itself, not a mirror of it, is what the proof runs on. `full` and
+ * `retained` are the two retained sets as seen at open, before any replay. */
+function openPair(f: ReturnType<typeof buildFixture>, prepare = false) {
+  const source = join(f.root, "journal");
+  const copy = join(f.root, "journal-plain");
+  cpSync(source, copy, { recursive: true });
+  chmodSync(copy, 0o700);
+  chmodSync(journalPartitionDirectory(copy, "global"), 0o700);
+  chmodSync(join(journalPartitionDirectory(copy, "global"), "journal.bin"), 0o600);
+  const options: DurableJournalOptions = {
+    rootDir: source,
+    partition: "global",
+    now,
+    deferCompaction: true,
+    fold: journalFoldPolicy,
+  };
+  const folded = prepare ? DurableJournal.prepare(options) : new DurableJournal(options);
+  const plain = new DurableJournal({ ...options, rootDir: copy, fold: undefined });
+  journals.push(folded, plain);
+  return { folded, plain, full: plain.records(), retained: folded.records() };
 }
 
 function replay(journal: DurableJournal) {
@@ -437,6 +342,22 @@ function observe(
     resumeMap: p.threads.resumeMap(f.threadId),
   };
 }
+
+/** Recovery side effects appended after `seq`, with the one order-dependent
+ * field masked: the quota marker digest covers the projection in
+ * Map-insertion order (see `observe`). */
+const appendedAfter = (journal: DurableJournal, seq: number) =>
+  journal
+    .records(seq)
+    .map((record) => [
+      record.type,
+      record.type === "quota.projection.updated"
+        ? { ...(record.payload as object), projection_signature: "<order-dependent>" }
+        : record.payload,
+    ]);
+
+const ofType = (records: readonly JournalRecord[], type: string) =>
+  records.filter((record) => record.type === type);
 
 describe("journal fold policy verdicts", () => {
   it("is one frozen, stateless policy: the same record always gets the same verdict", () => {
@@ -593,71 +514,38 @@ describe("journal fold policy verdicts", () => {
 });
 
 describe("journal fold policy replay equivalence", () => {
-  it("replays through the real reader with the policy to the same state as the mirror", () => {
-    const f = buildFixture();
-    const folded = applyFold(f.full, journalFoldPolicy);
-    const fullState = replay(new ListJournal("global", f.full, f.nextSeq).asJournal());
-    const prepared = DurableJournal.prepare({
-      rootDir: join(f.root, "journal"),
-      partition: "global",
-      now,
-      fold: journalFoldPolicy,
-    });
-    try {
-      expect(prepared.retiredAtReplay().count).toBe(f.full.length - folded.length);
-      expect(prepared.retiredAtReplay().bytes).toBeGreaterThan(0);
-      const shape = (records: readonly { seq: number; type: string }[]) =>
-        records.map((record) => [record.seq, record.type]);
-      expect(shape(prepared.records())).toEqual(shape(folded));
-      prepared.activatePrepared();
-      expect(shape(prepared.records())).toEqual(shape(folded));
-      // Chain state comes from the disk, not from the last retained record.
-      expect(prepared.currentSequence()).toBe(f.nextSeq - 1);
-      const realState = replay(prepared);
-      expect(observe(realState, f)).toEqual(observe(fullState, f));
-      expect(realState.commands.prunedScopeRoots()).toEqual([f.projectRoot]);
-    } finally {
-      prepared.close();
-    }
-  });
-
   it("replays the folded partition to the same validated state as the full history", () => {
     const f = buildFixture();
-    const folded = applyFold(f.full, journalFoldPolicy);
-    expect(folded.length).toBeLessThan(f.full.length);
-    // The fold only removes: every survivor is the exact original frame.
-    const bySeq = new Map(f.full.map((record) => [record.seq, record]));
-    for (const record of folded) expect(bySeq.get(record.seq)).toBe(record);
-    expect(folded.map((record) => record.seq)).toEqual(
-      [...folded.map((record) => record.seq)].sort((a, b) => a - b),
+    const { folded, plain, full, retained } = openPair(f);
+    expect(retained.length).toBeLessThan(full.length);
+    expect(folded.retiredAtReplay().count).toBe(full.length - retained.length);
+    expect(folded.retiredAtReplay().bytes).toBeGreaterThan(0);
+    expect(plain.retiredAtReplay()).toEqual({ count: 0, bytes: 0 });
+    // Chain state comes from the disk in both: same epoch, same next sequence.
+    expect(folded.currentSequence()).toBe(plain.currentSequence());
+    expect(folded.currentEpoch()).toBe(plain.currentEpoch());
+    // The fold only removes: every survivor is the exact original frame, in order.
+    const bySeq = new Map(full.map((record) => [record.seq, record]));
+    for (const record of retained) expect(record).toEqual(bySeq.get(record.seq));
+    expect(retained.map((record) => record.seq)).toEqual(
+      [...retained.map((record) => record.seq)].sort((a, b) => a - b),
     );
 
-    const fullJournal = new ListJournal("global", f.full, f.nextSeq);
-    const foldedJournal = new ListJournal("global", folded, f.nextSeq);
-    const fullState = replay(fullJournal.asJournal());
-    const foldedState = replay(foldedJournal.asJournal());
+    const seqAtOpen = plain.currentSequence();
+    const fullState = replay(plain);
+    const foldedState = replay(folded);
     expect(observe(foldedState, f)).toEqual(observe(fullState, f));
+    expect(foldedState.commands.prunedScopeRoots()).toEqual([f.projectRoot]);
     // Recovery side effects (interrupted commands and questions, the quota
-    // recovery marker) are identical, and both start after the disk nextSeq.
-    // The marker digest covers the projection in Map-insertion order (see
-    // `observe`), so it is the one order-dependent field.
-    const appended = (journal: ListJournal) =>
-      journal
-        .appended()
-        .map(([type, payload]) => [
-          type,
-          type === "quota.projection.updated"
-            ? { ...(payload as object), projection_signature: "<order-dependent>" }
-            : payload,
-        ]);
-    expect(appended(foldedJournal)).toEqual(appended(fullJournal));
-    expect(fullJournal.appended().map(([type]) => type)).toEqual([
+    // recovery marker) are identical, and both continue the disk chain.
+    expect(appendedAfter(folded, seqAtOpen)).toEqual(appendedAfter(plain, seqAtOpen));
+    expect(plain.records(seqAtOpen).map((record) => record.type)).toEqual([
       "command.updated",
       "command.updated",
       "interaction.resolved",
       "quota.projection.updated",
     ]);
-    expect(foldedJournal.records().at(-1)?.seq).toBe(fullJournal.records().at(-1)?.seq);
+    expect(folded.currentSequence()).toBe(plain.currentSequence());
     // The crash-recovery path still finds run-e's durable terminal after the fold.
     expect(foldedState.commands.get("job-e")).toMatchObject({
       state: "interrupted",
@@ -670,10 +558,27 @@ describe("journal fold policy replay equivalence", () => {
     expect(foldedState.interactions.status("run-a", "int-1")).toBe("missing");
   });
 
+  it("prepares read-only, then activates, to the same retained set and state", () => {
+    const f = buildFixture();
+    const { folded, plain, full, retained } = openPair(f, true);
+    const shape = (records: readonly { seq: number; type: string }[]) =>
+      records.map((record) => [record.seq, record.type]);
+    expect(folded.retiredAtReplay().count).toBe(full.length - retained.length);
+    folded.activatePrepared();
+    expect(shape(folded.records())).toEqual(shape(retained));
+    expect(folded.retiredAtReplay().count).toBe(full.length - retained.length);
+    expect(folded.currentSequence()).toBe(plain.currentSequence());
+    const seqAtOpen = plain.currentSequence();
+    const foldedState = replay(folded);
+    expect(observe(foldedState, f)).toEqual(observe(replay(plain), f));
+    expect(appendedAfter(folded, seqAtOpen)).toEqual(appendedAfter(plain, seqAtOpen));
+    expect(foldedState.commands.prunedScopeRoots()).toEqual([f.projectRoot]);
+  });
+
   it("never leaves a partial pair, a headless update, two terminals or a pruned run behind", () => {
     const f = buildFixture();
-    const folded = applyFold(f.full, journalFoldPolicy);
-    const types = (type: string) => folded.filter((record) => record.type === type);
+    const { full, retained } = openPair(f);
+    const types = (type: string) => ofType(retained, type);
     const accepted = new Set(
       types("command.accepted").map((r) => (r.payload as { record: { id: string } }).record.id),
     );
@@ -714,8 +619,8 @@ describe("journal fold policy replay equivalence", () => {
     // retained upsert whose disk predecessor was a prepare keeps that prepare
     // (the pair replays adjacent); a prepare whose commit a later plain upsert
     // superseded is the one stale frame per subject the scheme tolerates.
-    const fullBySeq = new Map(f.full.map((record) => [record.seq, record]));
-    const retainedSeqs = new Set(folded.map((record) => record.seq));
+    const fullBySeq = new Map(full.map((record) => [record.seq, record]));
+    const retainedSeqs = new Set(retained.map((record) => record.seq));
     const prepares = types("quota.snapshot.scoped_prepared");
     const upserts = types("quota.snapshot.upserted");
     const preparedSnapshot = (r: JournalRecord) => (r.payload as { snapshot: Snapshot }).snapshot;
