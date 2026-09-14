@@ -2062,8 +2062,12 @@ about every new crossing (and never after the journal is closed). Every pass end
 diagnostics record: `journal.records_retired` (`retainedCount`, `retiredCount`,
 `retiredBytes` beside the byte counts, plus the replay-time retirement the
 generation folded away at open) or `journal.compaction_declined` with its
-typed reason and bounds; below-threshold and empty passes stay silent, and no
-control-API field carries this yet. There is no maintenance job, persisted
+typed reason and bounds (`compressedBytes`, plus the `cap` that fired for a
+capacity decline). Both lines end with the process memory (`rssMb`,
+`heapUsedMb`, `externalMb`), as does the normal-admission line in the startup
+diagnostics, so the retained-set memory class is observable on every install.
+Below-threshold and empty passes stay silent, and no control-API field carries
+this yet. There is no maintenance job, persisted
 retry state, or manual upkeep requirement. The threshold value is unchanged;
 its meaning is growth since the last pass.
 

@@ -13,7 +13,7 @@ import { setImmediate } from "node:timers/promises";
 import { DurableJournal } from "@claudexor/journal";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { JournalManager } from "./journal-manager.js";
-import { JournalMaintenance } from "./journal-maintenance.js";
+import { describeCompactionOutcome, JournalMaintenance } from "./journal-maintenance.js";
 
 let root: string;
 const managers: JournalManager[] = [];
@@ -218,7 +218,9 @@ describe("journal maintenance generations", () => {
       expect.stringContaining("preparation failed"),
     ]);
     expect(lines("journal.compaction_declined")).toEqual([
-      "journal.compaction_declined partition=project:second reason=no_reclaim compressedBytes=10 cap=5",
+      expect.stringMatching(
+        /^journal\.compaction_declined partition=project:second reason=no_reclaim compressedBytes=10 rssMb=\d+ heapUsedMb=\d+ externalMb=\d+$/,
+      ),
     ]);
     // A failed or declined generation is not condemned: the threshold hook
     // re-requests it after the next crossing, and the queue runs it again.
@@ -227,7 +229,9 @@ describe("journal maintenance generations", () => {
     await vi.waitFor(() => expect(calls).toHaveBeenCalledTimes(4));
     expect(log).toHaveBeenCalledTimes(3); // below_threshold stays silent
     expect(lines("journal.records_retired")).toEqual([
-      "journal.records_retired partition=project:second retainedCount=3 retiredCount=7 retiredBytes=60 retiredAtReplayCount=0 retiredAtReplayBytes=0 beforeBytes=100 afterBytes=40",
+      expect.stringMatching(
+        /^journal\.records_retired partition=project:second retainedCount=3 retiredCount=7 retiredBytes=60 retiredAtReplayCount=0 retiredAtReplayBytes=0 beforeBytes=100 afterBytes=40 rssMb=\d+ heapUsedMb=\d+ externalMb=\d+$/,
+      ),
     ]);
     const third = journal("project:new");
     maintenance.request(third);
@@ -246,7 +250,7 @@ describe("journal maintenance generations", () => {
       timeout: 20_000,
     });
     expect(lines("journal.records_retired")[0]).toMatch(
-      /^journal\.records_retired partition=global retainedCount=\d+ retiredCount=0 retiredBytes=0 retiredAtReplayCount=0 retiredAtReplayBytes=0 beforeBytes=\d+ afterBytes=\d+$/,
+      /^journal\.records_retired partition=global retainedCount=\d+ retiredCount=0 retiredBytes=0 retiredAtReplayCount=0 retiredAtReplayBytes=0 beforeBytes=\d+ afterBytes=\d+ rssMb=\d+ heapUsedMb=\d+ externalMb=\d+$/,
     );
     const compacted = journal.physicalBytes();
     expect(compacted).toBeLessThan(9 * 1024 * 1024);
@@ -315,5 +319,59 @@ describe("journal maintenance generations", () => {
     expect(readdirSync(staging)).toContain(stale);
     maintenance.arm();
     await vi.waitFor(() => expect(readdirSync(staging)).toEqual(["append.pending.json"]));
+  });
+});
+
+describe("describeCompactionOutcome", () => {
+  const memory = "rssMb=1 heapUsedMb=2 externalMb=3";
+  it("prints one receipt line with the replay-time retirement and the process memory", () => {
+    expect(
+      describeCompactionOutcome(
+        "global",
+        {
+          beforeBytes: 100,
+          afterBytes: 40,
+          records: 3,
+          retainedCount: 3,
+          retiredCount: 7,
+          retiredBytes: 60,
+        },
+        { count: 2, bytes: 9 },
+        memory,
+      ),
+    ).toBe(
+      "journal.records_retired partition=global retainedCount=3 retiredCount=7 retiredBytes=60 retiredAtReplayCount=2 retiredAtReplayBytes=9 beforeBytes=100 afterBytes=40 rssMb=1 heapUsedMb=2 externalMb=3",
+    );
+  });
+
+  it("names the cap only when a capacity decline fired it and stays silent on the quiet no-ops", () => {
+    const replay = { count: 0, bytes: 0 };
+    expect(
+      describeCompactionOutcome(
+        "project:p",
+        { declined: true, reason: "no_reclaim", compressedBytes: 10, cap: 5 },
+        replay,
+        memory,
+      ),
+    ).toBe(
+      "journal.compaction_declined partition=project:p reason=no_reclaim compressedBytes=10 " +
+        memory,
+    );
+    expect(
+      describeCompactionOutcome(
+        "global",
+        { declined: true, reason: "capacity", cap: 8 },
+        replay,
+        memory,
+      ),
+    ).toBe("journal.compaction_declined partition=global reason=capacity cap=8 " + memory);
+    expect(
+      describeCompactionOutcome("global", { declined: true, reason: "aborted" }, replay, memory),
+    ).toBe("journal.compaction_declined partition=global reason=aborted " + memory);
+    for (const reason of ["below_threshold", "empty"] as const) {
+      expect(
+        describeCompactionOutcome("global", { declined: true, reason }, replay, memory),
+      ).toBeNull();
+    }
   });
 });

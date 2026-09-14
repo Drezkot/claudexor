@@ -2,7 +2,7 @@ import { lstat, readdir, unlink } from "node:fs/promises";
 import { join } from "node:path";
 import { setImmediate } from "node:timers/promises";
 import type { DurableJournal, JournalCompactionOutcome } from "@claudexor/journal";
-import { ensureCanonicalPrivateDirectory } from "@claudexor/util";
+import { ensureCanonicalPrivateDirectory, processMemoryFields } from "@claudexor/util";
 
 /** One cancelable maintenance flight under the daemon's existing root writer.
  * A manager creates a new journal object per generation and closes the old one;
@@ -125,20 +125,25 @@ export class JournalMaintenance {
 /** One log line per maintenance outcome: the typed decline with its reason and
  * bounds, or the `journal.records_retired` receipt — compaction-time counts
  * beside what the fold already retired while replaying this generation at
- * open (`retiredAtReplay`). The quiet no-ops (below the threshold, an empty
- * journal) produce no line. */
+ * open (`retiredAtReplay`). Both end with the process memory fields. The quiet
+ * no-ops (below the threshold, an empty journal) produce no line. */
 export function describeCompactionOutcome(
   partition: string,
   outcome: JournalCompactionOutcome,
   replay: { count: number; bytes: number } = { count: 0, bytes: 0 },
+  memory: string = processMemoryFields(),
 ): string | null {
   if ("declined" in outcome) {
     if (outcome.reason === "below_threshold" || outcome.reason === "empty") return null;
-    const bounds = (["compressedBytes", "cap"] as const)
-      .filter((key) => outcome[key] !== undefined)
-      .map((key) => `${key}=${outcome[key]}`);
+    const bounds: string[] = [];
+    if (outcome.compressedBytes !== undefined)
+      bounds.push(`compressedBytes=${outcome.compressedBytes}`);
+    // Only a capacity decline names a cap that fired; a no-reclaim decline's
+    // cap is the current file size, which `compressedBytes` already exceeds.
+    if (outcome.reason === "capacity" && outcome.cap !== undefined)
+      bounds.push(`cap=${outcome.cap}`);
     return ["journal.compaction_declined", `partition=${partition}`, `reason=${outcome.reason}`]
-      .concat(bounds)
+      .concat(bounds, memory)
       .join(" ");
   }
   return [
@@ -151,5 +156,6 @@ export function describeCompactionOutcome(
     `retiredAtReplayBytes=${replay.bytes}`,
     `beforeBytes=${outcome.beforeBytes}`,
     `afterBytes=${outcome.afterBytes}`,
+    memory,
   ].join(" ");
 }

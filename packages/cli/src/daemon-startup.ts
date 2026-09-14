@@ -20,6 +20,7 @@ import {
   type RootAuthorityGrant,
 } from "@claudexor/daemon";
 import { JournalRecoveryRequiredError } from "@claudexor/journal";
+import { processMemoryFields } from "@claudexor/util";
 import { CONTROL_PROTOCOL_MAJOR } from "@claudexor/schema";
 
 /** Single canonical admission snapshot; both transports read the SAME fact. */
@@ -213,7 +214,7 @@ export async function completeStartupAdmission(input: {
     throw error;
   }
   input.admission.openNormal();
-  input.log("startup admission: normal product admission open");
+  input.log(`startup admission: normal product admission open (${processMemoryFields()})`);
   return "normal";
 }
 
