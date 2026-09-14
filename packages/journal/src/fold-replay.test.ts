@@ -218,6 +218,29 @@ describe("fold at replay", () => {
     expect(journal.append("after.refusal", null).seq).toBe(41);
   });
 
+  it("reports replay-time retirement separately from compaction-time retirement", async () => {
+    seed(40);
+    const prepared = open({ fold: dropHistory }, true);
+    expect(prepared.retiredAtReplay()).toMatchObject({ count: 39 });
+    expect(prepared.retiredAtReplay().bytes).toBeGreaterThan(39 * 256);
+    prepared.activatePrepared();
+    const replayed = prepared.retiredAtReplay();
+    expect(replayed.count).toBe(39);
+    prepared.append("unfolded", { n: 1 });
+    expect(await prepared.compactInBackground({ stagingDir })).toMatchObject({
+      records: 2,
+      retainedCount: 2,
+      retiredCount: 0,
+      retiredBytes: 0,
+    });
+    expect(prepared.retiredAtReplay()).toEqual(replayed);
+    prepared.close();
+    const direct = open({ fold: dropHistory });
+    expect(direct.retiredAtReplay()).toEqual({ count: 0, bytes: 0 });
+    direct.close();
+    expect(open().retiredAtReplay()).toEqual({ count: 0, bytes: 0 });
+  });
+
   it("fires the threshold hook once per crossing and re-arms after a successful install", async () => {
     const crossings: number[] = [];
     const journal = open({

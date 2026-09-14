@@ -89,6 +89,7 @@ export class DurableJournal extends JournalCore {
       this.nextSeq = prepared.nextSeq;
       this.previousFrameHash = prepared.previousFrameHash;
       this.knownFileBytes = prepared.knownFileBytes;
+      this.replayRetired = { count: prepared.retiredCount, bytes: prepared.retiredBytes };
       return;
     }
     ensureCanonicalPrivateDirectory(options.rootDir);
@@ -195,6 +196,14 @@ export class DurableJournal extends JournalCore {
   physicalBytes(): number {
     this.assertOpen();
     return this.knownFileBytes;
+  }
+
+  /** What the configured fold retired while replaying the file (preparation,
+   * construction or activation). Compaction-time retirement is reported on the
+   * compaction receipt instead, so the daemon can log both. */
+  retiredAtReplay(): { count: number; bytes: number } {
+    this.assertOpen();
+    return { ...this.replayRetired };
   }
 
   /** Atomically replace physical frames with one checksummed compressed frame.

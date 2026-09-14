@@ -36,7 +36,8 @@ export type PreparedJournalRecovery =
     };
 
 /** Chain state (`epoch`/`nextSeq`/`previousFrameHash`) is the disk state after
- * the last frame; `records` is the retained set after the optional fold. */
+ * the last frame; `records` is the retained set after the optional fold, and
+ * `retiredCount`/`retiredBytes` say what that fold dropped while replaying. */
 export interface PreparedJournalInspection {
   receipt: JournalPreparationReceipt;
   recovery: PreparedJournalRecovery;
@@ -45,6 +46,8 @@ export interface PreparedJournalInspection {
   nextSeq: number;
   previousFrameHash: string;
   knownFileBytes: number;
+  retiredCount: number;
+  retiredBytes: number;
 }
 
 interface AppendIntent {
@@ -166,6 +169,8 @@ export function inspectPreparedJournal(input: {
     nextSeq: ready?.nextSeq ?? 1,
     previousFrameHash: ready?.previousFrameHash ?? ZERO_HASH,
     knownFileBytes: deferredRepair ? (prefix as AppendIntent).offset : size,
+    retiredCount: ready?.retiredCount ?? 0,
+    retiredBytes: ready?.retiredBytes ?? 0,
   };
 }
 

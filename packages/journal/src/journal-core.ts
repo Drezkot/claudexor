@@ -57,6 +57,7 @@ export abstract class JournalCore {
   protected writable = false;
   protected closed = false;
   protected thresholdNotified = false;
+  protected replayRetired = { count: 0, bytes: 0 };
 
   protected constructor(options: DurableJournalOptions) {
     if (!options.partition.trim()) throw new Error("journal partition must not be empty");
@@ -84,6 +85,7 @@ export abstract class JournalCore {
       return;
     }
     this.entries = result.retained;
+    this.replayRetired = { count: result.retiredCount, bytes: result.retiredBytes };
     this.epoch = result.epoch ?? this.epoch;
     this.nextSeq = result.nextSeq;
     this.previousFrameHash = result.previousFrameHash;

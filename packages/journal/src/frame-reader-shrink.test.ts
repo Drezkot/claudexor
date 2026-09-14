@@ -1,16 +1,42 @@
-import { closeSync, mkdtempSync, openSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import {
+  closeSync,
+  fsyncSync,
+  mkdtempSync,
+  openSync,
+  realpathSync,
+  rmSync,
+  writeFileSync,
+  writeSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import { prepareAppendBatch } from "./append-batch.js";
 import { ZERO_HASH } from "./frame-codec.js";
 import { readFrames } from "./frame-reader.js";
+import { DurableJournal, JournalAppendUncertainError } from "./index.js";
 
-const hooks = vi.hoisted(() => ({ fd: -1, extraBytes: 0 }));
+const hooks = vi.hoisted(() => ({ fd: -1, extraBytes: 0, captureWriter: false, failReads: false }));
 vi.mock("node:fs", async (original) => {
   const fs = await original<typeof import("node:fs")>();
   return {
     ...fs,
+    openSync: (...args: Parameters<typeof fs.openSync>) => {
+      const fd = fs.openSync(...args);
+      const flags = typeof args[1] === "number" ? args[1] : 0;
+      if (
+        hooks.captureWriter &&
+        String(args[0]).endsWith("journal.bin") &&
+        (flags & fs.constants.O_APPEND) !== 0
+      )
+        hooks.fd = fd;
+      return fd;
+    },
+    readSync: (...args: Parameters<typeof fs.readSync>) => {
+      // The file shrank between the size check and the read: EOF arrives early.
+      if (args[0] === hooks.fd && hooks.failReads) return 0;
+      return fs.readSync(...args);
+    },
     fstatSync: (...args: Parameters<typeof fs.fstatSync>) => {
       const stat = fs.fstatSync(...args);
       if (args[0] !== hooks.fd || hooks.extraBytes === 0) return stat;
@@ -56,6 +82,40 @@ describe("positional frame reader under a shrinking file", () => {
         hooks.fd = -1;
         closeSync(fd);
       }
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("surfaces a read failure during intent recovery with its own message", () => {
+    const root = realpathSync.native(mkdtempSync(join(tmpdir(), "journal-shrink-recovery-")));
+    try {
+      const options = { rootDir: join(root, "journal"), partition: "global" };
+      const seeded = new DurableJournal(options);
+      seeded.append("acknowledged", { n: 1 });
+      seeded.close();
+      const crashed = new DurableJournal({
+        ...options,
+        appendAndSync: (fd, bytes) => {
+          writeSync(fd, bytes, 0, 5);
+          fsyncSync(fd);
+          throw new Error("simulated crash before append ACK");
+        },
+      });
+      expect(() => crashed.append("unacknowledged", { n: 2 })).toThrow(JournalAppendUncertainError);
+      crashed.close();
+      hooks.captureWriter = true;
+      hooks.failReads = true;
+      try {
+        expect(() => new DurableJournal(options)).toThrow(/^journal changed while being read$/);
+      } finally {
+        hooks.captureWriter = false;
+        hooks.failReads = false;
+        hooks.fd = -1;
+      }
+      const recovered = new DurableJournal(options);
+      expect(recovered.state()).toEqual({ status: "ready", discardedTailBytes: 5 });
+      recovered.close();
     } finally {
       rmSync(root, { recursive: true, force: true });
     }

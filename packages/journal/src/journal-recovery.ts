@@ -1,5 +1,10 @@
 import { descriptorSize, readFrames, type FrameReadResult } from "./frame-reader.js";
-import { readIntent, removeFile, truncatePendingSuffix } from "./journal-files.js";
+import {
+  readIntent,
+  removeFile,
+  truncatePendingSuffix,
+  type AppendIntent,
+} from "./journal-files.js";
 import type { JournalFold } from "./journal-fold.js";
 import { JournalRecoveryRequiredError, journalRecoveryAt } from "./journal-recovery-state.js";
 
@@ -10,11 +15,14 @@ export interface RecoveredJournal {
   previousFrameHash: string;
   knownFileBytes: number;
   discardedBytes: number;
+  retiredCount: number;
+  retiredBytes: number;
 }
 
 /** Recover only the original canonical file. A compaction candidate is never
  * consulted as recovery authority. Returns the retained ACK history for its
- * writer plus the chain state of the last frame on disk. */
+ * writer plus the chain state of the last frame on disk. A positional-read
+ * failure propagates with its own message; only intent handling is labelled. */
 export function recoverJournal(
   fd: number,
   path: string,
@@ -22,33 +30,41 @@ export function recoverJournal(
   intentPath: string,
 ): RecoveredJournal {
   const size = descriptorSize(fd);
-  let decoded: FrameReadResult;
-  let knownFileBytes = size;
-  let discardedBytes = 0;
+  let intent: AppendIntent | null;
   try {
-    const intent = readIntent(intentPath);
-    if (intent) {
-      if (intent.offset > size || size > intent.offset + intent.length) {
-        throw required(intent.offset, "append intent does not match the journal prefix");
-      }
-      decoded = readFrames(fd, options.partition, { limit: intent.offset, fold: options.fold });
-      if (decoded.error || decoded.incompleteOffset !== null) {
-        throw required(intent.offset, "append intent does not match the journal prefix");
-      }
-      discardedBytes = size - intent.offset;
-      if (discardedBytes > 0) truncatePendingSuffix(fd, path, intent.offset, size);
-      knownFileBytes = intent.offset;
-      removeFile(intentPath);
-    } else {
-      decoded = readFrames(fd, options.partition, { fold: options.fold });
-    }
+    intent = readIntent(intentPath);
   } catch (error) {
-    if (error instanceof JournalRecoveryRequiredError) throw error;
     throw required(0, `append intent is malformed: ${String(error)}`);
   }
-  if (decoded.incompleteOffset !== null)
-    throw required(decoded.incompleteOffset, "unexplained suffix without append intent");
-  if (decoded.error) throw required(decoded.error.offset, decoded.error.reason);
+  if (!intent) {
+    const decoded = readFrames(fd, options.partition, { fold: options.fold });
+    if (decoded.incompleteOffset !== null)
+      throw required(decoded.incompleteOffset, "unexplained suffix without append intent");
+    if (decoded.error) throw required(decoded.error.offset, decoded.error.reason);
+    return recovered(decoded, size, 0);
+  }
+  if (intent.offset > size || size > intent.offset + intent.length) {
+    throw required(intent.offset, "append intent does not match the journal prefix");
+  }
+  const decoded = readFrames(fd, options.partition, { limit: intent.offset, fold: options.fold });
+  if (decoded.error || decoded.incompleteOffset !== null) {
+    throw required(intent.offset, "append intent does not match the journal prefix");
+  }
+  const discardedBytes = size - intent.offset;
+  try {
+    if (discardedBytes > 0) truncatePendingSuffix(fd, path, intent.offset, size);
+    removeFile(intentPath);
+  } catch (error) {
+    throw required(intent.offset, `append intent recovery failed: ${String(error)}`);
+  }
+  return recovered(decoded, intent.offset, discardedBytes);
+}
+
+function recovered(
+  decoded: FrameReadResult,
+  knownFileBytes: number,
+  discardedBytes: number,
+): RecoveredJournal {
   return {
     retained: decoded.retained,
     epoch: decoded.epoch,
@@ -56,6 +72,8 @@ export function recoverJournal(
     previousFrameHash: decoded.previousFrameHash,
     knownFileBytes,
     discardedBytes,
+    retiredCount: decoded.retiredCount,
+    retiredBytes: decoded.retiredBytes,
   };
 }
 
