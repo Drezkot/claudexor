@@ -181,8 +181,12 @@ export class ProjectPartitions implements CommandAuthority {
    * carries the prompt digest, never the prompt text.
    */
   recordRunEvent(params: unknown, event: RunEvent): RunEvent {
-    if (!isJournaledRunEvent(event)) return event;
-    return this.runEventStoreForRequest(params).record(journaledRunEventCopy(event));
+    if (isJournaledRunEvent(event)) {
+      this.runEventStoreForRequest(params).record(journaledRunEventCopy(event));
+    }
+    // The producer keeps its own event (prompt included) for events.jsonl and
+    // the live bus; only the journal copy carries the digest.
+    return event;
   }
 
   forRequest(params: unknown): CommandStore {

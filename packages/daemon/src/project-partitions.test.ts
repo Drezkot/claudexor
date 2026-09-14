@@ -693,15 +693,16 @@ describe("ProjectPartitions", () => {
     const params = {};
     const prompt = "Summarize the release notes.";
     const base = { ts: "2026-01-01T00:00:00.000Z", run_id: "run-j", task_id: "task-j" };
-    const created = f.partitions.recordRunEvent(params, {
+    const inbound = {
       ...base,
       seq: 1,
-      type: "run.created",
+      type: "run.created" as const,
       payload: { mode: "ask", prompt },
-    });
-    // The producer's own event keeps the prompt for events.jsonl / the bus.
-    expect(created.payload).toMatchObject({ mode: "ask" });
-    expect(created.payload).not.toHaveProperty("prompt");
+    };
+    // The producer's own event keeps the prompt for events.jsonl / the bus;
+    // the sink returns it untouched and journals the digest copy.
+    expect(f.partitions.recordRunEvent(params, inbound)).toBe(inbound);
+    expect(inbound.payload.prompt).toBe(prompt);
     const delta = { ...base, seq: 2, type: "harness.event" as const, payload: { text: "tok" } };
     expect(f.partitions.recordRunEvent(params, delta)).toBe(delta);
     f.partitions.recordRunEvent(params, {
