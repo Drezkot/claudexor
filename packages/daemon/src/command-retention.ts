@@ -57,20 +57,24 @@ export function prunableCommandIds(
       pruned.add(record.id);
     }
   }
-  // Byte budget over what survives the age/cap rule, oldest first.
+  // Byte budget over what survives the age/cap rule, oldest first. Only the
+  // records the rule can reach are counted: a needs-decision run is exempt
+  // (model receipts never enter `terminal`), so its params must not push every
+  // reachable command out — the budget bounds exactly what it may prune.
   let bytes = 0;
   const sizes = new Map<string, number>();
   for (const record of terminal) {
-    if (pruned.has(record.id)) continue;
+    if (pruned.has(record.id) || isNeedsDecision(record)) continue;
     const size = paramsBytes(record);
     sizes.set(record.id, size);
     bytes += size;
   }
   for (const record of terminal) {
     if (bytes <= maxParamsBytes) break;
-    if (pruned.has(record.id) || isNeedsDecision(record)) continue;
+    const size = sizes.get(record.id);
+    if (size === undefined) continue; // already pruned, or exempt
     pruned.add(record.id);
-    bytes -= sizes.get(record.id) ?? 0;
+    bytes -= size;
   }
   return [...pruned];
 }

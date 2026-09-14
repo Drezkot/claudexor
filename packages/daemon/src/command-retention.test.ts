@@ -136,7 +136,38 @@ describe("prunableCommandIds retained params byte budget (journal sprint D3)", (
     });
     const live = sized("live", 1, 4000, { state: "running", finishedAt: undefined });
     const records = [blocked, model, live, sized("mid", 2, 60), sized("new", 3, 60)];
-    expect(prunableCommandIds(records, 500, 365 * 24 * HOUR, now, 160)).toEqual(["mid"]);
+    // The exempt run's params are outside the budget: mid + new (146 chars)
+    // fit 160, so nothing is pruned; a tighter budget still forgets oldest-first.
+    expect(prunableCommandIds(records, 500, 365 * 24 * HOUR, now, 160)).toEqual([]);
+    expect(prunableCommandIds(records, 500, 365 * 24 * HOUR, now, 100)).toEqual(["mid"]);
+  });
+
+  it("leaves exempt params outside the budget: exempt bytes alone over budget prune nothing", () => {
+    const blocked = (id: string, day: number) =>
+      sized(id, day, 600, {
+        result: { lifecycle: "succeeded", facts: { review: "blocked", checks: "passed" } },
+      });
+    // Two needs-decision runs (613 B each) exceed a 1000 B budget on their own;
+    // the one reachable command, finished a minute ago, must survive — the
+    // loop could never reach `bytes <= budget` by pruning it.
+    const fresh = sized("fresh", 9, 60);
+    expect(
+      prunableCommandIds(
+        [blocked("b1", 1), blocked("b2", 2), fresh],
+        500,
+        365 * 24 * HOUR,
+        now,
+        1000,
+      ),
+    ).toEqual([]);
+    // Control: reachable records over the budget still go oldest-first.
+    const records = [
+      blocked("b1", 1),
+      sized("old", 2, 600),
+      blocked("b2", 3),
+      sized("new", 4, 600),
+    ];
+    expect(prunableCommandIds(records, 500, 365 * 24 * HOUR, now, 1000)).toEqual(["old"]);
   });
 
   it("combines with the age/cap rule and reports each id once", () => {
