@@ -4,18 +4,7 @@ Release and candidate history for Claudexor. The current version is declared
 in the root `package.json` (the version SSOT); published versions are available
 on GitHub Releases.
 
-- **Unreleased**: reading ONE run no longer serializes every retained run. The
-  daemon's retained-command list RPC now takes an optional query addressing a
-  single subject — one run id, or one parent's direct Delegate children — and
-  selects before it redacts, so `GET /v2/runs/:id` (the status poll every
-  embedding host makes) stops recursively projecting the prompts of unrelated
-  runs. A measured install carried 1,627 retained records over 150.3 MB, 98.6% of
-  it params. The honest cost is a reference and metadata scan over the retained
-  records plus a sort over the matching children: not constant time, not constant
-  memory, and unrelated to journal cold-replay memory or historical timeouts. The
-  unqualified read, the global `GET /v2/runs` page, and the uncapped transitive
-  cancellation cascade are unchanged; an engine older than the query ignores it
-  and answers in full, so callers keep applying their own selection.
+- **v3.12.1** (2026-09-16): reading ONE run no longer serializes every retained run. The daemon's retained-command list RPC now takes an optional query addressing a single subject — one run id, or one parent's direct Delegate children — and selects before it redacts, so `GET /v2/runs/:id` (the status poll every embedding host makes) stops recursively projecting the prompts of unrelated runs. A measured install carried 1,627 retained records over 150.3 MB, 98.6% of it params. The honest cost is a reference and metadata scan over the retained records plus a sort over the matching children: not constant time, not constant memory, and unrelated to journal cold-replay memory or historical timeouts. The unqualified read, the global `GET /v2/runs` page, and the uncapped transitive cancellation cascade are unchanged; an engine older than the query ignores it and answers in full, so callers keep applying their own selection. The engine update keeps the Claudexor.app 3.11.0 compatibility floor (no new wire contract the app must decode).
 
 - **v3.12.0** (2026-09-14): the daemon's journal now replays frame by frame and forgets dead history through a fixed fold policy (per-token harness deltas, superseded quota snapshots, immutable params on updates, terminals of pruned commands), so startup memory follows the retained state rather than the journal size: on a 1.6 GB root, normal admission in about 20–30 s depending on host load, at the default heap, instead of an out-of-memory crash, and the root compacts to about 0.3 GB. Sequence numbers, the epoch and live cursors survive compaction, snapshots may span several frames, and maintenance re-arms on growth since the last pass (a restart no longer rewrites an already-compacted partition; a failed pass settles the baseline too). Typed compaction declines, `journal.records_retired` receipts and the daemon's own memory are logged on admission and on every maintenance pass; retained params of terminal commands are capped at 256 MiB; crash-GC reuses the prepared command projection. Compatibility: an engine from before 3.12.0 refuses a root served by 3.12.0 loudly (rollback = keep the journal, recover with 3.12.0 or newer); the app compatibility floor stays at Claudexor.app 3.11.0 (no new wire contract the app must decode). One-time residue: legacy prune tombstones carry no run ids, so terminals of runs pruned before 3.12.0 stay retained (none on the acceptance root); runs that never received a journaled terminal keep their pre-release progress frames until their command is pruned, when the tombstone retires them (two such runs hold about 3.1k frames on the acceptance root).
 

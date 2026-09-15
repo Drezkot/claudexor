@@ -1,5 +1,18 @@
 # @claudexor/control-api
 
+## 3.12.1
+
+### Patch Changes
+
+- Reading ONE run no longer serializes every retained run. The daemon's retained-command list RPC takes an optional query addressing a single subject (one run id, or one parent's direct Delegate children) and selects before it redacts, so `GET /v2/runs/:id` stops recursively projecting the prompts of unrelated runs; the unqualified read and the global `GET /v2/runs` page are unchanged, and an engine older than the query answers in full so callers keep applying their own selection.
+- Updated dependencies
+  - @claudexor/schema@3.12.1
+  - @claudexor/delivery@3.12.1
+  - @claudexor/event-log@3.12.1
+  - @claudexor/workspace@3.12.1
+  - @claudexor/secrets@3.12.1
+  - @claudexor/util@3.12.1
+
 ## 3.12.0
 
 ### Patch Changes

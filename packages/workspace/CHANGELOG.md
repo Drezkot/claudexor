@@ -1,5 +1,14 @@
 # @claudexor/workspace
 
+## 3.12.1
+
+### Patch Changes
+
+- Updated dependencies
+  - @claudexor/schema@3.12.1
+  - @claudexor/core@3.12.1
+  - @claudexor/util@3.12.1
+
 ## 3.12.0
 
 ### Patch Changes
