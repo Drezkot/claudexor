@@ -1732,6 +1732,20 @@ Endpoint semantics beyond the inventory:
   retention-owned `tombstone.yaml` transition (all other artifacts are frozen once
   the run is terminal). The bare parameterless call stays valid — it now yields the
   newest 200 with a cursor to page the rest.
+- An ADDRESSED read never pays for unrelated runs. The daemon's retained-command
+  list RPC takes an optional query that names exactly one subject — `id` (the job
+  id or the bound run id) XOR `delegatedFromRunId` (that parent's bounded direct
+  Delegate children) — and `selectProductCommands` applies it BEFORE
+  `publicJobRecord`, whose recursive redaction is what makes a whole-list answer
+  expensive. `GET /v2/runs/:id` uses both: the record lookup addresses the run,
+  and parent detail addresses that parent's children. A query naming neither
+  subject is the unchanged whole-list answer; one naming both is a typed refusal,
+  not a silent full scan. The honest contract is a reference/metadata scan over
+  the retained records plus a sort over the matching children only — not constant
+  time and not constant memory, and separate from journal cold-replay memory. The
+  transitive cancellation cascade is deliberately UNCAPPED and keeps reading the
+  whole list. Callers re-apply their own exact match and bounded child rule on the
+  result, because an engine older than the query ignores it and answers in full.
 - `claudexor settings show|set` is a thin client of `GET|POST /v2/settings`.
   Validation, persistence, cache invalidation, and the returned effective
   `ControlSettingsSnapshot` come from the daemon; the CLI has no second config
