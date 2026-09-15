@@ -55,7 +55,6 @@ import {
 import * as runStart from "./run-start.js";
 import { cancelDelegationFamily } from "./delegation-control.js";
 import {
-  directDelegatedChildrenFromRecords,
   delegatedDescendantsFromRecords,
   paramsRecord,
   type ControlOperatorDecisionRecord,
@@ -128,6 +127,7 @@ import {
   PlanQuestionsArtifact,
   CouncilProjection,
   derivePlanReadiness,
+  directDelegatedChildrenFromRecords,
   type ApplyEligibility,
   ControlAuthReadinessRefreshRequest,
   ControlAuthReadinessRefreshResponse,
@@ -802,9 +802,13 @@ export class DaemonControlApiServer {
       // included) after it — see the detailFor doc comment.
       const lastSeq = rec.runDir ? lastSeqInFile(join(rec.runDir, "events.jsonl")) : 0;
       const parentRunId = rec.runId ?? rec.id;
+      // Addressed child read: the daemon selects this parent's direct children
+      // before it projects, so parent detail never pays for the params of every
+      // other retained run. The same bounded rule is re-applied here, because an
+      // engine that predates the query answers with the whole list.
       const children = directDelegatedChildrenFromRecords(
         parentRunId,
-        await this.opts.daemon.list(),
+        await this.opts.daemon.list({ delegatedFromRunId: parentRunId }),
       ).map((candidate) => this.summarizeRunOrDiagnostic(candidate));
       return this.json(
         res,
@@ -1970,8 +1974,13 @@ export class DaemonControlApiServer {
     return this.json(res, status, body);
   }
 
+  /** One addressed run by job id or run id, or null when it is not retained.
+   * The daemon selects that record before projecting it, so a status poll costs
+   * a reference scan instead of every retained run's redacted params. The exact
+   * match stays here too: an engine older than the query answers with the full
+   * list, and a transport failure THROWS rather than reading as absence. */
   private async findRun(id: string): Promise<DaemonRunRecord | null> {
-    const runs = await this.opts.daemon.list();
+    const runs = await this.opts.daemon.list({ id });
     return runs.find((r) => r.id === id || r.runId === id) ?? null;
   }
 

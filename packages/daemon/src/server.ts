@@ -2,6 +2,7 @@ import { type Server, type Socket, createServer } from "node:net";
 
 import {
   ControlRunStartRequest,
+  delegatedParentOf,
   resolveRunReviewRequested,
   normalizeCancelReasonCode,
   isTerminalLifecycle,
@@ -27,11 +28,10 @@ import {
   findAcceptedCommand,
   publicAcceptedCommand,
 } from "./command-rpc.js";
-import { productCommandRecords, prunableCommandIds } from "./command-retention.js";
+import { prunableCommandIds, selectProductCommands } from "./command-retention.js";
 import { clearStaleUnixSocketPath, listenOnDaemonEndpoint } from "./daemon-listen.js";
 import {
   admitDelegatedRequest,
-  delegatedParentOf,
   isDelegatedChildRecord,
   type DelegationAdmissionAuthority,
 } from "./delegation-admission.js";
@@ -374,7 +374,7 @@ export class DaemonServer {
         return publicAcceptedCommand(this.opts.commands, params);
       }
       case "claudexor.list":
-        return productCommandRecords(this.allRecords()).map(publicJobRecord);
+        return selectProductCommands(this.allRecords(), params?.query).map(publicJobRecord);
       case "claudexor.cancel": {
         return this.cancelJob(String(params?.id), normalizeCancelReasonCode(params?.reason_code));
       }
