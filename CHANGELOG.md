@@ -4,6 +4,8 @@ Release and candidate history for Claudexor. The current version is declared
 in the root `package.json` (the version SSOT); published versions are available
 on GitHub Releases.
 
+- **v3.12.3** (2026-09-18): Codex model discovery and quota checks now find the same CLI and Node runtime as sign-in and agent runs on GUI installations, while preserving scoped account homes and credential isolation.
+
 - **v3.12.2** (2026-09-18): accounts remain eligible by default until quota usage reaches 100%, so the final 10% stays available for routing and rotation. Explicitly configured lower thresholds remain effective; vendor cooldowns and exhausted windows still block selection.
 
 - **v3.12.1** (2026-09-16): reading ONE run no longer serializes every retained run. The daemon's retained-command list RPC now takes an optional query addressing a single subject — one run id, or one parent's direct Delegate children — and selects before it redacts, so `GET /v2/runs/:id` (the status poll every embedding host makes) stops recursively projecting the prompts of unrelated runs. A measured install carried 1,627 retained records over 150.3 MB, 98.6% of it params. The honest cost is a reference and metadata scan over the retained records plus a sort over the matching children: not constant time, not constant memory, and unrelated to journal cold-replay memory or historical timeouts. The unqualified read, the global `GET /v2/runs` page, and the uncapped transitive cancellation cascade are unchanged; an engine older than the query ignores it and answers in full, so callers keep applying their own selection. The engine update keeps the Claudexor.app 3.11.0 compatibility floor (no new wire contract the app must decode).
