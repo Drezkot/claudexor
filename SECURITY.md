@@ -61,9 +61,15 @@ What Claudexor already does, so you can calibrate reports:
   stop the process from reaching other same-user host paths. In particular,
   trusted `full` can read or mutate out-of-project state, and those effects are
   outside Claudexor's patch capture, review, revert, and rollback custody.
-- Repository trust gates authorization to request native `full`; it is not a
-  containment claim. `workspace_write` and `readonly` mean the selected
-  adapter's native policy, whose exact enforcement differs by vendor. For an
+- Repository trust gates authorization for an operator at a surface to request
+  native `full`; it is not a containment claim. `workspace_write` and `readonly`
+  mean the selected adapter's native policy, whose exact enforcement differs by
+  vendor. A run marked `execution.delegated` carries the external orchestrator's
+  own authority instead and needs no trust record; any client that can reach the
+  daemon control API or the host MCP server can set that marker, and such a
+  client already holds the daemon token that could write the trust file itself.
+  The macOS app and belt sub-runs cannot set it. Either way the harness runs as
+  the signed-in OS user with no outer boundary, as described above. For an
   externally orchestrated mutating run, the registered/trusted project stays
   `scope.root` while the harness executes in the caller-supplied
   `execution.workspaceRoot`; neither path relationship nor a second trust

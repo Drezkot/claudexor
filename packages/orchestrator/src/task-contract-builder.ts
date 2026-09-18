@@ -28,6 +28,11 @@ interface TaskContractBuildInput {
   instructions?: string;
   baseRef?: string;
   delegate?: boolean;
+  /** Wire `execution.delegated`: an EXTERNAL orchestrator owns this workspace
+   *  and carries its own authority. Unrelated to the `delegate` belt flag above
+   *  and to `delegatedFromRunId` (belt-child provenance). Already carried on
+   *  RunInput (orchestrator.ts) — declared here so the trust gate can read it. */
+  delegated?: boolean;
   parentRunId?: string | null;
   delegatedFromRunId?: string | null;
   tests?: TestCommandInvocation[];
@@ -68,12 +73,25 @@ export function buildTaskContract(
   const requestedAccess = access.requested;
   // Effective access is COMPUTED by the engine, never echoed from a client.
   const effectiveAccess: AccessProfile = access.effective;
-  // TrustConfig is USER-LEVEL only (versioned repo config must never
-  // self-grant sensitive powers): unsandboxed full access requires an
-  // explicit allow in ~/.claudexor trust settings — loud error, no downgrade.
-  // The gate applies to the EFFECTIVE profile: a read-only run clamped to
-  // readonly never runs unsandboxed and needs no trust allow.
-  if (effectiveAccess === "full" && !resolvedCfg.trust.allow_full_access) {
+  // The full-access allow is a CONSENT CEREMONY for the operator sitting at a
+  // surface (the app's one-time grant, `claudexor trust --allow-full-access`):
+  // a loud error, never a silent downgrade. Versioned repo config still cannot
+  // self-grant it — ProjectConfig structurally excludes the sensitive trust
+  // settings, and the narrow trust surface only sets a readonly|workspace_write
+  // default (ControlTrustUpdateRequest), so `full` arrives as an explicit
+  // caller request. A run marked `execution.delegated` has no operator at a
+  // surface to ask: an external orchestrator owns the workspace and carries its
+  // own authority, and its client already holds the daemon token that could
+  // write the trust file itself, so a second ceremony there buys nothing and
+  // only teaches embedders to auto-grant (INV-122: existing controls count; do
+  // not duplicate them with a weaker second boundary). The gate applies to the
+  // EFFECTIVE profile either way, so a run clamped to readonly never runs
+  // unsandboxed and needs no allow.
+  if (
+    effectiveAccess === "full" &&
+    input.delegated !== true &&
+    !resolvedCfg.trust.allow_full_access
+  ) {
     // Typed refusal: the `code` rides the daemon job record onto the thread
     // turn (TurnEnqueueError.code), so surfaces key remedies on the CODE —
     // never on substring-matching this human message.

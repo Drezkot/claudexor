@@ -12330,6 +12330,58 @@ describe("Orchestrator", () => {
           access: "full",
         }),
       ).rejects.toThrow(/allow_full_access/);
+      // The refusal is TYPED: surfaces key the one-time-grant remedy on the
+      // code + 403, never on substring-matching the human message.
+      await expect(
+        orch.run({
+          repoRoot: repo,
+          prompt: "x",
+          mode: "agent",
+          harnesses: ["fake-success"],
+          n: 1,
+          access: "full",
+        }),
+      ).rejects.toMatchObject({ code: "trust_full_access_required", status: 403 });
+    } finally {
+      delete process.env.CLAUDEXOR_CONFIG_DIR;
+    }
+  });
+
+  it("admits a delegated access=full run with no trust record and records the full profile", async () => {
+    // The trust allow is a consent ceremony for the operator at a surface. A run
+    // marked execution.delegated has no such operator: an external orchestrator
+    // owns the workspace and carries its own authority, so it needs no trust
+    // record. The effective profile must still be recorded honestly as full, so
+    // admitting the run never becomes a silent downgrade to workspace_write.
+    const dir = reapMk(join(tmpdir(), "claudexor-orch-delegated-full-"));
+    writeFileSync(join(dir, "task.txt"), "do the thing\n");
+    // Scoped config dir with NO trust file, so the run proves the skip rather
+    // than inheriting an allow from the developer's real home.
+    const configDir = reapMk(join(tmpdir(), "claudexor-orch-delegated-notrust-"));
+    process.env.CLAUDEXOR_CONFIG_DIR = configDir;
+    try {
+      const registry = new Map<string, HarnessAdapter>([
+        ["fake-success", createFakeHarness("fake-success")],
+      ]);
+      const orch = new Orchestrator({ registry, reviewers: reviewers() });
+      const res = await orch.run({
+        repoRoot: dir,
+        executionRoot: dir,
+        prompt: "x",
+        mode: "agent",
+        harnesses: ["fake-success"],
+        attempts: 2,
+        inPlace: true,
+        access: "full",
+        delegated: true,
+      });
+      expect(res.lifecycle).toBe("succeeded");
+      expect(readFileSync(join(res.runDir, "context", "task.yaml"), "utf8")).toContain(
+        "effective_profile: full",
+      );
+      expect(readFileSync(join(res.runDir, "final", "telemetry.yaml"), "utf8")).toContain(
+        "effective_access: full",
+      );
     } finally {
       delete process.env.CLAUDEXOR_CONFIG_DIR;
     }

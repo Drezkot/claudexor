@@ -384,7 +384,11 @@ message, code, retryability, bounded required actions, and bounded structured
 context. Clients present the message/actions and do not dump context wholesale;
 `POST /v2/threads/:id/turns/:turnId/retry` re-enqueues that same turn.
 `GET /v2/trust` / `POST /v2/trust` are the sole CLI/app trust boundary for the
-user-level full-access grant and `readonly|workspace_write` access default.
+user-level full-access grant and `readonly|workspace_write` access default. An
+embedding orchestrator that owns the workspace marks its runs
+`execution.delegated` and does not need that grant to request `access: full`;
+its client already holds the daemon token that could write the trust file
+itself. The refusal above still applies to runs an operator starts at a surface.
 
 ## MCP
 
