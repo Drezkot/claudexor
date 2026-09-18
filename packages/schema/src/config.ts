@@ -111,7 +111,9 @@ export const TrustConfig = z
     allow_full_access: z
       .boolean()
       .default(false)
-      .describe("Per-repo allow required before any run may use the full access profile."),
+      .describe(
+        "Per-repo allow required before a run an operator starts at a surface may use the full access profile. An execution.delegated run carries the external orchestrator's own authority and does not need it.",
+      ),
     /**
      * Provenance ONLY: which repo root this file was written for. The file's
      * key stays the repo-root HASH in its filename — this field never gates

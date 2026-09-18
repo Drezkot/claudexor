@@ -384,7 +384,16 @@ message, code, retryability, bounded required actions, and bounded structured
 context. Clients present the message/actions and do not dump context wholesale;
 `POST /v2/threads/:id/turns/:turnId/retry` re-enqueues that same turn.
 `GET /v2/trust` / `POST /v2/trust` are the sole CLI/app trust boundary for the
-user-level full-access grant and `readonly|workspace_write` access default.
+user-level full-access grant and `readonly|workspace_write` access default. An
+embedding orchestrator that owns the workspace marks its runs
+`execution.delegated` and does not need that grant to request `access: full`.
+A control-API client holds the daemon token and can already grant itself the
+allow here, so the exemption costs nothing on that surface. The host MCP server
+accepts the same marker from a caller that holds no token and has no
+trust-writing tool, so there one tool call with `execution.delegated: true` and
+`access: "full"` runs unsandboxed native `full` on any `repoPath` without the
+grant, bounded only by the host's own MCP tool-approval policy. The refusal
+above still applies to runs an operator starts at a surface.
 
 ## MCP
 
