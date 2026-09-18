@@ -1,5 +1,12 @@
 # @claudexor/schema
 
+## 3.12.2
+
+### Patch Changes
+
+- Keep accounts eligible by default until their quota reaches 100% usage instead of reserving the final 10%. Explicitly configured thresholds remain effective.
+  - @claudexor/util@3.12.2
+
 ## 3.12.1
 
 ### Patch Changes

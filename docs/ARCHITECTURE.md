@@ -925,7 +925,9 @@ intentional presence-only API-key probe may remain `not_run` (shown unknown,
 then adapter-enforced). Each harness
 may declare ONE typed `profile_policy`
 (`limit_action: auto|fail|ask|rotate`, priority-ordered `rotation_eligible`,
-`headroom_threshold`). `auto` is the STORED DEFAULT and resolves by the limit
+`headroom_threshold`, default `1`: accounts remain eligible until 100% usage;
+explicitly configured lower thresholds remain effective). `auto` is the STORED
+DEFAULT and resolves by the limit
 subject's credential kind at decision time (`effectiveLimitAction`, ONE
 resolver shared by the engine and every projection): `rotate` for a
 subscription (`local_session`) subject, `fail` for a metered API-key or

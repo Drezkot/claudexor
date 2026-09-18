@@ -769,7 +769,7 @@ function spentProfileSnapshot(
       {
         id: "five_hour",
         label: "5 hour",
-        used_ratio: 0.97,
+        used_ratio: 1,
         window_seconds: 18_000,
         resets_at: resetsAt,
         cooldown_until: null,
@@ -6393,7 +6393,7 @@ describe("Orchestrator", () => {
             {
               id: "five_hour",
               label: "5 hour",
-              used_ratio: 0.97,
+              used_ratio: 1,
               window_seconds: 18000,
               resets_at: null,
               cooldown_until: null,
@@ -6504,7 +6504,7 @@ describe("Orchestrator", () => {
               {
                 id: "five_hour",
                 label: "5 hour",
-                used_ratio: 0.97,
+                used_ratio: 1,
                 window_seconds: 18000,
                 resets_at: null,
                 cooldown_until: null,
@@ -6523,8 +6523,8 @@ describe("Orchestrator", () => {
         credentialProfileId: "a",
         onEvent: (event) => events.push(event.type),
       });
-      // Default policy = fail FAILS (release wave tier1 #4): a FRESH breach
-      // refuses before spawn with typed evidence; no adapter ever launches.
+      // The default threshold refuses a fresh, fully spent window before
+      // spawn with typed evidence; no adapter ever launches.
       expect(legacyOutcome(res)).toBe("failed");
       expect(seen).toEqual([]);
       expect(events).toContain("route.profile.headroom_exceeded");
@@ -7129,7 +7129,7 @@ describe("Orchestrator", () => {
               {
                 id: "weekly_scoped:Fable",
                 label: "7 day (Fable)",
-                used_ratio: 0.97,
+                used_ratio: 1,
                 window_seconds: 604800,
                 resets_at: resetsAt,
                 cooldown_until: null,

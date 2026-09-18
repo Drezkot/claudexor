@@ -162,7 +162,7 @@ export class OrchestratorCredentials {
     const policy = this.host.config(repoRoot)?.global.harnesses?.[harnessId]?.profile_policy;
     // A6: an ABSENT policy means `auto` (kind-aware: rotate for subscription
     // subjects, fail for metered) — resolved later by effectiveLimitAction.
-    return policy ?? { limit_action: "auto", rotation_eligible: [], headroom_threshold: 0.9 };
+    return policy ?? { limit_action: "auto", rotation_eligible: [], headroom_threshold: 1 };
   }
 
   /** The quota poller's authenticated vendor evidence for THIS decision epoch,

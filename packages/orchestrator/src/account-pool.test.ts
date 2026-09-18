@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { CredentialProfile, QuotaSnapshot } from "@claudexor/schema";
+import { GlobalConfig } from "@claudexor/schema";
 import { rankAccountPool, selectFromAccountPool } from "./account-pool.js";
 
 function row(id: string, overrides: Partial<CredentialProfile> = {}): CredentialProfile {
@@ -187,6 +188,24 @@ describe("account pool ranking (unified model, D-U1 + K.5)", () => {
 });
 
 describe("account pool selection", () => {
+  it.each([
+    [0.9, "selected"],
+    [0.95, "selected"],
+    [0.99, "selected"],
+    [1, "exhausted"],
+  ] as const)("default policy at %s usage leaves the pool %s", (usedRatio, outcome) => {
+    const policy = GlobalConfig.parse({ harnesses: { claude: {} } }).harnesses["claude"]!
+      .profile_policy;
+    const selection = selectFromAccountPool({
+      ...baseArgs,
+      registry: [row("last-account")],
+      snapshots: [snapshot("last-account", usedRatio)],
+      readyProfileIds: new Set(["last-account"]),
+      headroomThreshold: policy.headroom_threshold,
+    });
+    expect(selection.outcome).toBe(outcome);
+  });
+
   it("selects the best candidate and never an exhausted row", () => {
     const registry = [row("spent"), row("open")];
     const selection = selectFromAccountPool({

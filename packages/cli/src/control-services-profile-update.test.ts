@@ -615,7 +615,7 @@ describe("updateCredentialProfile (INV-135 Enabled toggle) + accounts projection
       },
     ];
     const refreshedQuota = ControlQuotaResponse.parse({
-      snapshots: [quotaSnapshot("work", 0.95)],
+      snapshots: [quotaSnapshot("work", 1)],
       absences: [],
       refreshed_at: "2026-07-28T01:02:03Z",
     });

@@ -413,7 +413,7 @@ export const GlobalConfig = z
                   .number()
                   .min(0)
                   .max(1)
-                  .default(0.9)
+                  .default(1)
                   .describe(
                     "Preflight headroom bound: a selected profile whose active window is at/over this ratio triggers the limit action BEFORE spawn.",
                   ),
