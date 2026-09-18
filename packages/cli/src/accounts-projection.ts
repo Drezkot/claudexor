@@ -216,7 +216,7 @@ export async function accountPoolsProjection(
       harnessId,
       snapshots: quotaSnapshots,
       readyProfileIds: eligibleReady,
-      headroomThreshold: h?.profile_policy?.headroom_threshold ?? 0.9,
+      headroomThreshold: h?.profile_policy?.headroom_threshold ?? 1,
       model: h?.default_model ?? null,
     });
     if (selection.outcome === "selected") {

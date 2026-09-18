@@ -433,7 +433,7 @@
                     "type": "number",
                     "minimum": 0,
                     "maximum": 1,
-                    "default": 0.9,
+                    "default": 1,
                     "description": "Preflight headroom bound: a selected profile whose active window is at/over this ratio triggers the limit action BEFORE spawn."
                   }
                 },
