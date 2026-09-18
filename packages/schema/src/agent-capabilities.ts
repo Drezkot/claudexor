@@ -183,7 +183,7 @@ export const CatalogMutabilityMatrix = z
     accessProfiles: z
       .array(AccessProfile)
       .describe(
-        "Access vocabulary; `full` additionally requires the per-repo trust allow (claudexor trust --allow-full-access).",
+        "Access vocabulary; `full` additionally requires the per-repo trust allow (claudexor trust --allow-full-access) for a run an operator starts at a surface, not for an execution.delegated run.",
       ),
     applyModes: z
       .array(z.enum(["apply", "commit", "branch", "pr"]))

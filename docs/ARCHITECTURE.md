@@ -515,10 +515,14 @@ managed Cursor readonly uses Ask + `--force` + sandbox enabled for non-off
 policies while `off` and `inherit_native` receive no injected force.
 Command/network sandboxing remains separate.
 
-`access=full` (unsandboxed) additionally requires `allow_full_access: true` in
-the USER-LEVEL trust config (`~/.claudexor/v3/trust/<repo-hash>.yaml`); versioned
-repo config can never self-grant it, and the violation is a loud routing error
-naming the resolved trust path, not a silent downgrade. `claudexor trust` is
+`access=full` (unsandboxed) requested by an operator at a surface additionally
+requires `allow_full_access: true` in the USER-LEVEL trust config
+(`~/.claudexor/v3/trust/<repo-hash>.yaml`); versioned repo config can never
+self-grant it, and the violation is a loud routing error naming the resolved
+trust path, not a silent downgrade. A run marked `execution.delegated` is driven
+by an external orchestrator that owns the workspace and carries its own
+authority: it needs no separate trust record, and its effective profile is still
+recorded as `full` on the immutable contract. `claudexor trust` is
 the writer for that file (`--allow-full-access`, `--revoke-full-access`,
 `--access-default readonly|workspace_write`). Per-harness engine defaults
 (`harnesses.<id>.enabled/default_model/effort/web/max_turns/max_rounds/

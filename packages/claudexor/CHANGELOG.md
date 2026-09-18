@@ -1,5 +1,12 @@
 # claudexor
 
+## 3.12.3
+
+### Patch Changes
+
+- A run marked `execution.delegated` may request `access: full` without a user-level trust record. The external orchestrator that owns the workspace carries its own authority, so there is no operator at a surface to ask for the one-time grant. Runs started at a surface keep the existing typed 403 refusal and its retry remedy, and an admitted delegated run still records `full` as its effective profile.
+  - @claudexor/cli@3.12.3
+
 ## 3.12.2
 
 ### Patch Changes

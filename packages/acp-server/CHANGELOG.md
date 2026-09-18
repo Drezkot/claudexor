@@ -1,5 +1,12 @@
 # @claudexor/acp-server
 
+## 3.12.3
+
+### Patch Changes
+
+- @claudexor/schema@3.12.3
+- @claudexor/util@3.12.3
+
 ## 3.12.2
 
 ### Patch Changes
