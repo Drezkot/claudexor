@@ -1,5 +1,12 @@
 # @claudexor/budget
 
+## 3.12.4
+
+### Patch Changes
+
+- @claudexor/schema@3.12.4
+- @claudexor/util@3.12.4
+
 ## 3.12.3
 
 ### Patch Changes

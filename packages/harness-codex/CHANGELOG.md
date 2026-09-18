@@ -1,5 +1,15 @@
 # @claudexor/harness-codex
 
+## 3.12.4
+
+### Patch Changes
+
+- 67c7a71: Use the shared harness environment for Codex model discovery and quota probes so GUI-launched installs can find the same CLI and Node runtime as sign-in and agent execution.
+  - @claudexor/core@3.12.4
+  - @claudexor/schema@3.12.4
+  - @claudexor/secrets@3.12.4
+  - @claudexor/util@3.12.4
+
 ## 3.12.3
 
 ### Patch Changes

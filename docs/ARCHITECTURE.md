@@ -713,6 +713,10 @@ code-signing monitor SIGKILLs (`Killed: 9`); the daemon proved its own Node
 runnable by executing on it. The prepend is skipped when that Node is itself an
 at-risk Homebrew build, so a killable runtime never poisons the shell, and
 `claudexor doctor` still surfaces the non-gating at-risk-Node advisory.
+Codex's direct `model/list` and quota app-server probes use that same producer,
+so a GUI-launched daemon can discover models and quota from the CLI it found
+during login. Host toolchain PATH is composed before a scoped HOME patch;
+credential homes and provider-variable scrubbing remain specific to each probe.
 
 ### Credential profiles (INV-135, unified account model)
 
