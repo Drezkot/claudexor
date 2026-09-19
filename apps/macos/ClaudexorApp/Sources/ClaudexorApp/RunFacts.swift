@@ -25,9 +25,9 @@ enum RunFacts {
     static func applyFact(state: String?, adopted: Bool) -> (text: String, glyph: String, tone: OutcomePresentation.Tone)? {
         switch state {
         case "applied":
-            return (adopted ? "Winner applied" : "Applied", "checkmark.seal.fill", .success)
+            return (adopted ? "Winner applied" : LocalizedPresentation.text("Applied"), "checkmark.seal.fill", .success)
         case "applied_review_blocked":
-            // BOTH facts, always — never one victorious "Applied".
+            // BOTH facts, always — never one victorious LocalizedPresentation.text("Applied").
             return ("Applied · review blocked", "exclamationmark.triangle.fill", .warning)
         case "reverted":
             return ("Reverted", "arrow.uturn.backward.circle", .neutral)
@@ -40,18 +40,18 @@ enum RunFacts {
     /// Distinct vocabulary from `credential_route` (humanizeCredentialRoute).
     static func authModeLabel(_ mode: String) -> String {
         switch mode {
-        case "local_session": return "Subscription"
-        case "api_key": return "API key"
+        case "local_session": return LocalizedPresentation.text("Subscription")
+        case "api_key": return LocalizedPresentation.text("API key")
         default: return mode.replacingOccurrences(of: "_", with: " ").capitalized
         }
     }
 
     static func outputReadyLabel(_ state: String) -> String {
         switch state {
-        case "pending": return "Output pending"
-        case "finalizing": return "Output finalizing"
-        case "diagnostic": return "Diagnostic output"
-        case "ready": return "Output ready"
+        case "pending": return LocalizedPresentation.text("Output pending")
+        case "finalizing": return LocalizedPresentation.text("Output finalizing")
+        case "diagnostic": return LocalizedPresentation.text("Diagnostic output")
+        case "ready": return LocalizedPresentation.text("Output ready")
         default: return state
         }
     }

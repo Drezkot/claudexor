@@ -19,11 +19,11 @@ struct AuthSheetNativeSetupPanel: View {
     var body: some View {
         Panel {
             VStack(alignment: .leading, spacing: Theme.Spacing.md) {
-                SectionLabel("Native setup", systemImage: "person.crop.circle")
+                SectionLabel(L10n.t("Native setup"), systemImage: "person.crop.circle")
                 // M9-UX item 4: Log in is THE filled primary; Recheck the quiet secondary.
                 HStack(spacing: Theme.Spacing.sm) {
                     Button(action: runLogin) {
-                        Label(targetVerified ? "Manage Login" : "Log in", systemImage: "person.crop.circle.badge.checkmark")
+                        Label(targetVerified ? "Manage Login" : LocalizedPresentation.text("Log in"), systemImage: "person.crop.circle.badge.checkmark")
                     }
                     .buttonStyle(.borderedProminent)
                     .tint(Theme.accentSolid)
@@ -33,7 +33,7 @@ struct AuthSheetNativeSetupPanel: View {
                         family: family, verified: targetVerified, setupLogin: setupLogin))
 
                     Button(action: recheck) {
-                        Label("Recheck", systemImage: "arrow.clockwise")
+                        Label(L10n.t("Recheck"), systemImage: "arrow.clockwise")
                     }
                     .buttonStyle(.bordered)
                     .disabled(actionInFlight)
@@ -63,9 +63,9 @@ struct AuthSheetApiKeyPanel: View {
     var body: some View {
         Panel {
             VStack(alignment: .leading, spacing: Theme.Spacing.md) {
-                SectionLabel("API-key fallback", systemImage: "key")
+                SectionLabel(L10n.t("API-key fallback"), systemImage: "key")
                 SecureField("\(name) key", text: $secretValue).textFieldStyle(.roundedBorder)
-                Button(action: storeKey) { Label("Store Key", systemImage: "key.fill") }
+                Button(action: storeKey) { Label(L10n.t("Store Key"), systemImage: "key.fill") }
                     .buttonStyle(.bordered)
                     .disabled(!enabled)
                     .help(panelHelp)

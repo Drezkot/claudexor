@@ -47,7 +47,7 @@ struct HarnessAccountChip: View {
     private var harnessSegment: some View {
         Menu {
             Button { onPickHarness(nil) } label: {
-                Label("Auto", systemImage: "wand.and.stars")
+                Label(LocalizedPresentation.text("Auto"), systemImage: "wand.and.stars")
                 if current == nil { Image(systemName: "checkmark") }
             }
             Divider()
@@ -64,7 +64,7 @@ struct HarnessAccountChip: View {
                 // Chip meta-rule (round-3 item 4): the harness label NEVER wraps
                 // — the owner saw "Code\nx" (Codex broken mid-word) when width-
                 // constrained. lineLimit(1) + intrinsic width forbid it.
-                Text(current?.label ?? "Auto")
+                Text(current?.label ?? LocalizedPresentation.text("Auto"))
                     .lineLimit(1).fixedSize(horizontal: true, vertical: false)
             }
             .font(.caption.weight(.medium))
@@ -84,7 +84,7 @@ struct HarnessAccountChip: View {
             model: model, harnessId: harness.rawValue, pinnedProfileId: pinnedProfileId)
         return Menu {
             Button { onPickAccount(nil) } label: {
-                Label("Automatic (account pool)", systemImage: "wand.and.stars")
+                Label(LocalizedPresentation.text("Automatic (account pool)"), systemImage: "wand.and.stars")
                 if pinnedProfileId == nil { Image(systemName: "checkmark") }
             }
             if !profiles.isEmpty {
@@ -169,13 +169,13 @@ struct AccessChip: View {
 
     private var chipHelp: String {
         if access == nil {
-            return "This historical thread used a retired access profile. Choose an active profile to continue."
+            return LocalizedPresentation.text("This historical thread used a retired access profile. Choose an active profile to continue.")
         }
         if browserArmed {
-            return "Browser keeps this access scope; unsupported harness combinations are refused before launch."
+            return LocalizedPresentation.text("Browser keeps this access scope; unsupported harness combinations are refused before launch.")
         }
-        if writeDisabled { return "Read-only intents never write" }
-        return "How much this turn may touch"
+        if writeDisabled { return LocalizedPresentation.text("Read-only intents never write") }
+        return LocalizedPresentation.text("How much this turn may touch")
     }
 }
 
@@ -247,7 +247,7 @@ extension ThreadsScreen {
                       systemImage: "lock.shield")
                     .font(.caption)
                     .foregroundStyle(.orange)
-                Button("Grant full access") {
+                Button(L10n.t("Grant full access")) {
                     Task { await model.setTrust(repoRoot: repoRoot, allowFullAccess: true) }
                 }
                 .buttonStyle(.bordered)

@@ -9,10 +9,10 @@ enum AgentStrategy: String, CaseIterable, Identifiable, Hashable {
     var id: String { rawValue }
     var label: String {
         switch self {
-        case .single: return "Single"
-        case .bestOf: return "Best-of"
-        case .untilClean: return "Until clean"
-        case .create: return "Create"
+        case .single: return "Один агент"
+        case .bestOf: return "Лучший из вариантов"
+        case .untilClean: return "До чистого результата"
+        case .create: return "Создать"
         }
     }
     var glyph: String {
@@ -25,10 +25,10 @@ enum AgentStrategy: String, CaseIterable, Identifiable, Hashable {
     }
     var blurb: String {
         switch self {
-        case .single: return "One candidate with optional model review; completed changes can be applied normally."
-        case .bestOf: return "N candidates in isolated envelopes, cross-reviewed, best wins."
-        case .untilClean: return "One envelope repaired until gates/review are clean."
-        case .create: return "Scaffold a brand-new repo or component."
+        case .single: return LocalizedPresentation.text("One candidate with optional model review; completed changes can be applied normally.")
+        case .bestOf: return LocalizedPresentation.text("N candidates in isolated envelopes, cross-reviewed, best wins.")
+        case .untilClean: return LocalizedPresentation.text("One envelope repaired until gates/review are clean.")
+        case .create: return LocalizedPresentation.text("Scaffold a brand-new repo or component.")
         }
     }
 

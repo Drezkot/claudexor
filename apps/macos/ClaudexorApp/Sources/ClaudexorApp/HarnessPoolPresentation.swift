@@ -28,7 +28,7 @@ enum HarnessPoolPresentation {
     /// non-empty pool is an explicit user subset.
     static func isAuto(pool: [String]) -> Bool { pool.isEmpty }
 
-    /// The wire value after tapping the "Auto" chip: clear the explicit subset so
+    /// The wire value after tapping the LocalizedPresentation.text("Auto") chip: clear the explicit subset so
     /// the pool is empty again → the engine routes across all available. The body
     /// the composer sends is unchanged from today's "no explicit pool".
     static func selectingAuto() -> [String] { [] }
@@ -75,7 +75,7 @@ enum HarnessPoolPresentation {
             if isAuto(pool: pool) {
                 return .init(
                     included: included,
-                    help: "Auto includes available harnesses; this one is unavailable: \(availability.reason)",
+                    help: "Авто включает доступных агентов; этот агент недоступен: \(availability.reason)",
                     accessibilityValue: "Not included by Auto, unavailable"
                 )
             }
@@ -83,8 +83,8 @@ enum HarnessPoolPresentation {
             let accessibilityMembership = included ? "Included" : "Excluded"
             return .init(
                 included: included,
-                help: "This harness is \(membership) in the explicit eligible pool, but is unavailable: \(availability.reason)",
-                accessibilityValue: "\(accessibilityMembership), unavailable"
+                help: "Этот агент \(membership) в выбранном пуле, но сейчас недоступен: \(availability.reason)",
+                accessibilityValue: "\(accessibilityMembership), недоступен"
             )
         }
         if isAuto(pool: pool) {

@@ -15,7 +15,7 @@ enum TurnPresentation {
         var identity: String?
         /// The single-family identity for glyph/color, when unambiguous.
         var family: HarnessFamily?
-        /// The QUIET state word: "Working…" (retry folds in: "Retrying 2/10")
+        /// The QUIET state word: LocalizedPresentation.text("Working…") (retry folds in: "Retrying 2/10")
         /// while active; the terminal label otherwise — or nil when the
         /// attention chip already voices the terminal state (no "Failed
         /// [Failed]" stutter).
@@ -56,7 +56,7 @@ enum TurnPresentation {
         let identity: String?
         let family: HarnessFamily?
         if isRace {
-            identity = "Best-of \(max(1, n))"
+            identity = "Лучший из \(max(1, n))"
             family = nil
         } else if harnesses.count == 1, let single = harnesses.first {
             identity = single.label
@@ -67,13 +67,13 @@ enum TurnPresentation {
         }
         // The attention chip IS the state fact (W4.1 caps the line at four
         // facts): whenever a chip exists the quiet word yields — including a
-        // waiting-active run, where "Needs your answer" outranks "Working…".
+        // waiting-active run, where "Needs your answer" outranks LocalizedPresentation.text("Working…").
         let stateWord: String?
         if attention(phase: phase, reason: reason, reviewNeedsDecision: reviewNeedsDecision,
                      waitingOnUser: waitingOnUser) != nil {
             stateWord = nil
         } else if phase.isActive {
-            stateWord = retryLabel ?? "Working…"
+            stateWord = retryLabel ?? LocalizedPresentation.text("Working…")
         } else {
             stateWord = RunReasonLabel.label(reason) ?? phase.label
         }
@@ -98,9 +98,9 @@ enum TurnPresentation {
             }
         }
         var parts: [String] = []
-        if thinkingSeconds >= 1 { parts.append("Thinking \(Int(thinkingSeconds))s") }
-        if tools > 0 { parts.append("\(tools) tool\(tools == 1 ? "" : "s")") }
-        if files > 0 { parts.append("\(files) file\(files == 1 ? "" : "s")") }
+        if thinkingSeconds >= 1 { parts.append("Размышление: \(Int(thinkingSeconds)) с") }
+        if tools > 0 { parts.append("инструментов: \(tools)") }
+        if files > 0 { parts.append("файлов: \(files)") }
         return parts.isEmpty ? "Activity" : parts.joined(separator: " · ")
     }
 
@@ -119,7 +119,7 @@ enum TurnPresentation {
                 let line = ToolRow.subtitle(tool).map { "\(title) \($0)" } ?? title
                 return String(line.prefix(140))
             case .thinking(_, _, let seconds):
-                return seconds >= 1 ? "Thinking · \(Int(seconds))s" : "Thinking"
+                return seconds >= 1 ? "Thinking · \(Int(seconds))s" : LocalizedPresentation.text("Thinking")
             case .message:
                 continue
             }

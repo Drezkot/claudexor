@@ -105,11 +105,11 @@ enum DelegationPresentation {
     private static func unavailableExplanation(reason: String) -> String {
         switch reason {
         case "runtime_unavailable":
-            return "This runtime cannot host the Delegate tool belt. Update or repair the Claudexor runtime, then reconnect."
+            return LocalizedPresentation.text("This runtime cannot host the Delegate tool belt. Update or repair the Claudexor runtime, then reconnect.")
         case "manifest_unsupported":
-            return "The selected harness cannot accept the Delegate tool belt. Choose a supported harness."
+            return LocalizedPresentation.text("The selected harness cannot accept the Delegate tool belt. Choose a supported harness.")
         default:
-            return "Delegate is unavailable for the selected harness and runtime. Check Harness Doctor, then try again."
+            return LocalizedPresentation.text("Delegate is unavailable for the selected harness and runtime. Check Harness Doctor, then try again.")
         }
     }
 
@@ -187,15 +187,15 @@ enum DelegationPresentation {
     private static func degradedExplanation(reason: String) -> String {
         switch reason {
         case "runtime_unavailable":
-            return "The selected Claudexor runtime could not provide the Delegate tool belt. Update or repair the runtime, then try again."
+            return LocalizedPresentation.text("The selected Claudexor runtime could not provide the Delegate tool belt. Update or repair the runtime, then try again.")
         case "manifest_unsupported":
-            return "The selected harness could not accept the Delegate tool belt. Choose a supported harness, then try again."
+            return LocalizedPresentation.text("The selected harness could not accept the Delegate tool belt. Choose a supported harness, then try again.")
         case "access_profile_incompatible":
-            return "The selected access profile could not host Delegate. Choose Full access, then try again."
+            return LocalizedPresentation.text("The selected access profile could not host Delegate. Choose Full access, then try again.")
         case "partially_degraded":
-            return "One selected lane could not host Delegate and continued as ordinary Agent. Inspect that lane or choose only Delegate-capable harnesses."
+            return LocalizedPresentation.text("One selected lane could not host Delegate and continued as ordinary Agent. Inspect that lane or choose only Delegate-capable harnesses.")
         default:
-            return "Delegate could not be enabled before the run started."
+            return LocalizedPresentation.text("Delegate could not be enabled before the run started.")
         }
     }
 

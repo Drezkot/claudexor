@@ -14,7 +14,7 @@ struct AuthSheetHeader: View {
     var body: some View {
         HStack(spacing: Theme.Spacing.md) {
             if profileDisplayName != nil {
-                Button(action: back) { Label("Accounts", systemImage: "chevron.left") }
+                Button(action: back) { Label(L10n.t(LocalizedPresentation.text("Accounts")), systemImage: "chevron.left") }
                     .buttonStyle(.borderless)
                     .disabled(backDisabled)
                     .help(backDisabled
@@ -32,7 +32,7 @@ struct AuthSheetHeader: View {
                     .foregroundStyle(.secondary)
             }
             Spacer()
-            Button("Done", action: done)
+            Button(L10n.t(LocalizedPresentation.text("Done")), action: done)
                 .buttonStyle(.bordered)
                 .keyboardShortcut(.cancelAction)
                 .help("Close \(family.label) Auth. An active setup job asks whether to keep running or cancel.")

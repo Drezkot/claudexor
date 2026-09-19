@@ -34,7 +34,7 @@ struct AuthSheetJobPanel: View {
         Panel {
             VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
                 HStack {
-                    SectionLabel("Setup job", systemImage: "list.bullet.rectangle")
+                    SectionLabel(L10n.t("Setup job"), systemImage: "list.bullet.rectangle")
                     Spacer()
                     // W4.8: state + phase + outcome sewn into ONE human status
                     // — never "Failed" beside "Completed" beside "exit 0".
@@ -77,7 +77,7 @@ struct AuthSheetJobPanel: View {
                 }
 
                 if job.blocksReplacement {
-                    Label("A previous process may still be alive. New Login and Retry stay disabled until the daemon can prove a safe replacement. API-key storage remains a separate operation.",
+                    Label(LocalizedPresentation.text("A previous process may still be alive. New Login and Retry stay disabled until the daemon can prove a safe replacement. API-key storage remains a separate operation."),
                           systemImage: "exclamationmark.shield.fill")
                         .font(.caption2)
                         .foregroundStyle(Theme.status(.caution))
@@ -88,10 +88,10 @@ struct AuthSheetJobPanel: View {
                 // a dead end — a first-class button STARTS the Terminal sign-in.
                 if deviceAuthFallback == .terminalLogin {
                     VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
-                        Text("This codex build does not support in-app device-code sign-in. Use the Terminal sign-in instead.")
+                        Text(L10n.t("This codex build does not support in-app device-code sign-in. Use the Terminal sign-in instead."))
                             .font(.caption).foregroundStyle(.secondary)
                         Button(action: startTerminalFallback) {
-                            Label("Open Terminal sign-in", systemImage: "terminal")
+                            Label(L10n.t("Open Terminal sign-in"), systemImage: "terminal")
                         }
                         .buttonStyle(.borderedProminent)
                         .tint(Theme.accentSolid)
@@ -122,7 +122,7 @@ struct AuthSheetJobPanel: View {
                     Text("Reconnecting setup stream (\(lifecycle.reconnectAttempt)/\(SetupLifecycleController.maximumReconnects))…")
                         .font(.caption2).foregroundStyle(.secondary)
                 } else if lifecycle.connection == .streamLost {
-                    Text("Setup stream lost after bounded reconnects. The job was not marked failed; reconnect to fetch its current server state.")
+                    Text(L10n.t("Setup stream lost after bounded reconnects. The job was not marked failed; reconnect to fetch its current server state."))
                         .font(.caption2).foregroundStyle(Theme.status(.caution))
                 }
                 if let error = lifecycle.lastError, !error.isEmpty {
@@ -139,19 +139,19 @@ struct AuthSheetJobPanel: View {
         HStack(spacing: Theme.Spacing.sm) {
             // W4.8: named for what it extends (canExtend gates to a live login).
             if job.canExtend {
-                Button("Extend login wait (15 min)", action: extendDeadline)
+                Button(L10n.t("Extend login wait (15 min)"), action: extendDeadline)
                     .buttonStyle(.bordered)
                     .disabled(actionInFlight || activeStateUnknown)
                     .help("Extend the wait for the native login you are completing by 15 minutes.")
             }
             if job.canCancel {
-                Button("Cancel Login", role: .destructive, action: cancelJob)
+                Button(L10n.t("Cancel Login"), role: .destructive, action: cancelJob)
                     .buttonStyle(.bordered)
                     .disabled(actionInFlight)
                     .help("Request cancellation and keep observing until the engine confirms termination.")
             }
             if lifecycle.connection == .streamLost || job.blocksReplacement {
-                Button(job.blocksReplacement ? "Reconcile" : "Reconnect", action: reconnect)
+                Button(job.blocksReplacement ? "Reconcile" : LocalizedPresentation.text("Reconnect"), action: reconnect)
                     .buttonStyle(.bordered)
                     .help(job.isActive
                           ? "Re-snapshot this job and start a fresh bounded stream observation."
@@ -165,13 +165,13 @@ struct AuthSheetJobPanel: View {
     @ViewBuilder private var advancedActionsRow: some View {
         HStack(spacing: Theme.Spacing.sm) {
             if job.canRetry {
-                Button("Retry", action: retryJob)
+                Button(L10n.t("Retry"), action: retryJob)
                     .buttonStyle(.bordered)
                     .disabled(actionInFlight || activeStateUnknown)
                     .help("Create a new \(familyLabel) \(Self.humanize(job.action.rawValue)) setup job.")
             }
             if let raw = job.guideUrl, let url = URL(string: raw) {
-                Button("Guide") { NSWorkspace.shared.open(url) }
+                Button(L10n.t("Guide")) { NSWorkspace.shared.open(url) }
                     .buttonStyle(.bordered)
                     .help("Open the official \(familyLabel) setup guide.")
             }
@@ -187,7 +187,7 @@ struct AuthSheetJobPanel: View {
 
     static func deadlineText(_ deadline: Date, now: Date) -> String {
         let seconds = max(0, Int(deadline.timeIntervalSince(now)))
-        if seconds == 0 { return "Deadline reached — waiting for the engine's terminal result" }
+        if seconds == 0 { return LocalizedPresentation.text("Deadline reached — waiting for the engine's terminal result") }
         return String(format: "Native login deadline in %02d:%02d", seconds / 60, seconds % 60)
     }
 
@@ -234,9 +234,9 @@ struct AuthSheetConnectionPanel: View {
     var body: some View {
         Panel {
             VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
-                SectionLabel("Setup state", systemImage: connection == .streamLost ? "wifi.exclamationmark" : "magnifyingglass")
+                SectionLabel(L10n.t("Setup state"), systemImage: connection == .streamLost ? "wifi.exclamationmark" : "magnifyingglass")
                 if connection == .streamLost {
-                    Text("The active setup state is unknown. A request may have reached the daemon even though its response was lost; reconnect before starting another job.")
+                    Text(L10n.t("The active setup state is unknown. A request may have reached the daemon even though its response was lost; reconnect before starting another job."))
                         .font(.caption)
                         .foregroundStyle(Theme.status(.caution))
                     if let error = lastError, !error.isEmpty {
@@ -245,14 +245,14 @@ struct AuthSheetConnectionPanel: View {
                             .foregroundStyle(Theme.status(.negative))
                             .textSelection(.enabled)
                     }
-                    Button("Reconnect", action: reconnect)
+                    Button(L10n.t(LocalizedPresentation.text("Reconnect")), action: reconnect)
                         .buttonStyle(.borderedProminent)
                         .tint(Theme.accentSolid)
                         .help("Look up this harness's active setup job before enabling a new start.")
                 } else {
                     ProgressView("Checking for an active setup job…")
                         .controlSize(.small)
-                    Text("New setup actions stay disabled until the daemon confirms whether a job is already active.")
+                    Text(L10n.t("New setup actions stay disabled until the daemon confirms whether a job is already active."))
                         .font(.caption2)
                         .foregroundStyle(.secondary)
                 }

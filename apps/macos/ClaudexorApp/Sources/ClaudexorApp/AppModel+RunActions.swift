@@ -11,18 +11,18 @@ extension AppModel {
         switch error {
         case let gateway as GatewayError where gateway.controlProblem != nil:
             guard case GatewayError.http(let status, _) = gateway,
-                  let problem = gateway.controlProblem else { return "Request failed." }
-            let action = problem.requiredActions.first.map { " Required action: \($0)." } ?? ""
-            return "Request failed (HTTP \(status), \(problem.code)): \(problem.message)\(action)"
+                  let problem = gateway.controlProblem else { return LocalizedPresentation.text("Request failed.") }
+            let action = problem.requiredActions.first.map { " Требуемое действие: \($0)." } ?? ""
+            return "Ошибка запроса (HTTP \(status), \(problem.code)): \(problem.message)\(action)"
         case GatewayError.http(let status, let body):
-            if status == 501 { return "This engine build does not support threads. Update Claudexor." }
-            if status == 404 { return "The engine is out of date — restart the daemon." }
-            if let detail = serverErrorMessage(from: body) { return "Request failed (HTTP \(status)): \(detail)" }
-            return "Request failed (HTTP \(status))."
+            if status == 501 { return LocalizedPresentation.text("This engine build does not support threads. Update Claudexor.") }
+            if status == 404 { return LocalizedPresentation.text("The engine is out of date — restart the daemon.") }
+            if let detail = serverErrorMessage(from: body) { return "Ошибка запроса (HTTP \(status)): \(detail)" }
+            return "Ошибка запроса (HTTP \(status))."
         case is URLError:
-            return "Cannot reach the engine — is the daemon running?"
+            return LocalizedPresentation.text("Cannot reach the engine — is the daemon running?")
         default:
-            return "Something went wrong. Try again."
+            return LocalizedPresentation.text("Something went wrong. Try again.")
         }
     }
 
@@ -43,14 +43,14 @@ extension AppModel {
     /// language; anything else passes through untouched (never invent).
     static func humanRevertRefusal(_ message: String?) -> String? {
         guard let message, message.contains("postimage no longer matches") else { return nil }
-        return "The files changed after this turn (a later run or a manual edit) — "
+        return LocalizedPresentation.text("The files changed after this turn (a later run or a manual edit) —") + " "
             + "revert is no longer available. Restore via git if you need the old state."
     }
 
     /// Typed operator decision on a blocked run (review queue actions).
     func decide(runId: String, action: String, feedback: String? = nil, acceptedRisks: [String]? = nil) async -> String? {
         let locationID = selectedExecutionLocation
-        guard let requestClient = gateway(for: locationID) else { return "Engine offline." }
+        guard let requestClient = gateway(for: locationID) else { return LocalizedPresentation.text("Engine offline.") }
         do {
             let res = try await requestClient.decide(
                 runId: runId,
@@ -63,9 +63,9 @@ extension AppModel {
                 await refreshRemoteThreads(locationID)
                 await openThread(locationID: locationID, id: threadId)
             }
-            return res.accepted ? nil : (res.message ?? "Decision was not accepted (\(res.status)).")
+            return res.accepted ? nil : (res.message ?? "Решение не принято (\(res.status)).")
         } catch {
-            return "Decision failed: \(error)"
+            return "Ошибка решения: \(error)"
         }
     }
 
@@ -75,7 +75,7 @@ extension AppModel {
     /// refusal reason (the gate error body, or the patch's non-applying stderr).
     func applyCheck(runId: String) async -> String? {
         guard let requestClient = gateway(for: selectedExecutionLocation) else {
-            return "Engine offline."
+            return LocalizedPresentation.text("Engine offline.")
         }
         do {
             let res = try await requestClient.applyCheck(runId: runId)
@@ -105,12 +105,12 @@ extension AppModel {
     ) async -> RevertOutcome {
         let locationID = requestedLocationID ?? selectedExecutionLocation
         guard let requestClient = gateway(for: locationID) else {
-            return .error("Engine offline.")
+            return .error(LocalizedPresentation.text("Engine offline."))
         }
         do {
             let res = try await requestClient.revertRun(runId: runId)
             guard res.accepted else {
-                return .error(res.message ?? "Revert was refused (\(res.status)).")
+                return .error(res.message ?? "Откат отклонён (\(res.status)).")
             }
             if locationID == .local {
                 await refreshRuns()
@@ -138,13 +138,13 @@ extension AppModel {
     func answerInteraction(runId: String, interactionId: String, answers: [InteractionAnswerPayload]) async -> String? {
         let locationID = selectedExecutionLocation
         guard let requestClient = gateway(for: locationID) else {
-            return "Engine offline: reconnect before answering."
+            return LocalizedPresentation.text("Engine offline: reconnect before answering.")
         }
         do {
             let response = try await requestClient.answerInteraction(
                 runId: runId, interactionId: interactionId, answers: answers)
             guard response.accepted else {
-                return response.message ?? "Answer was not accepted (\(response.status))."
+                return response.message ?? "Ответ не принят (\(response.status))."
             }
             mutateTask(runId, at: locationID) {
                 $0.pendingInteractions.removeAll { $0.interactionId == interactionId }
@@ -156,7 +156,7 @@ extension AppModel {
             }
             return nil
         } catch {
-            return "Could not deliver the answer: \(error)"
+            return "Не удалось отправить ответ: \(error)"
         }
     }
 

@@ -78,10 +78,10 @@ enum LocalDaemonReconciliationPolicy: Sendable, Equatable {
         case .failed(.targetScriptUnavailable), .failed(.targetAuthorityUnavailable),
              .failed(.targetProbeFailed), .failed(.targetAuthorityMismatch(_, _)):
             self = .useCompatible(
-                notice: "Could not verify the selected engine runtime; continuing with the compatible running engine.")
+                notice: L10n.t("Could not verify the selected engine runtime; continuing with the compatible running engine."))
         case .failed(.servingIdentityUnavailable):
             self = .useCompatible(
-                notice: "Could not verify the running engine build; continuing with its compatible protocol.")
+                notice: L10n.t("Could not verify the running engine build; continuing with its compatible protocol."))
         case .failed(.stopFailed):
             self = .failOffline(
                 notice: "Engine refresh could not safely stop the previous engine. Reconnecting.")

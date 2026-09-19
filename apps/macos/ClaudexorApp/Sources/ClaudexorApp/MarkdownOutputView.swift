@@ -69,7 +69,7 @@ struct MarkdownOutputView: View {
                 }
             }
             if renderTruncated > 0 {
-                Text("\(renderTruncated) more characters not rendered here — open the run's full answer artifact.")
+                Text("Ещё \(renderTruncated) символов не показано — откройте полный артефакт ответа запуска.")
                     .font(.caption2).foregroundStyle(.tertiary)
             }
         }
@@ -100,7 +100,7 @@ struct MarkdownOutputView: View {
                 NSWorkspace.shared.open(URL(fileURLWithPath: path))
                 linkRefusal = nil
             case .refuse(let reason):
-                linkRefusal = "Link not opened: \(reason)."
+                linkRefusal = "Ссылка не открыта: \(reason)."
                 NSSound.beep()
             }
             return .handled
@@ -521,8 +521,8 @@ struct MarkdownTableView: View {
 
     private var disclosure: String? {
         var parts: [String] = []
-        if table.truncatedRows > 0 { parts.append("\(table.truncatedRows) more rows") }
-        if table.truncatedColumns > 0 { parts.append("\(table.truncatedColumns) more columns") }
+        if table.truncatedRows > 0 { parts.append("ещё строк: \(table.truncatedRows)") }
+        if table.truncatedColumns > 0 { parts.append("ещё столбцов: \(table.truncatedColumns)") }
         guard !parts.isEmpty else { return nil }
         return parts.joined(separator: " · ") + " not shown — open the run's full answer artifact."
     }

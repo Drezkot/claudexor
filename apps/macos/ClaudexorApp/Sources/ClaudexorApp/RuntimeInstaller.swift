@@ -22,8 +22,8 @@ public enum RuntimeUpdateError: Error, LocalizedError, Equatable {
     public var errorDescription: String? {
         switch self {
         case let .transport(m): return "Update check failed: \(m)"
-        case .manifestMissing: return "The latest release has no runtime-manifest.json asset."
-        case .manifestMalformed: return "The runtime manifest could not be parsed."
+        case .manifestMissing: return LocalizedPresentation.text(LocalizedPresentation.text("The latest release has no runtime-manifest.json asset."))
+        case .manifestMalformed: return LocalizedPresentation.text(LocalizedPresentation.text("The runtime manifest could not be parsed."))
         }
     }
 }
@@ -147,27 +147,27 @@ public enum RuntimeInstallError: Error, LocalizedError, Equatable {
         case let .shaMismatch(e, a):
             return "The downloaded runtime did not match its signed digest (expected \(e), got \(a))."
         case let .unpackFailed(m): return "Unpacking the runtime failed: \(m)"
-        case .unpackedScriptMissing: return "The unpacked runtime is missing its daemon script."
+        case .unpackedScriptMissing: return LocalizedPresentation.text(LocalizedPresentation.text("The unpacked runtime is missing its daemon script."))
         case let .notMonotonic(t):
             return "Runtime \(t) is not newer than the installed runtime; refusing a downgrade."
         case let .probeMismatch(e, g):
             return "The unpacked runtime reported \(Self.describe(g)), expected \(Self.describe(e))."
-        case .daemonBusy: return "The engine is busy running jobs; the update will retry when idle."
+        case .daemonBusy: return LocalizedPresentation.text(LocalizedPresentation.text("The engine is busy running jobs; the update will retry when idle."))
         case let .handshakeMismatch(e, g):
             return "After relaunch the engine reported \(Self.describe(g)), expected \(Self.describe(e)); rolling back."
         case let .recoveryFailed(step, remediation):
             return "Recovery after a failed update did not complete: could not \(step). \(remediation)"
         case .rollbackIdentityUnavailable:
-            return "The exact prior engine identity could not be verified; the running engine was not stopped."
+            return LocalizedPresentation.text(LocalizedPresentation.text("The exact prior engine identity could not be verified; the running engine was not stopped."))
         case .lifecycleBusy:
-            return "Another engine lifecycle action is already in progress; retry the update."
-        case .lockHeld: return "Another runtime update is already in progress."
+            return LocalizedPresentation.text(LocalizedPresentation.text("Another engine lifecycle action is already in progress; retry the update."))
+        case .lockHeld: return LocalizedPresentation.text(LocalizedPresentation.text("Another runtime update is already in progress."))
         case let .io(m): return "Runtime update file error: \(m)"
         }
     }
 
     private static func describe(_ identity: RuntimeClosureIdentity?) -> String {
-        guard let identity else { return "no exact identity" }
+        guard let identity else { return LocalizedPresentation.text(LocalizedPresentation.text("no exact identity")) }
         return "\(identity.version) @ \(identity.buildSha)"
     }
 }

@@ -45,7 +45,7 @@ struct TurnReceiptRow: View {
             .buttonStyle(.borderless)
             // QA-003: name the icon-only workspace affordance (else the AX name is
             // the localized `sidebar.trailing` description).
-            .accessibilityLabel("Open in workspace")
+            .accessibilityLabel(LocalizedPresentation.text("Open in workspace"))
             .help("Open this run in the thread workspace — changes, artifacts, evidence")
         }
     }
@@ -170,23 +170,23 @@ struct ApplyThreadBar: View {
             Image(systemName: isApplied ? "checkmark.seal.fill" : "arrow.up.doc.on.clipboard")
                 .foregroundStyle(isApplied ? Theme.status(.positive) : Theme.accent)
             VStack(alignment: .leading, spacing: 2) {
-                Text("Isolated workspace").font(.caption.weight(.medium))
+                Text(L10n.t("Isolated workspace")).font(.caption.weight(.medium))
                 switch outcome {
                 case .applied:
-                    Text("Applied to the project — this thread's worktree has been delivered.")
+                    Text(L10n.t("Applied to the project — this thread's worktree has been delivered."))
                         .font(.caption).foregroundStyle(Theme.status(.positive))
                 case .failed(let message):
                     Text(message).font(.caption).foregroundStyle(.orange).textSelection(.enabled)
                 case .idle:
-                    Text("Turns are kept in a thread worktree — apply them to the project when ready.")
+                    Text(L10n.t("Turns are kept in a thread worktree — apply them to the project when ready."))
                         .font(.caption).foregroundStyle(.secondary)
                 }
             }
             Spacer()
             // After a successful apply the thread is delivered — HIDE the apply actions
-            // so it can't be re-applied by mistake; show an explicit "Applied" state.
+            // so it can't be re-applied by mistake; show an explicit LocalizedPresentation.text("Applied") state.
             if isApplied {
-                Label("Applied", systemImage: "checkmark.seal.fill")
+                Label(LocalizedPresentation.text("Applied"), systemImage: "checkmark.seal.fill")
                     .font(.caption.weight(.medium))
                     .foregroundStyle(Theme.status(.positive))
             } else {
@@ -202,7 +202,7 @@ struct ApplyThreadBar: View {
                 .controlSize(.small)
                 .disabled(applying)
                 .help("Deliver the thread's accumulated diff to the project (server-gated)")
-                Button("As branch") {
+                Button(L10n.t("As branch")) {
                     applying = true
                     Task {
                         let err = await model.applyThread(id: threadId, mode: "branch")

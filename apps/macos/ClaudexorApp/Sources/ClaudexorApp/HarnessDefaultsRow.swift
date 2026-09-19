@@ -70,10 +70,10 @@ struct HarnessDefaultsRow: View {
                 .id(activeScope)
                 if !effortLevels.isEmpty {
                     Picker(
-                        "Effort",
+                        L10n.t("Effort"),
                         selection: draftBinding(\.effort, lane: .modelAndEffort)
                     ) {
-                        Text("Default").tag("__default")
+                        Text(L10n.t("Default")).tag("__default")
                         ForEach(effortLevels, id: \.self) { Text($0).tag($0) }
                     }
                     .fixedSize()
@@ -83,11 +83,11 @@ struct HarnessDefaultsRow: View {
             }
 
             HStack(spacing: Theme.Spacing.sm) {
-                Picker("Web", selection: draftBinding(\.web, lane: .web)) {
-                    Text("Auto").tag("auto")
-                    Text("Off").tag("off")
-                    Text("Cached").tag("cached")
-                    Text("Live").tag("live")
+                Picker(L10n.t("Web"), selection: draftBinding(\.web, lane: .web)) {
+                    Text(L10n.t(LocalizedPresentation.text("Auto"))).tag("auto")
+                    Text(L10n.t("Off")).tag("off")
+                    Text(L10n.t("Cached")).tag("cached")
+                    Text(L10n.t("Live")).tag("live")
                 }
                 .fixedSize()
                 .help("Default external web/search policy for this harness.")
@@ -332,23 +332,23 @@ struct HarnessDefaultsRow: View {
         case .clean:
             EmptyView()
         case .editing:
-            Text("Editing…")
+            Text(L10n.t("Editing…"))
                 .font(.caption2)
                 .foregroundStyle(.secondary)
         case .invalid(let message):
             failureLabel(message)
         case .queued, .saving:
-            Label("Saving…", systemImage: "arrow.triangle.2.circlepath")
+            Label(L10n.t("Saving…"), systemImage: "arrow.triangle.2.circlepath")
                 .font(.caption2)
                 .foregroundStyle(.secondary)
         case .saved:
-            Label("Saved", systemImage: "checkmark.circle.fill")
+            Label(L10n.t("Saved"), systemImage: "checkmark.circle.fill")
                 .font(.caption2)
                 .foregroundStyle(Theme.status(.positive))
         case .failed(let message):
             HStack(spacing: Theme.Spacing.xs) {
                 failureLabel(message)
-                Button("Retry") { retry(lane) }
+                Button(L10n.t("Retry")) { retry(lane) }
                     .buttonStyle(.borderless)
                     .font(.caption2)
             }

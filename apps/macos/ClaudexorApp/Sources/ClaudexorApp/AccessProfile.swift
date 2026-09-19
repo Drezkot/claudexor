@@ -17,10 +17,10 @@ enum AccessProfile: String, CaseIterable, Identifiable {
     }
     var label: String {
         switch self {
-        case .readOnly: return "Read-only"
-        case .workspaceWrite: return "Workspace write"
-        case .full: return "Full access"
-        case .inheritNative: return "Inherit native"
+        case .readOnly: return LocalizedPresentation.text("Read-only")
+        case .workspaceWrite: return LocalizedPresentation.text("Workspace write")
+        case .full: return LocalizedPresentation.text("Full access")
+        case .inheritNative: return LocalizedPresentation.text("Inherit native")
         }
     }
     var glyph: String {
@@ -53,7 +53,7 @@ enum AccessProfile: String, CaseIterable, Identifiable {
     }
     /// Historical display remains readable without making the retired value active.
     static func humanize(_ wire: String) -> String {
-        if wire == "external_sandbox_full" { return "Retired external sandbox (full)" }
+        if wire == "external_sandbox_full" { return LocalizedPresentation.text("Retired external sandbox (full)") }
         return AccessProfile(wire: wire)?.label ?? wire
     }
 }
@@ -90,7 +90,7 @@ enum ComposerThreadAccessSelection: Equatable {
 
     var migrationBlocker: String? {
         guard case .migrationRequired = self else { return nil }
-        return "Choose an active access profile for this historical thread before continuing."
+        return LocalizedPresentation.text("Choose an active access profile for this historical thread before continuing.")
     }
 
     /// A migration choice always persists, even when it equals the repository

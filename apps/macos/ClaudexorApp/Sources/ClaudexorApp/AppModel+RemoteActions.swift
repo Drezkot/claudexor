@@ -152,7 +152,7 @@ extension AppModel {
                 }
                 guard presentRemoteTerminal(
                     terminalPresentation,
-                    title: "\(HarnessFamily(rawValue: harness.rawValue).label) login — \(connection.displayName)",
+                    title: "Вход \(HarnessFamily(rawValue: harness.rawValue).label) — \(connection.displayName)",
                     invocation: invocation,
                     purpose: .setup(lease, job.jobId))
                 else {
@@ -162,7 +162,7 @@ extension AppModel {
                 handedOff = true
             } else {
                 remoteConnectionMessages[connectionID] =
-                    "\(HarnessFamily(rawValue: harness.rawValue).label) sign-in started."
+                    "Вход \(HarnessFamily(rawValue: harness.rawValue).label) запущен."
                 remoteDeviceLogin = RemoteDeviceLoginRequest(
                     lease: lease, jobID: job.jobId)
                 handedOff = true
@@ -208,7 +208,7 @@ extension AppModel {
         let harnesses = remoteHarnesses[location] ?? []
         let ready = harnesses.filter { !$0.routableIntents.isEmpty }.count
         remoteConnectionMessages[connectionID] =
-            "Harness Doctor: \(ready) of \(harnesses.count) harnesses ready."
+            "Harness Doctor: готово агентов \(ready) из \(harnesses.count)."
     }
 
     func finishRemoteSetup(_ lease: RemoteActionLease) async {
@@ -229,7 +229,7 @@ extension AppModel {
         // under a ForEach row that no longer exists — silently.
         guard installableRemoteHarnesses.contains(harness) else {
             threadStatus =
-                "\(harness) is not an installable harness; nothing was installed."
+                "\(harness) нельзя установить как агент; ничего не установлено."
             return
         }
         guard remoteConnections.contains(where: { $0.id == connectionID }) else {
@@ -345,7 +345,7 @@ extension AppModel {
                 "~/.claudexor/remote/current/bin/claudexor harness install "
                 + SSHCommandFactory.posixQuote(prompt.harness) + " --yes"
             settingsRemoteTerminalSheet = RemoteTerminalSheetRequest(
-                title: "Install \(HarnessFamily(rawValue: prompt.harness).label) — \(connection.displayName)",
+                title: "Установка \(HarnessFamily(rawValue: prompt.harness).label) — \(connection.displayName)",
                 invocation: factory.remoteCommand(command, requestTTY: true),
                 purpose: .install(prompt.lease, prompt.harness))
         } catch {
@@ -365,14 +365,14 @@ extension AppModel {
         let displayName = HarnessFamily(rawValue: harness).label
         guard exitCode == 0 else {
             remoteConnectionMessages[connectionID] =
-                "\(displayName) installer failed with exit code \(exitCode)."
+                "Установщик \(displayName) завершился с кодом \(exitCode)."
             finishRemoteAction(lease)
             return
         }
         let location = ExecutionLocationID.remote(connectionID)
         guard let client = remoteClients[location] else {
             remoteConnectionMessages[connectionID] =
-                "\(displayName) installed, but the remote connection is unavailable for Harness Doctor."
+                "\(displayName) установлен, но удалённое подключение недоступно для Harness Doctor."
             finishRemoteAction(lease)
             return
         }
@@ -382,7 +382,7 @@ extension AppModel {
         else {
             guard remoteActionIsCurrent(lease, client: client) else { return }
             remoteConnectionMessages[connectionID] =
-                "\(displayName) installed, but Harness Doctor could not refresh. Retry."
+                "\(displayName) установлен, но Harness Doctor не смог обновить состояние. Повторите попытку."
             finishRemoteAction(lease)
             return
         }
@@ -401,13 +401,13 @@ extension AppModel {
                 + (installed.flatMap(\.detail).map { ": \($0)" } ?? "") + "."
         } else if !result.routableIntents.isEmpty {
             remoteConnectionMessages[connectionID] =
-                "\(displayName) installed and ready."
+                "\(displayName) установлен и готов."
         } else {
             let reason = result.reasons.first ?? "authentication is still required"
             let nextStep =
                 harness == "opencode"
                 ? "Configure its provider credentials."
-                : "Use Login → \(displayName)."
+                : "Используйте «Вход» → \(displayName)."
             remoteConnectionMessages[connectionID] =
                 "\(displayName) installed, but is not ready: \(reason). \(nextStep)"
         }
@@ -440,8 +440,8 @@ extension AppModel {
             let readiness = RemoteNativeLoginReadiness.profile(entry)
             remoteConnectionMessages[connectionID] =
                 readiness.nativeSessionVerified && readiness.harnessRoutable
-                ? "\(label) account is signed in and ready."
-                : (entry.status.detail ?? "\(label) account is not ready yet.")
+                ? "Аккаунт \(label) авторизован и готов."
+                : (entry.status.detail ?? "Аккаунт \(label) пока не готов.")
             return readiness
         }
         guard await refreshHarnesses(
@@ -455,7 +455,7 @@ extension AppModel {
             $0.family.rawValue == harnessID
         }) else {
             remoteConnectionMessages[connectionID] =
-                "Harness Doctor did not return \(harnessID)."
+                "Harness Doctor не вернул данные для \(harnessID)."
             return nil
         }
         let readiness = RemoteNativeLoginReadiness(
@@ -463,10 +463,10 @@ extension AppModel {
             harnessRoutable: !harness.routableIntents.isEmpty)
         if readiness.nativeSessionVerified && readiness.harnessRoutable {
             remoteConnectionMessages[connectionID] =
-                "\(label) is signed in and ready."
+                "\(label) авторизован и готов."
         } else {
             remoteConnectionMessages[connectionID] =
-                harness.reasons.first ?? "\(label) is not ready yet."
+                harness.reasons.first ?? "\(label) пока не готов."
         }
         return readiness
     }
@@ -513,7 +513,7 @@ extension AppModel {
         var activationLease: RemoteRuntimeActivationLease?
         setRemoteState(
             connectionID, .installing,
-            message: "Downloading and verifying the signed runtime…")
+            message: LocalizedPresentation.text("Downloading and verifying the signed runtime…"))
         do {
             try await sshConnectionManager.connectBatch(connection)
             try await remoteRuntimeInstaller.recoverPendingActivation(on: connection)

@@ -29,7 +29,7 @@ struct FindingCard: View {
                         Label("\(file)\(finding.evidenceLine.map { ":\($0)" } ?? "")", systemImage: "doc.text.magnifyingglass")
                             .font(.system(.caption2, design: .monospaced)).foregroundStyle(Theme.link)
                     } else {
-                        Label("No evidence — cannot block", systemImage: "exclamationmark.shield")
+                        Label(L10n.t("No evidence — cannot block"), systemImage: "exclamationmark.shield")
                             .font(.caption2).foregroundStyle(.secondary)
                     }
                     Spacer()

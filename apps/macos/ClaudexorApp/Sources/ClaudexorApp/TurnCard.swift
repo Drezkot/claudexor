@@ -311,7 +311,7 @@ struct TurnCard: View {
     @ViewBuilder
     private func planImplementRow(_ result: RunResult) -> some View {
         HStack(spacing: Theme.Spacing.sm) {
-            Label("Plan — no files changed", systemImage: "list.bullet.rectangle")
+            Label(LocalizedPresentation.text(LocalizedPresentation.text("Plan — no files changed")), systemImage: "list.bullet.rectangle")
                 .font(.caption).foregroundStyle(.secondary)
             if result.blockers > 0 {
                 Label("\(result.blockers) blocker\(result.blockers == 1 ? "" : "s")", systemImage: "exclamationmark.triangle.fill")
@@ -323,7 +323,7 @@ struct TurnCard: View {
                     .foregroundStyle(Theme.status(.caution))
                     .help("Implement starts a write-capable Agent turn with \(planImplementAccessDescription) access.")
             } else {
-                Label("Choose access in composer", systemImage: "exclamationmark.triangle.fill")
+                Label(LocalizedPresentation.text(LocalizedPresentation.text("Choose access in composer")), systemImage: "exclamationmark.triangle.fill")
                     .font(.caption)
                     .foregroundStyle(Theme.status(.caution))
                     .help(planImplementBlocker ?? "Choose an active access profile before implementing.")
@@ -358,7 +358,7 @@ struct TurnCard: View {
     /// (`RunFacts.applyFact`). Read-only — the decision/apply/revert CONTROLS are
     /// owned by the DecisionBar (receipt) and the workspace, never duplicated
     /// here; this line only voices what already happened. The transient local
-    /// "Applied to project" confirmation (`applied`) owns the just-applied case,
+    /// LocalizedPresentation.text("Applied to project") confirmation (`applied`) owns the just-applied case,
     /// so this yields to it.
     @ViewBuilder
     private func applyStateLine(_ run: TaskRun) -> some View {
@@ -386,14 +386,14 @@ struct TurnCard: View {
             }
         }
         if applied {
-            Label("Applied to project", systemImage: "checkmark.seal.fill")
+            Label(L10n.t(LocalizedPresentation.text("Applied to project")), systemImage: "checkmark.seal.fill")
                 .font(.caption).foregroundStyle(Theme.status(.positive))
         } else if DecisionApplyPresentation.showsApply(run) {
             // Item f: Apply is HIDDEN unless the server eligibility says eligible.
             // Only decision-flow runs apply here; clean runs apply in the workspace.
             HStack(spacing: Theme.Spacing.sm) {
-                Button("Apply patch") { apply(run, mode: "apply") }
-                Button("Apply as branch") { apply(run, mode: "branch") }
+                Button(L10n.t("Apply patch")) { apply(run, mode: "apply") }
+                Button(L10n.t("Apply as branch")) { apply(run, mode: "branch") }
                 Spacer()
             }
             .buttonStyle(.borderedProminent).controlSize(.small)
@@ -433,7 +433,7 @@ struct TurnCard: View {
                 Image(systemName: "checkmark.seal").foregroundStyle(.secondary)
             }
             if overridden {
-                Label("Implemented over open plan questions — plan readiness was overridden.",
+                Label(LocalizedPresentation.text(LocalizedPresentation.text("Implemented over open plan questions — plan readiness was overridden.")),
                       systemImage: "exclamationmark.triangle.fill")
                     .font(.caption2).foregroundStyle(Theme.status(.caution)).textSelection(.enabled)
             }
@@ -475,7 +475,7 @@ struct TurnCard: View {
                     .font(.caption).foregroundStyle(.secondary).textSelection(.enabled)
             }
             Spacer()
-            Button("Open run") { model.openRun(run.id) }
+            Button(L10n.t("Open run")) { model.openRun(run.id) }
                 .buttonStyle(.link)
                 .help("Open this run in the thread workspace — failure detail, evidence, logs")
         }

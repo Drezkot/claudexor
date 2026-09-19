@@ -66,7 +66,7 @@ extension AppModel {
               isCurrentGateway(requestClient, at: locationID)
         else {
             runApplicabilityProjections[locationID] = .failed(
-                repoRoot: repoRoot, message: "Engine offline — reconnect to check Git readiness.")
+                repoRoot: repoRoot, message: LocalizedPresentation.text("Engine offline — reconnect to check Git readiness."))
             return
         }
         runApplicabilityProjections[locationID] = .loading(repoRoot: repoRoot)

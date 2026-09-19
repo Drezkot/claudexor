@@ -20,16 +20,16 @@ struct AuthSheetAccountsPanel: View {
         Panel {
             VStack(alignment: .leading, spacing: Theme.Spacing.md) {
                 HStack {
-                    SectionLabel("Accounts", systemImage: "person.2")
+                    SectionLabel(L10n.t(LocalizedPresentation.text("Accounts")), systemImage: "person.2")
                     Spacer()
                     Button(action: recheck) {
-                        Label("Recheck", systemImage: "arrow.clockwise")
+                        Label(L10n.t("Recheck"), systemImage: "arrow.clockwise")
                     }
                     .buttonStyle(.borderless)
                     .disabled(actionInFlight)
                     // INV-134: a disabled control names its own cause.
                     .help(actionInFlight
-                          ? "Wait for the current action to finish."
+                          ? LocalizedPresentation.text("Wait for the current action to finish.")
                           : "Refresh account readiness")
                 }
                 AccountsSurface(

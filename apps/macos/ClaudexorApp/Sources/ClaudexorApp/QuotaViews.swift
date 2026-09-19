@@ -21,10 +21,10 @@ struct QuotaDetailView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: Theme.Spacing.md) {
                 HStack {
-                    Text("Quota").font(.headline)
+                    Text(L10n.t("Quota")).font(.headline)
                     Spacer()
                     Button { Task { _ = await model.refreshAccounts() } } label: {
-                        Label("Refresh", systemImage: "arrow.clockwise")
+                        Label(L10n.t("Refresh"), systemImage: "arrow.clockwise")
                     }
                     .buttonStyle(.bordered)
                     .disabled(model.activeAccountsLoadState == .loading)
@@ -35,14 +35,14 @@ struct QuotaDetailView: View {
                         groupSection(group)
                     }
                 } else if model.gateway(for: model.activeExecutionLocation) == nil {
-                    ContentUnavailableView("Engine offline", systemImage: "wifi.slash")
+                    ContentUnavailableView(LocalizedPresentation.text("Engine offline"), systemImage: "wifi.slash")
                 } else if case .failed(let message) = model.activeAccountsLoadState {
                     failedWithoutGroups(message)
                 } else {
                     ContentUnavailableView(
                         "Quota unknown",
                         systemImage: "gauge.with.dots.needle.0percent",
-                        description: Text("No official quota snapshot is available yet. Unknown is not shown as full headroom.")
+                        description: Text(L10n.t("No official quota snapshot is available yet. Unknown is not shown as full headroom."))
                     )
                 }
             }
@@ -64,14 +64,14 @@ struct QuotaDetailView: View {
 
     @ViewBuilder private var displayNotice: some View {
         if model.activeAccountsLoadState == .loading, model.activeQuotaResponse != nil {
-            Label("Refreshing · last-known quota remains visible", systemImage: "arrow.clockwise")
+            Label(L10n.t("Refreshing · last-known quota remains visible"), systemImage: "arrow.clockwise")
                 .font(.caption).foregroundStyle(.secondary)
         }
         switch model.activeAccountsQuotaDisplayState {
         case .idle:
             EmptyView()
         case .loading:
-            Label("Loading quota…", systemImage: "arrow.clockwise")
+            Label(L10n.t("Loading quota…"), systemImage: "arrow.clockwise")
                 .font(.caption).foregroundStyle(.secondary)
         case .current:
             EmptyView()
@@ -91,7 +91,7 @@ struct QuotaDetailView: View {
                 Label(message, systemImage: "exclamationmark.triangle.fill")
                     .font(.caption).foregroundStyle(Theme.status(.negative))
                 Spacer()
-                Button("Retry") { Task { _ = await model.refreshAccounts() } }
+                Button(L10n.t("Retry")) { Task { _ = await model.refreshAccounts() } }
                     .buttonStyle(.bordered).controlSize(.small)
             }
         }
@@ -104,7 +104,7 @@ struct QuotaDetailView: View {
                 systemImage: "exclamationmark.triangle.fill",
                 description: Text(message)
             )
-            Button("Retry") { Task { _ = await model.refreshAccounts() } }
+            Button(L10n.t("Retry")) { Task { _ = await model.refreshAccounts() } }
                 .buttonStyle(.borderedProminent)
         }
     }
@@ -114,16 +114,16 @@ struct QuotaDetailView: View {
             HStack {
                 Text(group.harness).font(.headline)
                 if let subject = group.subjectId { Text(subject).foregroundStyle(Theme.accent) }
-                Text(group.routeLabel).foregroundStyle(.secondary)
+                Text(L10n.t(group.routeLabel)).foregroundStyle(.secondary)
                 if let plan = group.planLabel { Text(plan).foregroundStyle(.secondary) }
                 Spacer()
-                Text(group.freshness.capitalized)
+                Text(L10n.t(group.freshness.capitalized))
                     .font(.caption)
                     .foregroundStyle(freshnessColor(group.freshness))
             }
             if let availability = group.availability, availability.state != "available" {
                 Label(
-                    availability.state == "exhausted" ? "Account quota exhausted" : "Account cooling down",
+                    availability.state == "exhausted" ? L10n.t("Account quota exhausted") : L10n.t("Account cooling down"),
                     systemImage: availability.state == "exhausted" ? "gauge.with.dots.needle.100percent" : "hourglass")
                     .font(.caption)
                     .foregroundStyle(Theme.status(.caution))
@@ -134,7 +134,7 @@ struct QuotaDetailView: View {
                     .foregroundStyle(Theme.status(.caution))
             }
             if let cooldown = formattedDate(group.cooldownUntil) {
-                Label("Cooling down until \(cooldown)", systemImage: "hourglass")
+                Label("Ожидание восстановления до \(cooldown)", systemImage: "hourglass")
                     .font(.caption)
                     .foregroundStyle(.orange)
             }
@@ -148,11 +148,11 @@ struct QuotaDetailView: View {
                     if let ratio = window.usedRatio {
                         ProgressView(value: ratio, total: 1).tint(ratio >= 0.9 ? .orange : Theme.accent)
                     } else {
-                        Text("Provider did not report usage for this window.")
+                        Text(L10n.t("Provider did not report usage for this window."))
                             .font(.caption2).foregroundStyle(.secondary)
                     }
                     if let reset = formattedDate(window.resetsAt) {
-                        Text("Resets \(reset)")
+                        Text("Сброс \(reset)")
                             .font(.caption2)
                             .foregroundStyle(.secondary)
                     }
@@ -161,7 +161,7 @@ struct QuotaDetailView: View {
                 .background(Theme.surfaceRaised, in: RoundedRectangle(cornerRadius: Theme.Radius.control))
             }
             ForEach(group.sources) { source in
-                Text("\(source.source.replacingOccurrences(of: "_", with: " ")) · observed \(formattedDate(source.observedAt) ?? source.observedAt)")
+                Text("\(source.source.replacingOccurrences(of: "_", with: " ")) · получено \(formattedDate(source.observedAt) ?? source.observedAt)")
                     .font(.caption2)
                     .foregroundStyle(.secondary)
             }
@@ -169,14 +169,40 @@ struct QuotaDetailView: View {
     }
 
     private func windowLabel(_ window: QuotaPresentation.Window) -> String {
-        guard let models = window.appliesToModels, !models.isEmpty else { return window.label }
-        return "\(window.label) · \(QuotaPresentation.modelScopeLabel(models))"
+        let label = localizedQuotaWindowLabel(window.label)
+
+        guard let models = window.appliesToModels, !models.isEmpty else {
+            return label
+        }
+
+        return "\(label) · \(QuotaPresentation.modelScopeLabel(models))"
+    }
+
+    private func localizedQuotaWindowLabel(_ raw: String) -> String {
+        let normalized = raw
+            .lowercased()
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+
+        switch normalized {
+        case "5 hour", "5 hours", "5h":
+            return "5 часов"
+        case "7 day", "7 days", "7d", "week", "weekly":
+            return "7 дней"
+        case "30 day", "30 days", "30d", "month", "monthly":
+            return "30 дней"
+        case "1 reset credit available":
+            return "Доступен 1 сброс лимита"
+        case "reset credit available":
+            return "Доступен сброс лимита"
+        default:
+            return raw
+        }
     }
 }
 
 private func usageText(_ ratio: Double?) -> String {
-    guard let ratio else { return "Unknown" }
-    return "\(Int((ratio * 100).rounded()))% used"
+    guard let ratio else { return L10n.t("Unknown") }
+    return "Использовано \(Int((ratio * 100).rounded()))%"
 }
 
 private func freshnessColor(_ freshness: String) -> Color {
@@ -195,5 +221,5 @@ func formattedDate(_ value: String?) -> String? {
     guard let date = fractional.date(from: value) ?? plain.date(from: value) else { return value }
     return date.formatted(
         Date.FormatStyle(date: .abbreviated, time: .shortened)
-            .locale(Locale(identifier: "en_US_POSIX")))
+            .locale(Locale(identifier: "ru_RU")))
 }

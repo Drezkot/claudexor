@@ -59,10 +59,10 @@ struct BrowserView: View {
                     .buttonStyle(.borderless).help("Forward")
                 Button { store.webView.reload() } label: { Image(systemName: "arrow.clockwise") }
                     .buttonStyle(.borderless).help("Reload")
-                TextField("localhost:3000  ·  or a URL…", text: $urlString)
+                TextField(LocalizedPresentation.text("localhost:3000  ·  or a URL…"), text: $urlString)
                     .textFieldStyle(.roundedBorder)
                     .onSubmit(navigate)
-                Button("Go", action: navigate)
+                Button(LocalizedPresentation.text("Go"), action: navigate)
                     .disabled(urlString.trimmingCharacters(in: .whitespaces).isEmpty)
             }
             .padding(Theme.Spacing.sm)
@@ -107,9 +107,9 @@ struct PreviewSheet: View {
     var body: some View {
         VStack(spacing: 0) {
             HStack {
-                Text("Preview").font(.headline)
+                Text(L10n.t("Preview")).font(.headline)
                 Spacer()
-                Button("Done") { dismiss() }
+                Button(L10n.t(LocalizedPresentation.text("Done"))) { dismiss() }
             }
             .padding(Theme.Spacing.md)
             Divider()

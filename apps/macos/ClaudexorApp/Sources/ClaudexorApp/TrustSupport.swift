@@ -223,8 +223,8 @@ struct TrustSettingsSection: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.md) {
-            SectionLabel("Trust — full project access", systemImage: "shield.lefthalf.filled")
-            Text("Projects allowed to run without a sandbox (access: full). Stored user-level in ~/.claudexor/v3/trust — never inside the repo, so versioned config can't self-grant it.")
+            SectionLabel(L10n.t("Trust — full project access"), systemImage: "shield.lefthalf.filled")
+            Text(L10n.t("Projects allowed to run without a sandbox (access: full). Stored user-level in ~/.claudexor/v3/trust — never inside the repo, so versioned config can't self-grant it."))
                 .font(.caption).foregroundStyle(.secondary)
             if let status = model.trustStatus {
                 Label(status, systemImage: "exclamationmark.triangle.fill")
@@ -232,7 +232,7 @@ struct TrustSettingsSection: View {
             }
             let fullAccess = model.activeTrustEntries.filter(\.allowFullAccess)
             if fullAccess.isEmpty {
-                Text("No projects have full access.")
+                Text(L10n.t("No projects have full access."))
                     .font(.caption).foregroundStyle(.tertiary)
             } else {
                 ForEach(fullAccess) { entry in
@@ -255,7 +255,7 @@ struct TrustSettingsSection: View {
                     .lineLimit(1).truncationMode(.middle)
                     .textSelection(.enabled)
                 if entry.repoRoot == nil {
-                    Text("Granted before project paths were recorded — revoke with `claudexor trust --revoke-full-access` inside that repo.")
+                    Text(L10n.t("Granted before project paths were recorded — revoke with `claudexor trust --revoke-full-access` inside that repo."))
                         .font(.caption2).foregroundStyle(.secondary)
                 }
             }
@@ -264,7 +264,7 @@ struct TrustSettingsSection: View {
                 Button(role: .destructive) {
                     Task { await model.setTrust(repoRoot: root, allowFullAccess: false) }
                 } label: {
-                    Label("Revoke", systemImage: "shield.slash")
+                    Label(L10n.t("Revoke"), systemImage: "shield.slash")
                 }
                 .buttonStyle(.bordered)
                 .help("Turn full access back off for this project. Future turns with access: full will be refused until re-granted.")
@@ -303,7 +303,7 @@ struct TurnRefusalCard: View {
             Image(systemName: "hand.raised.fill")
                 .foregroundStyle(Theme.status(.negative))
             VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
-                Text("Not started").font(.caption.weight(.semibold)).foregroundStyle(Theme.status(.negative))
+                Text(L10n.t("Not started")).font(.caption.weight(.semibold)).foregroundStyle(Theme.status(.negative))
                 Text(refusal.message)
                     .font(.caption).foregroundStyle(.secondary).textSelection(.enabled)
                 ForEach(Array(refusal.requiredActions.prefix(3).enumerated()), id: \.offset) { _, action in
@@ -314,7 +314,7 @@ struct TurnRefusalCard: View {
                 if refusal.retryable == false {
                     // No recorded job to replay (the enqueue itself threw):
                     // Retry would 409 — say so instead of offering it.
-                    Text("This turn cannot be retried in place — send a new message instead.")
+                    Text(L10n.t("This turn cannot be retried in place — send a new message instead."))
                         .font(.caption2).foregroundStyle(.tertiary)
                 } else if isTrustRefusal, !target.repoRoot.isEmpty {
                     remedyButton(

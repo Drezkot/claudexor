@@ -12,9 +12,9 @@ import ClaudexorKit
 
 extension AppModel {
     static func interactionResolutionActivityTitle(type: String, reason: String?) -> String {
-        if type == "interaction.answered" { return "Answer delivered" }
-        if reason == "cancelled" { return "Question closed — run cancelled" }
-        return "Question timed out — continuing with assumptions"
+        if type == "interaction.answered" { return LocalizedPresentation.text("Answer delivered") }
+        if reason == "cancelled" { return LocalizedPresentation.text("Question closed — run cancelled") }
+        return LocalizedPresentation.text("Question timed out — continuing with assumptions")
     }
 
     // MARK: Live SSE stream
@@ -332,10 +332,10 @@ extension AppModel {
     private static func notifyTransition(from: RunPhase, to: RunPhase, title: String) {
         guard from != to else { return }
         switch to {
-        case .succeeded: Notifier.post(title: "Run succeeded", body: title)
-        case .failed: Notifier.post(title: "Run failed", body: title)
-        case .interrupted: Notifier.post(title: "Run interrupted", body: title)
-        case .unknown: Notifier.post(title: "Run status unknown", body: title)
+        case .succeeded: Notifier.post(title: LocalizedPresentation.text("Run succeeded"), body: title)
+        case .failed: Notifier.post(title: LocalizedPresentation.text("Run failed"), body: title)
+        case .interrupted: Notifier.post(title: LocalizedPresentation.text("Run interrupted"), body: title)
+        case .unknown: Notifier.post(title: LocalizedPresentation.text("Run status unknown"), body: title)
         default: break
         }
     }
@@ -531,8 +531,8 @@ extension AppModel {
                 t.waitingOnUser = true
                 taskChanged = true
                 let summary = pending.questions.map(\.question).joined(separator: " | ")
-                box.appendActivity(ActivityEvent(.system, "Question: \(String(summary.prefix(200)))", at: .now))
-                Notifier.post(title: "Claudexor needs your answer", body: String(summary.prefix(120)))
+                box.appendActivity(ActivityEvent(.system, "Вопрос: \(String(summary.prefix(200)))", at: .now))
+                Notifier.post(title: LocalizedPresentation.text("Claudexor needs your answer"), body: String(summary.prefix(120)))
             }
         } else if type == "interaction.answered" || type == "interaction.timeout" {
             if let interactionId = payload["interaction_id"]?.stringValue {
@@ -553,16 +553,16 @@ extension AppModel {
             // modal, no new persistent state.
             let harness = payload["harness_id"]?.stringValue ?? ""
             let to = payload["to_profile_id"]?.stringValue ?? "default account"
-            let note = "Switched to account \(to)\(harness.isEmpty ? "" : " (\(harness))") — quota limit"
+            let note = "Переключено на аккаунт \(to)\(harness.isEmpty ? "" : " (\(harness))") — достигнута квота"
             t.attentionNote = note
             taskChanged = true
             box.appendActivity(ActivityEvent(.system, note, at: .now))
         } else if type == "route.profile.headroom_exceeded" {
             let harness = payload["harness_id"]?.stringValue ?? ""
-            box.appendActivity(ActivityEvent(.system, "Account quota headroom exceeded\(harness.isEmpty ? "" : " (\(harness))")", at: .now))
+            box.appendActivity(ActivityEvent(.system, "Резерв квоты аккаунта исчерпан\(harness.isEmpty ? "" : " (\(harness))")", at: .now))
         } else if type == "route.profile.rotation_exhausted" {
             let harness = payload["harness_id"]?.stringValue ?? ""
-            let note = "No eligible account has quota headroom\(harness.isEmpty ? "" : " (\(harness))")"
+            let note = "Нет подходящего аккаунта с доступной квотой\(harness.isEmpty ? "" : " (\(harness))")"
             t.attentionNote = note
             taskChanged = true
             box.appendActivity(ActivityEvent(.system, note, at: .now))

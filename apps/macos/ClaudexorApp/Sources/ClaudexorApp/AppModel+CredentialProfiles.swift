@@ -37,7 +37,7 @@ extension AppModel {
         }
         let locationID = selectedExecutionLocation
         guard let requestClient = gateway(for: locationID) else {
-            threadStatus = "Engine offline — reconnect to change the account."
+            threadStatus = LocalizedPresentation.text("Engine offline — reconnect to change the account.")
             return
         }
         do {

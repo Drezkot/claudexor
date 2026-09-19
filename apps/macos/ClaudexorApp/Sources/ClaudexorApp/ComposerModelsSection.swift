@@ -50,7 +50,7 @@ struct ComposerModelsSection: View {
             // A TYPED empty state (QA-011 acceptance #6): no routable harness for
             // this intent is not a blank section that reads as a failed load.
             if families.isEmpty {
-                Text("No routable harnesses for this intent.")
+                Text(L10n.t("No routable harnesses for this intent."))
                     .font(.caption).foregroundStyle(.secondary)
             }
             ForEach(families) { family in
@@ -61,7 +61,7 @@ struct ComposerModelsSection: View {
                         .frame(width: 92, alignment: .leading)
                     modelPicker(for: family)
                     if family == primary {
-                        Text("primary")
+                        Text(L10n.t("primary"))
                             .font(.caption2)
                             .foregroundStyle(.secondary)
                             .help("This harness answers in chat; the others race when you pick Best-of.")
@@ -108,7 +108,7 @@ struct ComposerModelsSection: View {
         if let catalog = catalogs[key], catalog.canEnumerate {
             let visible = Self.visibleModels(catalog.models, route: route)
             Picker("", selection: bindingFor(id)) {
-                Text("Harness default").tag("")
+                Text(L10n.t("Harness default")).tag("")
                 // A previously-chosen id the truth source no longer lists (or
                 // the current route hides) stays visible so the user can SEE
                 // and clear it (the engine refuses it at preflight either way
@@ -117,7 +117,7 @@ struct ComposerModelsSection: View {
                 // (the tag keeps the FULL id).
                 if let current = selections[id], !current.isEmpty,
                    !visible.contains(where: { $0.id == current }) {
-                    Text("\(HarnessModelPresentation.menuTitle(label: nil, id: current)) (not offered here)")
+                    Text("\(HarnessModelPresentation.menuTitle(label: nil, id: current)) (здесь недоступна)")
                         .tag(current)
                 }
                 ForEach(visible) { m in
@@ -129,29 +129,29 @@ struct ComposerModelsSection: View {
         } else if catalogs[key] != nil {
             // A LOADED catalog that cannot enumerate (source: none) — the
             // server's answer, honestly rendered.
-            Text("Harness default only")
+            Text(L10n.t("Harness default only"))
                 .font(.caption)
                 .foregroundStyle(.secondary)
-                .help("\(family.label) exposes no model truth source, so this turn uses its default model; an explicit model would be refused (strict model governance).")
+                .help("\(family.label) не предоставляет список моделей, поэтому используется модель по умолчанию; явная модель будет отклонена.")
         } else if failedKeys.contains(key) {
             // The fetch FAILED (unreachable / errored) — do NOT claim the harness
             // has no truth source (the server's call), and do NOT hang forever on
-            // a "Loading…" that will never resolve. Surface it with a Retry.
+            // a LocalizedPresentation.text("Loading…") that will never resolve. Surface it with a Retry.
             HStack(spacing: Theme.Spacing.xs) {
-                Text("Couldn't load models")
+                Text(L10n.t("Couldn't load models"))
                     .font(.caption)
                     .foregroundStyle(Theme.status(.caution))
-                Button("Retry") { Task { await load(family) } }
+                Button(L10n.t("Retry")) { Task { await load(family) } }
                     .buttonStyle(.borderless)
                     .font(.caption)
             }
-            .help("\(family.label)'s models endpoint was unreachable. Retry, or check the engine connection.")
+            .help("Не удалось получить модели \(family.label). Повторите попытку или проверьте подключение к движку.")
         } else {
             // Not loaded yet — a fetch is in flight.
-            Text("Loading models…")
+            Text(L10n.t("Loading models…"))
                 .font(.caption)
                 .foregroundStyle(.tertiary)
-                .help("Fetching \(family.label)'s model truth source; if this persists, the models endpoint is unreachable.")
+                .help("Получение списка моделей \(family.label); если сообщение не исчезает, источник моделей недоступен.")
         }
     }
 
@@ -166,10 +166,10 @@ struct ComposerModelsSection: View {
     }
 
     private func pickerHelp(_ family: HarnessFamily, _ catalog: HarnessModelsResponse, hiddenOnRoute: Int) -> String {
-        let freshness = catalog.verifiedAgainst.map { " (verified against CLI \($0))" } ?? ""
+        let freshness = catalog.verifiedAgainst.map { " (проверено через CLI \($0))" } ?? ""
         let hidden = hiddenOnRoute > 0
-            ? " \(hiddenOnRoute) model\(hiddenOnRoute == 1 ? " is" : "s are") hidden on the current auth route."
+            ? " Скрыто моделей для текущего маршрута авторизации: \(hiddenOnRoute)."
             : ""
-        return "Model for \(family.label) on THIS turn; source: \(catalog.source)\(freshness).\(hidden) Default keeps the harness/settings choice."
+        return "Модель \(family.label) для этого запуска; источник: \(catalog.source)\(freshness).\(hidden) Значение по умолчанию использует настройку агента."
     }
 }

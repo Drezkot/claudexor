@@ -58,7 +58,7 @@ struct DelegatedRunRow: View {
                                 .padding(.horizontal, Theme.Spacing.xs).padding(.vertical, 1)
                                 .background(Theme.accent.opacity(0.12), in: Capsule())
                                 .foregroundStyle(Theme.accent)
-                                .accessibilityLabel("Delegated Claudexor run")
+                                .accessibilityLabel(LocalizedPresentation.text(LocalizedPresentation.text("Delegated Claudexor run")))
                             Text(child.phase.label)
                                 .font(.caption2).foregroundStyle(.secondary)
                                 .lineLimit(1)
@@ -76,7 +76,7 @@ struct DelegatedRunRow: View {
                         .font(.caption2)
                         .lineLimit(1).fixedSize(horizontal: true, vertical: false)
                         .help("Open parent run \(receipt.parentRunId)")
-                        .accessibilityLabel("Open parent run")
+                        .accessibilityLabel(LocalizedPresentation.text(LocalizedPresentation.text("Open parent run")))
                         .accessibilityValue(receipt.parentRunId)
                 }
                 .padding(.horizontal, Theme.Spacing.sm)
@@ -96,7 +96,7 @@ struct DelegatedRunRow: View {
                                 .lineLimit(2)
                                 .help(failure)
                             Spacer()
-                            Button("Retry") {
+                            Button(L10n.t("Retry")) {
                                 Task { await model.hydrateDelegatedChildInteractions(child) }
                             }
                             .buttonStyle(.bordered)

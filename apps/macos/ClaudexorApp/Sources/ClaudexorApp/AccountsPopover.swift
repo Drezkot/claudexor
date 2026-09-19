@@ -128,7 +128,7 @@ struct AccountsPopover: View {
             ScrollView(.vertical, showsIndicators: true) {
                 VStack(alignment: .leading, spacing: Theme.Spacing.md) {
                     if !AccountsPresentation.isAvailable(model: model) {
-                        Label("Accounts and quota are unavailable while the engine is offline.",
+                        Label(LocalizedPresentation.text("Accounts and quota are unavailable while the engine is offline."),
                               systemImage: "wifi.slash")
                             .font(.caption).foregroundStyle(.secondary)
                     } else {
@@ -172,7 +172,7 @@ struct AccountsPopover: View {
 
     private var header: some View {
         HStack(spacing: Theme.Spacing.sm) {
-            Text("Accounts").font(.headline)
+            Text(L10n.t(LocalizedPresentation.text("Accounts"))).font(.headline)
             Spacer()
             Button { showQuotaDetail = true } label: {
                 Image(systemName: "gauge.with.dots.needle.67percent")
@@ -320,12 +320,12 @@ struct AccountsSurface: View {
             ),
             titleVisibility: .visible
         ) {
-            Button("Remove from Claudexor", role: .destructive) {
+            Button(L10n.t("Remove from Claudexor"), role: .destructive) {
                 if let row = pendingDelete { Task { await deleteAccount(row) } }
             }
-            Button("Cancel", role: .cancel) { pendingDelete = nil }
+            Button(L10n.t("Cancel"), role: .cancel) { pendingDelete = nil }
         } message: {
-            Text("Claudexor removes this binding and any Claudexor-owned state or managed secret. A vendor credential for this OS user may be left unchanged.")
+            Text(L10n.t("Claudexor removes this binding and any Claudexor-owned state or managed secret. A vendor credential for this OS user may be left unchanged."))
         }
     }
 
@@ -390,10 +390,10 @@ struct AccountsSurface: View {
             if case .failed(let message) = model.activeAccountsRegistryLoadState {
                 GridRow {
                     VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
-                        Label("Could not load accounts", systemImage: "exclamationmark.triangle.fill")
+                        Label(L10n.t("Could not load accounts"), systemImage: "exclamationmark.triangle.fill")
                             .font(.caption.weight(.medium)).foregroundStyle(Theme.status(.negative))
                         Text(message).font(.caption2).foregroundStyle(.secondary).textSelection(.enabled)
-                        Button("Retry") { Task { _ = await model.loadCredentialProfiles() } }
+                        Button(L10n.t("Retry")) { Task { _ = await model.loadCredentialProfiles() } }
                             .buttonStyle(.bordered).controlSize(.small)
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -405,12 +405,12 @@ struct AccountsSurface: View {
             {
                 GridRow {
                     VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
-                        Label("Could not refresh readiness and quota",
+                        Label(L10n.t("Could not refresh readiness and quota"),
                               systemImage: "exclamationmark.triangle.fill")
                             .font(.caption.weight(.medium))
                             .foregroundStyle(Theme.status(.negative))
                         Text(message).font(.caption2).foregroundStyle(.secondary)
-                        Button("Reload accounts") {
+                        Button(L10n.t("Reload accounts")) {
                             Task { _ = await model.loadCredentialProfiles() }
                         }
                         .buttonStyle(.bordered).controlSize(.small)
@@ -435,7 +435,7 @@ struct AccountsSurface: View {
                         // keeps that row cold with its own Sign in affordance.
                         if let bootstrapLogin,
                            model.activeAccountsRegistryLoadState != .loading {
-                            Button("Sign in", action: bootstrapLogin)
+                            Button(L10n.t("Sign in"), action: bootstrapLogin)
                                 .buttonStyle(.borderedProminent)
                                 .tint(Theme.accentSolid)
                                 .controlSize(.small)
@@ -470,7 +470,7 @@ struct AccountsSurface: View {
     /// internal profile id is derived from the name and never asked for.
     private var addSection: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
-            Text("Add another account").font(.subheadline.weight(.semibold))
+            Text(L10n.t("Add another account")).font(.subheadline.weight(.semibold))
             HStack(spacing: Theme.Spacing.sm) {
                 if family == nil {
                     Picker("", selection: $addHarnessChoice) {
@@ -481,7 +481,7 @@ struct AccountsSurface: View {
                     .labelsHidden()
                     .fixedSize()
                 }
-                TextField("name (optional, e.g. Work)", text: $addDisplayName)
+                TextField(L10n.t("name (optional, e.g. Work)"), text: $addDisplayName)
                     .textFieldStyle(.roundedBorder)
                     .font(.callout)
                     .onSubmit { Task { await addAccount() } }

@@ -268,7 +268,7 @@ struct ThreadsScreen: View {
 
     private var threadList: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
-            Text("Threads")
+            Text(L10n.t("Threads"))
                 .font(.headline)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding([.horizontal, .top], Theme.Spacing.md)
@@ -277,9 +277,9 @@ struct ThreadsScreen: View {
 
             if model.locatedThreads.isEmpty {
                 ContentUnavailableView(
-                    "No threads yet",
+                    L10n.t("No threads yet"),
                     systemImage: "bubble.left.and.text.bubble.right",
-                    description: Text("Start a thread to work conversationally: plan, continue, race, review, apply — one conversation.")
+                    description: Text(L10n.t("Start a thread to work conversationally: plan, continue, race, review, apply — one conversation."))
                 )
                 .frame(maxHeight: .infinity)
             } else {
@@ -447,7 +447,7 @@ struct ThreadsScreen: View {
             Button {
                 showOptions.toggle()
             } label: {
-                Label("More options", systemImage: "slider.horizontal.3")
+                Label(L10n.t("More options"), systemImage: "slider.horizontal.3")
                     .labelStyle(.iconOnly)
                     // Subtle active tint only while the panel is open, so the
                     // options control reads as a PEER of the other composer-row
@@ -562,7 +562,7 @@ struct ThreadsScreen: View {
                         // target. Show a disabled "Starting…" so a second turn can't be
                         // sent over the not-yet-started first; it flips to Stop once the
                         // runId binds.
-                        Button("Starting…", action: {})
+                        Button(L10n.t("Starting…"), action: {})
                             .buttonStyle(AccentButtonStyle())
                             .productControlAccessibility("Starting")
                             .keyboardShortcut(.return, modifiers: .command)
@@ -577,7 +577,7 @@ struct ThreadsScreen: View {
                             .help("Cancel the running turn (server-owned)")
                     } else {
                         let availability = composerSendAvailability
-                        Button("Send", action: send)
+                        Button(L10n.t("Send"), action: send)
                             .buttonStyle(AccentButtonStyle())
                             .productControlAccessibility(
                                 availability.name,

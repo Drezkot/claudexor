@@ -15,14 +15,14 @@ enum RemoteSetupLoginRouting {
     ) -> Decision {
         guard let capability else {
             return .unavailable(
-                "The remote engine did not provide a current managed-login capability for \(HarnessFamily(rawValue: harness.rawValue).label). Reconnect or refresh Harness Doctor before trying again.")
+                "Удалённый движок не предоставил актуальный способ управляемого входа для \(HarnessFamily(rawValue: harness.rawValue).label). Переподключитесь или обновите Harness Doctor и повторите попытку.")
         }
         switch capability {
         case .legacyAbsent:
             return .transport(harness == .codex ? .daemon : .clientPty)
         case .unavailable:
             return .unavailable(
-                "The remote engine reports no managed login for \(HarnessFamily(rawValue: harness.rawValue).label).")
+                "Удалённый движок сообщает, что управляемый вход для \(HarnessFamily(rawValue: harness.rawValue).label) недоступен.")
         case .inApp:
             return .transport(.daemon)
         case .externalTerminal:

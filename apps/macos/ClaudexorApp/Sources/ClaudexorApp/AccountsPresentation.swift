@@ -106,7 +106,7 @@ struct AccountRowModel: Identifiable {
         let labels = Set(quotaGroups.flatMap(\.scopedExhaustions).map(\.scopeLabel))
         if labels.count == 1 { return labels.first }
         if !labels.isEmpty || quotaGroups.contains(where: \.hasOnlyScopedWindows) {
-            return "Scoped limits"
+            return LocalizedPresentation.text("Scoped limits")
         }
         return nil
     }
@@ -142,7 +142,7 @@ enum AccountsPresentation {
     /// one in the SSOT's own order, so the sentence cannot go stale.
     static func addAccountCaption(family: HarnessFamily?) -> String {
         let subject = family?.label ?? listed(addableFamilies.map(\.label))
-        return "A second \(subject) subscription — one click opens the official CLI login."
+        return "Вторая подписка \(subject) — одним нажатием откроется официальный вход через CLI."
     }
 
     /// "A", "A or B", "A, B, or C" — an Oxford list, so a two-family future
@@ -151,8 +151,8 @@ enum AccountsPresentation {
         switch labels.count {
         case 0: return ""
         case 1: return labels[0]
-        case 2: return "\(labels[0]) or \(labels[1])"
-        default: return labels.dropLast().joined(separator: ", ") + ", or \(labels[labels.count - 1])"
+        case 2: return "\(labels[0]) или \(labels[1])"
+        default: return labels.dropLast().joined(separator: ", ") + " или \(labels[labels.count - 1])"
         }
     }
 
@@ -301,7 +301,7 @@ enum AccountsPresentation {
         }
         // No pin means routing may change as quota/readiness changes. Naming the
         // transient next-up route made this one stable choice oscillate between
-        // "Default", "CLI login", and "API key" during projection refreshes.
+        // "Default", "CLI login", and LocalizedPresentation.text("API key") during projection refreshes.
         return AccountSegment(pinned: false, label: "Automatic", systemImage: "wand.and.stars")
     }
 
@@ -328,9 +328,9 @@ enum AccountsPresentation {
     /// The trigger's label: a single account's name, else "N accounts".
     static func triggerTitle(_ rows: [AccountRowModel]) -> String {
         switch rows.count {
-        case 0: return "Accounts"
+        case 0: return LocalizedPresentation.text("Accounts")
         case 1: return rows[0].displayName
-        default: return "\(rows.count) accounts"
+        default: return "Аккаунтов: \(rows.count)"
         }
     }
 

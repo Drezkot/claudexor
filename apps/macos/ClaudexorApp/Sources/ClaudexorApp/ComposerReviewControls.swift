@@ -103,10 +103,10 @@ struct AdvancedReviewControls: View {
 
     @ViewBuilder private var reviewersSection: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
-            Text("Reviewers").font(.subheadline.weight(.semibold))
+            Text(L10n.t("Reviewers")).font(.subheadline.weight(.semibold))
             HStack(spacing: Theme.Spacing.sm) {
                 Picker("", selection: $draft.pickerHarness) {
-                    Text("Auto").tag("")
+                    Text(L10n.t(LocalizedPresentation.text("Auto"))).tag("")
                     ForEach(harnessChoices) { family in
                         Text(family.label).tag(family.rawValue)
                     }
@@ -114,15 +114,15 @@ struct AdvancedReviewControls: View {
                 .labelsHidden()
                 .fixedSize()
                 .onChange(of: draft.pickerHarness) { _, _ in writeReviewerToken() }
-                TextField("model (optional, e.g. opus)", text: $draft.pickerModel)
+                TextField(LocalizedPresentation.text("model (optional, e.g. opus)"), text: $draft.pickerModel)
                     .textFieldStyle(.roundedBorder)
                     .font(.system(.caption, design: .monospaced))
                     .frame(maxWidth: 150)
                     .onChange(of: draft.pickerModel) { _, _ in writeReviewerToken() }
             }
             if !effortLevels.isEmpty {
-                Picker("Effort", selection: $draft.pickerEffort) {
-                    Text("Default").tag("")
+                Picker(L10n.t("Effort"), selection: $draft.pickerEffort) {
+                    Text(L10n.t("Default")).tag("")
                     ForEach(effortLevels, id: \.self) { Text($0.capitalized).tag($0) }
                 }
                 .pickerStyle(.segmented)
@@ -134,7 +134,7 @@ struct AdvancedReviewControls: View {
             }
             // Power syntax: multi-reviewer strings, prefilled from the picker.
             HStack(spacing: Theme.Spacing.xs) {
-                TextField("claude=opus:max, cursor (or pinned JSON)", text: $draft.reviewerText)
+                TextField(LocalizedPresentation.text("claude=opus:max, cursor (or pinned JSON)"), text: $draft.reviewerText)
                     .textFieldStyle(.roundedBorder)
                     .font(.system(.caption, design: .monospaced))
                     .help("Comma or newline entries: harness[=model[:effort]] or harness[:effort]. For a strict account pin, paste a JSON array with credentialProfileId.")
@@ -144,7 +144,7 @@ struct AdvancedReviewControls: View {
                         .help("Reviewer entries need harness[=model[:effort]] or harness[:effort]; supported effort values come from each harness manifest. Pinned entries use a JSON array with credentialProfileId.")
                 }
             }
-            Text("An explicit panel enables review. Leave empty to use automatic reviewers when Review changes is on.")
+            Text(L10n.t("An explicit panel enables review. Leave empty to use automatic reviewers when Review changes is on."))
                 .font(.caption2).foregroundStyle(.secondary)
         }
     }
@@ -166,20 +166,20 @@ struct AdvancedReviewControls: View {
     @ViewBuilder private var approvalsSection: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
             HStack {
-                Text("Approvals").font(.subheadline.weight(.semibold))
+                Text(L10n.t("Approvals")).font(.subheadline.weight(.semibold))
                 Spacer()
                 Button {
                     draft.approvals.append(ComposerApprovalDraft())
-                } label: { Label("Add", systemImage: "plus") }
+                } label: { Label(L10n.t("Add"), systemImage: "plus") }
                     .buttonStyle(.borderless).controlSize(.small)
                     .help("Approve changes under one more protected path glob.")
             }
             ForEach($draft.approvals) { $row in
                 HStack(spacing: Theme.Spacing.xs) {
-                    TextField("path glob (e.g. test/**)", text: $row.path)
+                    TextField(LocalizedPresentation.text("path glob (e.g. test/**)"), text: $row.path)
                         .textFieldStyle(.roundedBorder)
                         .font(.system(.caption, design: .monospaced))
-                    TextField("reason (optional)", text: $row.reason)
+                    TextField(LocalizedPresentation.text("reason (optional)"), text: $row.reason)
                         .textFieldStyle(.roundedBorder)
                         .font(.caption)
                     Button(role: .destructive) {
@@ -191,7 +191,7 @@ struct AdvancedReviewControls: View {
             if draft.approvalRowsInvalid {
                 inlineError("Each approval needs a non-empty path glob.")
             }
-            Text("Approvals let this run change auto-protected gate/test paths; they never bypass the built-in critical/security path human gates.")
+            Text(L10n.t("Approvals let this run change auto-protected gate/test paths; they never bypass the built-in critical/security path human gates."))
                 .font(.caption2).foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
         }

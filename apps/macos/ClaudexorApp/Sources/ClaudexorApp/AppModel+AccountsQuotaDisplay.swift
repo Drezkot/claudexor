@@ -197,7 +197,7 @@ extension AppModel {
             let vendors = refreshSkipped.map(\.vendor).joined(separator: ", ")
             accountsQuotaDisplayStates[locationID] = .stale(
                 reason:
-                    "Rate-limit cooldown: \(vendors) served from last-known data (not re-fetched).",
+                    "Ожидание после ограничения запросов: \(vendors) показаны по последним известным данным без повторного запроса.",
                 observedAt: Self.quotaObservedAt(response))
         }
         quotaStatus = nil

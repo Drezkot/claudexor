@@ -59,12 +59,12 @@ extension AppModel {
         settingsLoadTokens[locationID] = token
         settingsLoadStates[locationID] = .loading
         let error = await enqueueSettingsOperation { [weak self] () -> String? in
-            guard let self else { return "Settings stopped loading." }
+            guard let self else { return LocalizedPresentation.text("Settings stopped loading.") }
             guard self.executionLocationGeneration(for: locationID) == generation else {
-                return "Settings context changed while loading. Retry."
+                return LocalizedPresentation.text("Settings context changed while loading. Retry.")
             }
             guard let requestClient = self.gateway(for: locationID) else {
-                return "Engine offline — reconnect to load settings."
+                return LocalizedPresentation.text("Engine offline — reconnect to load settings.")
             }
             do {
                 let answer = try await requestClient.settings()
@@ -74,7 +74,7 @@ extension AppModel {
                 guard self.executionLocationGeneration(for: locationID) == generation,
                       self.isCurrentGateway(requestClient, at: locationID),
                       self.settingsLoadTokens[locationID] == token
-                else { return "Settings context changed while loading. Retry." }
+                else { return LocalizedPresentation.text("Settings context changed while loading. Retry.") }
                 if locationID == .local {
                     self.settingsSnapshot = answer
                 } else {
@@ -85,8 +85,8 @@ extension AppModel {
                 guard self.executionLocationGeneration(for: locationID) == generation,
                       self.isCurrentGateway(requestClient, at: locationID),
                       self.settingsLoadTokens[locationID] == token
-                else { return "Settings context changed while loading. Retry." }
-                return "Could not load settings: \(self.userMessage(for: error))"
+                else { return LocalizedPresentation.text("Settings context changed while loading. Retry.") }
+                return "Не удалось загрузить настройки: \(self.userMessage(for: error))"
             }
         }
         guard settingsLoadTokens[locationID] == token else { return error }
@@ -174,7 +174,7 @@ extension AppModel {
                 _ = self.scheduleHarnessRefresh(locationID: locationID)
                 return .saved
             } catch {
-                let message = "Could not save settings: \(error)"
+                let message = "Не удалось сохранить настройки: \(error)"
                 guard self.executionLocationGeneration(for: locationID) == generation,
                       self.isCurrentGateway(requestClient, at: locationID)
                 else {

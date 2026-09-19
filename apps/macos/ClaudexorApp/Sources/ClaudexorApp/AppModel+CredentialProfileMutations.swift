@@ -17,7 +17,7 @@ extension AppModel {
         let locationID = activeExecutionLocation
         accountsNextUpAuthorityFresh[locationID] = false
         guard let requestClient = gateway(for: locationID) else {
-            return "Engine offline — reconnect to change the account."
+            return LocalizedPresentation.text("Engine offline — reconnect to change the account.")
         }
         do {
             _ = try await requestClient.updateCredentialProfile(
@@ -66,7 +66,7 @@ extension AppModel {
         let locationID = activeExecutionLocation
         accountsNextUpAuthorityFresh[locationID] = false
         guard let requestClient = gateway(for: locationID) else {
-            return .init(message: "Engine offline — reconnect to remove an account.", isError: true)
+            return .init(message: LocalizedPresentation.text("Engine offline — reconnect to remove an account."), isError: true)
         }
         do {
             let receipt = try await requestClient.deleteCredentialProfile(
@@ -98,10 +98,10 @@ extension AppModel {
 
     static func deletionSuccessMessage(for receipt: DeleteCredentialProfileReceipt) -> String {
         if receipt.vendorCredentialDisposition != nil {
-            return "Removed from Claudexor. Claudexor removed the binding and any Claudexor-owned state or managed secret; it did not change any vendor credential for this OS user."
+            return LocalizedPresentation.text("Removed from Claudexor. Claudexor removed the binding and any Claudexor-owned state or managed secret; it did not change any vendor credential for this OS user.")
         }
         if let warning = receipt.cleanupWarning { return "Removed from Claudexor. \(warning)" }
-        return "Removed from Claudexor."
+        return LocalizedPresentation.text("Removed from Claudexor.")
     }
 
     /// The typed delete-refusal mapping (D-U4): the engine's retryable

@@ -29,7 +29,7 @@ extension AppModel {
     /// Resume never crosses accounts, so this is which account owns each
     /// resumable session.
     func sessionAccountLabel(harnessId: String, profileId: String?) -> String {
-        guard let profileId else { return "Legacy default login" }
+        guard let profileId else { return LocalizedPresentation.text("Legacy default login") }
         let name = activeCredentialProfiles.first {
             $0.profile.profileId == profileId && $0.profile.harnessId == harnessId
         }?.profile.displayName

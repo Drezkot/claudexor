@@ -117,7 +117,7 @@ struct ProjectChip: View {
             // A stable row (above the MRU) so no-project stays reachable even with
             // no recents; disabled when already scopeless so it never no-ops.
             Button { onNoProject() } label: {
-                Label("No project (Ask only)", systemImage: "questionmark.folder")
+                Label(L10n.t("No project (Ask only)"), systemImage: "questionmark.folder")
             }
             .disabled(!hasProject)
             .help("Start a general read-only Ask with no project scope.")
@@ -133,7 +133,7 @@ struct ProjectChip: View {
                 Divider()
             }
             if !remoteConnections.isEmpty {
-                Section("Remote") {
+                Section(L10n.t("Remote")) {
                     ForEach(remoteConnections) { connection in
                         Menu(connection.displayName) {
                             ForEach(connection.savedProjects, id: \.self) { path in
@@ -159,7 +159,7 @@ struct ProjectChip: View {
                 Divider()
             }
             Button { onBrowse() } label: {
-                Label("Browse This Mac…", systemImage: "folder.badge.plus")
+                Label(L10n.t("Browse This Mac…"), systemImage: "folder.badge.plus")
             }
         }
     }

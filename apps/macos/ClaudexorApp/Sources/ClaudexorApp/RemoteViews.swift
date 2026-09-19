@@ -73,7 +73,7 @@ struct RemoteTerminalSheet: View {
                             exitCode == 0
                                 ? SwiftUI.Color.secondary : SwiftUI.Color.orange)
                 }
-                Button("Done") { dismiss() }
+                Button(L10n.t(LocalizedPresentation.text("Done"))) { dismiss() }
                     .disabled(exitCode == nil && request.purpose.blocksDismissalWhileRunning)
             }
             .padding()
@@ -126,8 +126,8 @@ struct RemoteDirectoryBrowser: View {
                     systemImage: "network")
                     .font(.headline)
                 Spacer()
-                Button("Cancel") { model.dismissRemoteDirectoryBrowser(request) }
-                Button("Choose Folder") { chooseCurrent() }
+                Button(L10n.t("Cancel")) { model.dismissRemoteDirectoryBrowser(request) }
+                Button(L10n.t("Choose Folder")) { chooseCurrent() }
                     .buttonStyle(.borderedProminent)
                     .disabled(listing == nil || loading)
             }
@@ -139,15 +139,15 @@ struct RemoteDirectoryBrowser: View {
                         Task { await load(parent) }
                     }
                 } label: {
-                    Label("Up", systemImage: "arrow.up")
+                    Label(LocalizedPresentation.text(LocalizedPresentation.text("Up")), systemImage: "arrow.up")
                 }
                 .disabled(listing?.parent == nil || loading)
-                TextField("Remote path", text: $directPath)
+                TextField(L10n.t("Remote path"), text: $directPath)
                     .font(.system(.body, design: .monospaced))
                     .textFieldStyle(.roundedBorder)
                     .onSubmit { Task { await load(directPath) } }
                     .disabled(loading)
-                Button("Go") { Task { await load(directPath) } }
+                Button(L10n.t(LocalizedPresentation.text("Go"))) { Task { await load(directPath) } }
                     .disabled(
                         loading
                             || directPath.trimmingCharacters(
@@ -240,7 +240,7 @@ struct RemotePreviewSheet: View {
                 Spacer()
                 Text("localhost:\(request.localPort)")
                     .font(.caption.monospaced())
-                Button("Close") {
+                Button(L10n.t("Close")) {
                     Task { await model.closeRemotePreview(request) }
                 }
             }
@@ -269,19 +269,19 @@ struct RemoteDeviceLoginSheet: View {
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.lg) {
             HStack {
-                Label("Codex device login", systemImage: "person.badge.key")
+                Label(L10n.t("Codex device login"), systemImage: "person.badge.key")
                     .font(.title2.weight(.semibold))
                 Spacer()
-                Button("Close") { model.dismissRemoteDeviceLogin(request) }
+                Button(L10n.t("Close")) { model.dismissRemoteDeviceLogin(request) }
             }
             if let disclosure = snapshot?.deviceCode {
-                Text("Open this page in an isolated browser session, then enter the one-time code.")
+                Text(L10n.t("Open this page in an isolated browser session, then enter the one-time code."))
                     .foregroundStyle(.secondary)
                 HStack {
                     Text(disclosure.verificationUrl)
                         .font(.body.monospaced())
                         .textSelection(.enabled)
-                    Button("Open") {
+                    Button(L10n.t("Open")) {
                         if let url = URL(string: disclosure.verificationUrl) {
                             NSWorkspace.shared.open(url)
                         }
@@ -292,7 +292,7 @@ struct RemoteDeviceLoginSheet: View {
                         Text(disclosure.userCode)
                             .font(.system(size: 26, weight: .semibold, design: .monospaced))
                             .textSelection(.enabled)
-                        Button("Copy") {
+                        Button(L10n.t("Copy")) {
                             NSPasteboard.general.clearContents()
                             NSPasteboard.general.setString(
                                 disclosure.userCode, forType: .string)
@@ -311,7 +311,7 @@ struct RemoteDeviceLoginSheet: View {
                     nativeSessionVerified: nativeSessionVerified,
                     harnessRoutable: harnessRoutable)
                 if terminalPresentation == .readyWithWarning {
-                    Text("Codex is signed in and ready.")
+                    Text(L10n.t("Codex is signed in and ready."))
                         .font(.callout)
                         .foregroundStyle(Theme.status(.positive))
                     Text(
@@ -339,7 +339,7 @@ struct RemoteDeviceLoginSheet: View {
             HStack {
                 Spacer()
                 if snapshot?.job.canCancel == true {
-                    Button("Cancel", role: .destructive) {
+                    Button(L10n.t("Cancel"), role: .destructive) {
                         Task {
                             guard let client,
                                   model.remoteActionIsCurrent(request.lease, client: client)
@@ -348,7 +348,7 @@ struct RemoteDeviceLoginSheet: View {
                         }
                     }
                 }
-                Button(snapshot?.job.isTerminal == true ? "Done" : "Keep open") {
+                Button(snapshot?.job.isTerminal == true ? LocalizedPresentation.text("Done") : "Keep open") {
                     model.dismissRemoteDeviceLogin(request)
                 }
                 .buttonStyle(.borderedProminent)
@@ -420,20 +420,20 @@ struct RemoteThreadTerminalView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.md) {
             HStack {
-                TextField("Dev server port", text: $previewPort)
+                TextField(L10n.t("Dev server port"), text: $previewPort)
                     .frame(width: 120)
                 Button {
                     if let port = Int(previewPort) {
                         Task { await model.openRemotePreview(remotePort: port) }
                     }
                 } label: {
-                    Label("Open preview", systemImage: "safari")
+                    Label(L10n.t("Open preview"), systemImage: "safari")
                 }
                 .disabled(Int(previewPort).map { !(1 ... 65_535).contains($0) } ?? true)
                 Button {
                     Task { await model.openRemoteDaemonLog() }
                 } label: {
-                    Label("Daemon log", systemImage: "doc.text.magnifyingglass")
+                    Label(L10n.t("Daemon log"), systemImage: "doc.text.magnifyingglass")
                 }
                 Spacer()
             }

@@ -141,8 +141,8 @@ struct ThreadWorkspacePanel: View {
             .onAppear { autoSelectDefaultTab() }
         } else {
             EmptyStateView(
-                title: "No thread open",
-                message: "Open a thread to see its changes, artifacts, and evidence.",
+                title: L10n.t("No thread open"),
+                message: L10n.t("Open a thread to see its changes, artifacts, and evidence."),
                 systemImage: "sidebar.trailing")
         }
     }
@@ -150,7 +150,7 @@ struct ThreadWorkspacePanel: View {
     // MARK: Panel title (the tab bar sits directly below it)
 
     private func title(_ detail: ThreadDetailResponse) -> some View {
-        Text("Thread workspace — \(detail.thread.title ?? "Untitled thread")")
+        Text("Рабочее пространство чата — \(detail.thread.title ?? "Без названия")")
             .font(.headline)
             .lineLimit(2)
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -201,7 +201,7 @@ struct ThreadWorkspacePanel: View {
         } label: {
             HStack(spacing: Theme.Spacing.xxs) {
                 Image(systemName: "line.3.horizontal.decrease.circle").imageScale(.small)
-                Text("run: \(String(id.suffix(6)))").font(.caption.weight(.medium))
+                Text("запуск: \(String(id.suffix(6)))").font(.caption.weight(.medium))
                     .lineLimit(1).fixedSize(horizontal: true, vertical: false)
                 Image(systemName: "xmark").imageScale(.small)
             }
@@ -214,13 +214,13 @@ struct ThreadWorkspacePanel: View {
         .fixedSize()
         // QA-003: the chip's action is to CLEAR the run filter — name it so, so
         // the trailing `xmark` glyph doesn't become the AX name.
-        .accessibilityLabel("Clear run filter")
-        .help("Filtered to full run id \(id) — clear to see the whole thread's workspace")
+        .accessibilityLabel(LocalizedPresentation.text(LocalizedPresentation.text("Clear run filter")))
+        .help("Показан запуск \(id) — сбросьте фильтр, чтобы увидеть рабочее пространство всего чата")
         .contextMenu {
-            Button("Copy Full Run ID") { copyRunReference(id) }
+            Button(L10n.t("Copy Full Run ID")) { copyRunReference(id) }
             if let command = RunInspectCommand.command(
                 runID: id, locationID: model.selectedExecutionLocation) {
-                Button("Copy Inspect Command") { copyRunReference(command) }
+                Button(L10n.t("Copy Inspect Command")) { copyRunReference(command) }
             }
         }
     }
@@ -259,8 +259,8 @@ struct ThreadWorkspacePanel: View {
         // A trivial thread (no runs at all) has nothing to show — be honest.
         } else if runIds.isEmpty {
             EmptyStateView(
-                title: "No project output in this thread",
-                message: "This thread hasn't produced changes, artifacts, or evidence yet.",
+                title: LocalizedPresentation.text("No project output in this thread"),
+                message: LocalizedPresentation.text("This thread hasn't produced changes, artifacts, or evidence yet."),
                 systemImage: "tray")
         } else {
             // Scope: the selected receipt narrows every tab to that one run.
@@ -296,7 +296,7 @@ struct ThreadWorkspacePanel: View {
                FileManager.default.fileExists(atPath: (root as NSString).appendingPathComponent("index.html")) {
                 HStack {
                     Button { showPreview = true } label: {
-                        Label("Open preview", systemImage: "safari")
+                        Label(L10n.t("Open preview"), systemImage: "safari")
                     }
                     .buttonStyle(.bordered).controlSize(.small)
                     .help("Open the project's index.html in a preview browser")

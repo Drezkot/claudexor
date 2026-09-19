@@ -27,7 +27,7 @@ extension ThreadsScreen {
     var composerModelsRoute: String? {
         // The per-turn Auth route picker (W18) WINS over the sticky thread /
         // global preference: it is the route this very turn will request.
-        // Empty = "Thread default" — no override, the sticky preference governs.
+        // Empty = LocalizedPresentation.text("Thread default") — no override, the sticky preference governs.
         let preference = !authRoutePreference.isEmpty
             ? authRoutePreference
             : (model.currentThread?.authPreference ?? model.activeSettingsSnapshot?.routing.authPreference)
@@ -74,7 +74,7 @@ extension ThreadsScreen {
     var composerOptions: some View {
         ScrollView(.vertical) {
             VStack(alignment: .leading, spacing: Theme.Spacing.lg) {
-            OptionSection(title: "Harness pool — Best-of runs these; the primary answers in chat") {
+            OptionSection(title: L10n.t("Harness pool — Best-of runs these; the primary answers in chat")) {
                 VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
                     FlowLayout(spacing: Theme.Spacing.sm) {
                         // Leading Auto chip (owner F9): SELECTED by default. Auto =
@@ -86,7 +86,7 @@ extension ThreadsScreen {
                         // SELECTED state carries the app's standard checkmark so
                         // "Auto is on" reads unambiguously next to the highlighted
                         // (included-by-Auto) harness chips (batch-6 item d).
-                        FilterChip(label: "Auto", systemImage: auto ? "checkmark" : "wand.and.stars",
+                        FilterChip(label: LocalizedPresentation.text("Auto"), systemImage: auto ? "checkmark" : "wand.and.stars",
                                    isActive: auto, tint: Theme.accent) {
                             Task { await model.setEligiblePool(HarnessPoolPresentation.selectingAuto()) }
                         }
@@ -122,7 +122,7 @@ extension ThreadsScreen {
                         .fixedSize(horizontal: false, vertical: true)
                 }
             }
-            OptionSection(title: "Models — per harness for THIS turn") {
+            OptionSection(title: L10n.t("Models — per harness for THIS turn")) {
                 ComposerModelsSection(
                     families: effectiveIncludedFamilies,
                     primary: primaryFamily,
@@ -134,7 +134,7 @@ extension ThreadsScreen {
                     }
                 )
             }
-            OptionRow(label: "Budget") {
+            OptionRow(label: L10n.t("Budget")) {
                 HStack(spacing: Theme.Spacing.xs) {
                     Text("$").foregroundStyle(.secondary)
                     TextField("default", text: $capUsdText)
@@ -151,10 +151,10 @@ extension ThreadsScreen {
             }
             // The Access control moved to the composer's main controls row
             // (AccessChip, W19) — the popover keeps only the secondary knobs.
-            OptionRow(label: "Web") {
+            OptionRow(label: L10n.t("Web")) {
                 Picker("", selection: $selectedWebPolicy) {
-                    Text("Auto").tag("auto"); Text("Off").tag("off")
-                    Text("Cached").tag("cached"); Text("Live").tag("live")
+                    Text(L10n.t(LocalizedPresentation.text("Auto"))).tag("auto"); Text(L10n.t("Off")).tag("off")
+                    Text(L10n.t("Cached")).tag("cached"); Text(L10n.t("Live")).tag("live")
                 }
                 .labelsHidden()
                 .fixedSize()
@@ -166,9 +166,9 @@ extension ThreadsScreen {
             // sticky primary narrows it to that harness). Hidden only when no
             // routable harness declares a ladder (adapter capability truth).
             if !composerEffortLevels.isEmpty {
-                OptionRow(label: "Effort") {
+                OptionRow(label: L10n.t("Effort")) {
                     Picker("", selection: $effortPreference) {
-                        Text("Harness default").tag("")
+                        Text(L10n.t("Harness default")).tag("")
                         ForEach(composerEffortLevels, id: \.self) { Text($0.capitalized).tag($0) }
                     }
                     .labelsHidden()
@@ -179,15 +179,15 @@ extension ThreadsScreen {
             // Per-turn auth route REQUEST (W18/R20) over the thread preference.
             // Honest language: this is what we ASK for — auto may switch routes
             // (typed fallback), and the run badge discloses the effective route.
-            // "Thread default" (empty) sends NO override; every other choice —
+            // LocalizedPresentation.text("Thread default") (empty) sends NO override; every other choice —
             // Auto included — rides the turn explicitly, so Auto genuinely
             // overrides an api_key-pinned thread instead of inheriting it.
-            OptionRow(label: "Auth route") {
+            OptionRow(label: L10n.t("Auth route")) {
                 Picker("", selection: $authRoutePreference) {
-                    Text("Thread default").tag("")
-                    Text("Auto").tag("auto")
-                    Text("Subscription").tag("subscription")
-                    Text("API key").tag("api_key")
+                    Text(L10n.t(LocalizedPresentation.text("Thread default"))).tag("")
+                    Text(L10n.t(LocalizedPresentation.text("Auto"))).tag("auto")
+                    Text(L10n.t(LocalizedPresentation.text("Subscription"))).tag("subscription")
+                    Text(L10n.t(LocalizedPresentation.text("API key"))).tag("api_key")
                 }
                 .labelsHidden()
                 .fixedSize()
@@ -207,7 +207,7 @@ extension ThreadsScreen {
             // picker + an approvals list editor (ComposerReviewControls). One
             // parent-owned draft projects the exact values the send path reads.
             if runControlApplicability.reviewers.applicable {
-                OptionSection(title: "Review controls") {
+                OptionSection(title: L10n.t("Review controls")) {
                     let strategyRequiresReview = agentStrategy == .bestOf || agentStrategy == .untilClean
                     let panelRequestsReview = !reviewerPanelEntries.isEmpty
                     Toggle("Review changes", isOn: Binding(
@@ -237,7 +237,7 @@ extension ThreadsScreen {
             // harness can inject it. Access remains an independent request axis;
             // the daemon refuses unsupported native harness/access combinations.
             if browserAvailableForCurrentTurn {
-                OptionRow(label: "Browser") {
+                OptionRow(label: L10n.t("Browser")) {
                     Toggle("", isOn: Binding(
                         get: { browser },
                         set: { on in
@@ -262,7 +262,7 @@ extension ThreadsScreen {
             // drafting the first turn (no thread selected yet). Isolated keeps a thread
             // worktree; in_place (default) mutates the live tree so the next turn sees it.
             if model.selectedThreadId == nil {
-                OptionSection(title: "Workspace") {
+                OptionSection(title: L10n.t("Workspace")) {
                     Toggle("Isolated workspace", isOn: Binding(
                         get: { model.draftIsolatedWorkspace },
                         set: { model.draftIsolatedWorkspace = $0 }
@@ -286,7 +286,7 @@ extension ThreadsScreen {
             // — the old distinct intents are now a per-turn knob. Delegate (D32)
             // rides alongside; Max-attempts caps the single/until-clean repair.
             if composerMode == .agent {
-                OptionSection(title: "Agent strategy") {
+                OptionSection(title: L10n.t("Agent strategy")) {
                     Picker("", selection: $agentStrategy) {
                         ForEach(AgentStrategy.composerCases(access: effectiveAccess)) { s in
                             Label(s.label, systemImage: s.glyph).tag(s)
@@ -330,7 +330,7 @@ extension ThreadsScreen {
                             .font(.caption2)
                             .foregroundStyle(Theme.status(.caution))
                             .fixedSize(horizontal: false, vertical: true)
-                            .accessibilityLabel("Delegate unavailable")
+                            .accessibilityLabel(LocalizedPresentation.text("Delegate unavailable"))
                             .accessibilityValue(delegateState.explanation)
                     }
                     // QA-010: Create scaffolds a brand-new project, so its test
@@ -345,7 +345,7 @@ extension ThreadsScreen {
             // Plan STRATEGY knob (D31): Council draft-and-merge across N harnesses,
             // presented to the user as ONE plan + ONE question set.
             if composerMode == .plan {
-                OptionSection(title: "Plan strategy") {
+                OptionSection(title: L10n.t("Plan strategy")) {
                     Toggle("Council — N harnesses draft in parallel, primary merges", isOn: $councilEnabled)
                         .toggleStyle(.switch).tint(Theme.accent)
                         .help("Council: each member drafts a plan in its own lane; the primary merges them into one plan and one question set. Solo (off) is the default.")
@@ -376,9 +376,9 @@ extension ThreadsScreen {
     /// field — whitespace-split argv with documented quoting — that rides the
     /// run's typed `tests` gate. Not a full editor.
     @ViewBuilder var testCommandField: some View {
-        OptionRow(label: "Test command") {
+        OptionRow(label: L10n.t("Test command")) {
             HStack(spacing: Theme.Spacing.xs) {
-                TextField("e.g. npm test", text: $testCommandText)
+                TextField(LocalizedPresentation.text("e.g. npm test"), text: $testCommandText)
                     .frame(maxWidth: 180)
                     .textFieldStyle(.roundedBorder)
                     .font(.system(.caption, design: .monospaced))
@@ -392,7 +392,7 @@ extension ThreadsScreen {
         }
     }
 
-    /// The wire value the per-turn picker sends: empty ("Thread default") is
+    /// The wire value the per-turn picker sends: empty (LocalizedPresentation.text("Thread default")) is
     /// NO override; everything else — explicit "auto" included — rides the
     /// turn and beats the sticky thread/global preference (sol review #1).
     static func authRouteRequest(_ preference: String) -> String? {
@@ -403,8 +403,8 @@ extension ThreadsScreen {
     /// so the request vocabulary has a unit test.
     static func authRouteCaption(_ preference: String) -> String {
         switch preference {
-        case "": return "Thread default"
-        case "api_key": return "API key"
+        case "": return LocalizedPresentation.text("Thread default")
+        case "api_key": return LocalizedPresentation.text("API key")
         default: return preference.capitalized
         }
     }

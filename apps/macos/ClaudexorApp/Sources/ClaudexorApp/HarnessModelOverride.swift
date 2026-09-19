@@ -39,17 +39,17 @@ struct HarnessModelOverrideField: View {
             unavailableNoDraft
         case .defaultOnly:
             LabeledContent("Model") {
-                Text("Harness default only")
+                Text(L10n.t("Harness default only"))
                     .font(.caption).foregroundStyle(.secondary)
             }
             .help(modelFallbackHelp)
         case .loading:
             // Catalog not answered yet: a transient state, not a truth claim.
             LabeledContent("Model") {
-                Text("Loading model catalog…")
+                Text(L10n.t("Loading model catalog…"))
                     .font(.caption).foregroundStyle(.secondary)
             }
-            .help("Loading the \(family.label) model catalog…")
+            .help("Загрузка каталога моделей \(family.label)…")
         }
     }
 
@@ -60,15 +60,15 @@ struct HarnessModelOverrideField: View {
     @ViewBuilder private var picker: some View {
         if let models {
             LabeledContent("Model") {
-                Picker("Model override", selection: $modelDraft) {
-                    Text("Harness default").tag("")
+                Picker(L10n.t("Model override"), selection: $modelDraft) {
+                    Text(L10n.t("Harness default")).tag("")
                     // A stored override the truth source no longer lists (legacy
                     // value) stays visible so the user can SEE and clear it — the
                     // engine refuses it at run preflight either way. Rendered
                     // through the shared cap so a pathological stored id cannot
                     // widen the open menu (the tag keeps the FULL id).
                     if !modelDraft.isEmpty, !models.models.contains(where: { $0.id == modelDraft }) {
-                        Text("\(HarnessModelPresentation.menuTitle(label: nil, id: modelDraft)) (not in \(models.source) list)")
+                        Text("\(HarnessModelPresentation.menuTitle(label: nil, id: modelDraft)) (нет в списке \(models.source))")
                             .tag(modelDraft)
                     }
                     ForEach(models.models) { m in
@@ -87,9 +87,9 @@ struct HarnessModelOverrideField: View {
     private var refusedLegacy: some View {
         LabeledContent("Model") {
                 HStack(spacing: Theme.Spacing.xs) {
-                    Text("\(modelDraft) — refused (no truth source)")
+                    Text("\(modelDraft) — отклонено (нет источника данных)")
                         .font(.caption).foregroundStyle(.orange)
-                    Button("Clear") { modelDraft = "" }
+                    Button(L10n.t("Clear")) { modelDraft = "" }
                         .controlSize(.small)
                         .help("Removes the stored override so this harness runs its default model.")
                 }
@@ -102,14 +102,14 @@ struct HarnessModelOverrideField: View {
     private var unavailableWithDraft: some View {
         LabeledContent("Model") {
                 HStack(spacing: Theme.Spacing.xs) {
-                    Text("\(modelDraft) — model catalog unavailable")
+                    Text("\(modelDraft) — каталог моделей недоступен")
                         .font(.caption).foregroundStyle(.secondary)
-                    Button("Retry") { Task { await loadModels(force: true) } }
+                    Button(L10n.t("Retry")) { Task { await loadModels(force: true) } }
                         .controlSize(.small)
-                        .help("Reload the \(family.label) model catalog to verify this override.")
+                        .help("Обновите каталог моделей \(family.label), чтобы проверить это переопределение.")
                 }
             }
-            .help("Could not load the \(family.label) model catalog; the override stays as-is. Retry after reconnecting to verify it.")
+            .help("Не удалось загрузить каталог моделей \(family.label); переопределение сохранено без изменений. После переподключения повторите проверку.")
     }
 
     /// Catalog fetch failed with no stored override: offer Retry and do NOT
@@ -117,24 +117,24 @@ struct HarnessModelOverrideField: View {
     private var unavailableNoDraft: some View {
         LabeledContent("Model") {
                 HStack(spacing: Theme.Spacing.xs) {
-                    Text("Model catalog unavailable")
+                    Text(L10n.t("Model catalog unavailable"))
                         .font(.caption).foregroundStyle(.secondary)
-                    Button("Retry") { Task { await loadModels(force: true) } }
+                    Button(L10n.t("Retry")) { Task { await loadModels(force: true) } }
                         .controlSize(.small)
-                        .help("Reload the \(family.label) model catalog.")
+                        .help("Обновить каталог моделей \(family.label).")
                 }
             }
-            .help("Could not load the \(family.label) model catalog. Retry after reconnecting.")
+            .help("Не удалось загрузить каталог моделей \(family.label). Переподключитесь и повторите попытку.")
     }
 
     private func modelPickerHelp(_ models: HarnessModelsResponse) -> String {
-        let freshness = models.verifiedAgainst.map { " (verified against CLI \($0))" } ?? ""
-        return "Model forwarded to \(family.label); source: \(models.source)\(freshness). Harness default keeps the engine choice."
+        let freshness = models.verifiedAgainst.map { " (проверено через CLI \($0))" } ?? ""
+        return "Модель передана \(family.label); источник: \(models.source)\(freshness). Значение по умолчанию оставляет выбор движку."
     }
 
     private var modelFallbackHelp: String {
-        if loadingModels { return "Loading \(family.label) models…" }
-        return "\(family.label) exposes no model truth source, so runs use its default model; an explicit model would be refused (strict model governance)."
+        if loadingModels { return "Загрузка моделей \(family.label)…" }
+        return "\(family.label) не предоставляет источник списка моделей, поэтому используется модель по умолчанию; явное указание модели будет отклонено."
     }
 
     private func loadModels(force: Bool = false) async {

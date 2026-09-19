@@ -99,7 +99,7 @@ extension AppModel {
         cancelRemoteStreams(locationID)
         discardRemoteDaemonProjections(at: locationID)
         var activationLease = transferredActivation?.lease
-        setRemoteState(id, .connecting, message: "Connecting with OpenSSH…")
+        setRemoteState(id, .connecting, message: LocalizedPresentation.text("Connecting with OpenSSH…"))
         do {
             try await sshConnectionManager.connectBatch(connection)
         } catch let error as SSHConnectionError {
@@ -119,7 +119,7 @@ extension AppModel {
                 guard allowInteraction, remoteTerminalSheet == nil else {
                     setRemoteState(
                         id, .needsInteraction,
-                        message: "SSH needs authentication. Click Connect to open its terminal.")
+                        message: LocalizedPresentation.text("SSH needs authentication. Click Connect to open its terminal."))
                     return
                 }
                 guard let presentation = beginRemoteTerminalPresentation(
@@ -127,7 +127,7 @@ extension AppModel {
                 else { return }
                 setRemoteState(
                     id, .needsInteraction,
-                    message: "Preparing the SSH authentication terminal…")
+                    message: LocalizedPresentation.text("Preparing the SSH authentication terminal…"))
                 do {
                     let invocation =
                         try await sshConnectionManager.interactiveMasterInvocation(for: connection)
@@ -144,7 +144,7 @@ extension AppModel {
                     }
                     setRemoteState(
                         id, .needsInteraction,
-                        message: "Finish SSH authentication in the terminal.")
+                        message: LocalizedPresentation.text("Finish SSH authentication in the terminal."))
                     _ = presentRemoteTerminal(
                         presentation,
                         title: "Connect to \(connection.displayName)",
@@ -203,7 +203,7 @@ extension AppModel {
                     throw SSHConnectionError.unavailable(
                         "the runtime is missing and the signed release manifest is unavailable")
                 }
-                setRemoteState(id, .installing, message: "Installing the remote runtime…")
+                setRemoteState(id, .installing, message: LocalizedPresentation.text("Installing the remote runtime…"))
                 activationLease = try await remoteRuntimeInstaller.install(
                     manifest, target: detectedTarget, on: connection,
                     appVersion: Self.appVersionString())
@@ -216,7 +216,7 @@ extension AppModel {
                     hasActiveTasks: false)
                 {
                 case .blockingUpdate:
-                    setRemoteState(id, .installing, message: "Updating an incompatible runtime…")
+                    setRemoteState(id, .installing, message: LocalizedPresentation.text("Updating an incompatible runtime…"))
                     activationLease = try await remoteRuntimeInstaller.install(
                         manifest, target: detectedTarget, on: connection,
                         appVersion: Self.appVersionString())
@@ -242,7 +242,7 @@ extension AppModel {
                     hasActiveTasks: hasActive)
                 {
                 case .updateAvailable:
-                    setRemoteState(id, .installing, message: "Updating the remote runtime…")
+                    setRemoteState(id, .installing, message: LocalizedPresentation.text("Updating the remote runtime…"))
                     await closeRemoteControlForward(id, through: generation)
                     activationLease = try await remoteRuntimeInstaller.install(
                         manifest, target: detectedTarget, on: connection,
@@ -400,7 +400,7 @@ extension AppModel {
               connection.status == .needsInteraction
         else { return }
         guard exitCode == 0 else {
-            setRemoteState(id, .failed, message: "Interactive SSH authentication did not finish.")
+            setRemoteState(id, .failed, message: LocalizedPresentation.text("Interactive SSH authentication did not finish."))
             return
         }
         do {
@@ -452,7 +452,7 @@ extension AppModel {
         }
         await sshConnectionManager.disconnect(id)
         guard remoteConnectionGenerations[id] == generation else { return nil }
-        setRemoteState(id, .offline, message: "Disconnected. Cached thread titles remain available.")
+        setRemoteState(id, .offline, message: LocalizedPresentation.text("Disconnected. Cached thread titles remain available."))
         return generation
     }
 

@@ -369,7 +369,7 @@ extension AppModel {
         setRemoteState(
             connectionID,
             .needsInteraction,
-            message: "SSH needs authentication. Close the current terminal and click Connect.")
+            message: LocalizedPresentation.text("SSH needs authentication. Close the current terminal and click Connect."))
     }
 
     /// The only reconnect-time remote client-slot mutation. Applicability is a

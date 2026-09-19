@@ -21,7 +21,7 @@ extension SettingsScreen {
 
     @ViewBuilder var generalGroup: some View {
         @Bindable var model = model
-        settingsGroup("General", "gearshape") {
+        settingsGroup(L10n.t("General"), "gearshape") {
             KeyValueRow(
                 key: "Engine status",
                 value: model.health.label,
@@ -33,15 +33,15 @@ extension SettingsScreen {
                 Button {
                     Task { await model.connect() }
                 } label: {
-                    Label("Reconnect", systemImage: "arrow.clockwise")
+                    Label(L10n.t(LocalizedPresentation.text("Reconnect")), systemImage: "arrow.clockwise")
                 }
                 .buttonStyle(.bordered)
-                .productControlAccessibility("Reconnect")
+                .productControlAccessibility(LocalizedPresentation.text("Reconnect"))
                 .help("Reconnect the app to the selected engine and reload its current state.")
                 Button {
                     Task { await refreshAll() }
                 } label: {
-                    Label("Refresh metadata", systemImage: "arrow.triangle.2.circlepath")
+                    Label(L10n.t("Refresh metadata"), systemImage: "arrow.triangle.2.circlepath")
                 }
                 .buttonStyle(.bordered)
                 .productControlAccessibility("Refresh metadata")
@@ -52,49 +52,49 @@ extension SettingsScreen {
 
     @ViewBuilder var appearanceGroup: some View {
         @Bindable var model = model
-        settingsGroup("Appearance", "paintpalette") {
-            Picker("Theme", selection: $model.appearance) {
+        settingsGroup(L10n.t(LocalizedPresentation.text("Appearance")), "paintpalette") {
+            Picker(L10n.t("Theme"), selection: $model.appearance) {
                 ForEach(AppearanceMode.allCases) {
                     Label($0.label, systemImage: $0.glyph).tag($0)
                 }
             }
             .pickerStyle(.segmented)
-            Text("The window is matte glass — the desktop shows faintly through it. Code and diffs stay on a solid surface for contrast. Reduce Transparency falls back to a solid backdrop.")
+            Text(L10n.t("The window is matte glass — the desktop shows faintly through it. Code and diffs stay on a solid surface for contrast. Reduce Transparency falls back to a solid backdrop."))
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }
     }
 
     @ViewBuilder var routingGroup: some View {
-        settingsGroup("Agent & Routing", "point.3.connected.trianglepath.dotted") {
+        settingsGroup(L10n.t("Agent & Routing"), "point.3.connected.trianglepath.dotted") {
             HStack {
                 Picker(
-                    "Routing goal",
+                    L10n.t("Routing goal"),
                     selection: draftBinding(\.routingGoal, lane: .routingGoal)
                 ) {
-                    Text("Auto").tag("auto")
-                    Text("Quality").tag("quality")
-                    Text("Economy").tag("economy")
+                    Text(L10n.t(LocalizedPresentation.text("Auto"))).tag("auto")
+                    Text(L10n.t("Quality")).tag("quality")
+                    Text(L10n.t("Economy")).tag("economy")
                 }
                 .help("Auto paces expiring quota, Quality uses your highest comparable tier, and Economy minimizes incremental paid spend.")
                 laneStatus(.routingGoal)
             }
             HStack {
                 Picker(
-                    "Paid fallback",
+                    L10n.t("Paid fallback"),
                     selection: draftBinding(\.paidFallback, lane: .paidFallback)
                 ) {
-                    Text("Never").tag("never")
-                    Text("When unavailable").tag("when_unavailable")
-                    Text("Allowed within cap").tag("allowed_within_cap")
+                    Text(L10n.t("Never")).tag("never")
+                    Text(L10n.t("When unavailable")).tag("when_unavailable")
+                    Text(L10n.t("Allowed within cap")).tag("allowed_within_cap")
                 }
                 .help("Controls whether routing may leave subscription or proven-zero routes.")
                 laneStatus(.paidFallback)
             }
-            KeyValueRow(key: "Quality tiers", value: "\(qualityTierCount()) configured")
+            KeyValueRow(key: L10n.t("Quality tiers"), value: "\(qualityTierCount()) configured")
             HStack {
-                Picker("Primary harness", selection: primaryHarnessBinding()) {
-                    Text("None").tag("__none")
+                Picker(L10n.t("Primary harness"), selection: primaryHarnessBinding()) {
+                    Text(L10n.t("None")).tag("__none")
                     ForEach(model.selectableHarnesses.filter { $0 != .raw }) { family in
                         Label {
                             Text(family.label)
@@ -109,23 +109,23 @@ extension SettingsScreen {
             }
             HStack {
                 Picker(
-                    "Env inheritance",
+                    L10n.t("Env inheritance"),
                     selection: draftBinding(\.envInheritance, lane: .envInheritance)
                 ) {
-                    Text("Mirror native").tag("mirror_native")
-                    Text("Clean").tag("clean")
+                    Text(L10n.t("Mirror native")).tag("mirror_native")
+                    Text(L10n.t("Clean")).tag("clean")
                 }
                 .help("mirror_native reuses native CLI auth/session context by default.")
                 laneStatus(.envInheritance)
             }
             HStack {
                 Picker(
-                    "Auth route",
+                    L10n.t("Auth route"),
                     selection: draftBinding(\.authPreference, lane: .authPreference)
                 ) {
-                    Text("Auto (subscription first)").tag("auto")
-                    Text("Subscription").tag("subscription")
-                    Text("API key").tag("api_key")
+                    Text(L10n.t("Auto (subscription first)")).tag("auto")
+                    Text(L10n.t(LocalizedPresentation.text("Subscription"))).tag("subscription")
+                    Text(L10n.t(LocalizedPresentation.text("API key"))).tag("api_key")
                 }
                 .help("Which credential route harness runs prefer. Auto seeds the native subscription session and falls back to a stored API key; an explicit route discloses any fallback in the run events.")
                 laneStatus(.authPreference)
@@ -156,18 +156,18 @@ extension SettingsScreen {
     }
 
     @ViewBuilder var harnessDoctorGroup: some View {
-        settingsGroup("Harness Doctor & Auth", "cpu") {
-            Text("Claudexor mirrors native harness auth first, with API-key fallback through stored secret refs.")
+        settingsGroup(L10n.t("Harness Doctor & Auth"), "cpu") {
+            Text(L10n.t("Claudexor mirrors native harness auth first, with API-key fallback through stored secret refs."))
                 .font(.caption)
                 .foregroundStyle(.secondary)
             if case .failed(let message) = model.activeAccountsLoadState {
                 VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
-                    Label("Could not refresh accounts and readiness",
+                    Label(LocalizedPresentation.text(LocalizedPresentation.text("Could not refresh accounts and readiness")),
                           systemImage: "exclamationmark.triangle.fill")
                         .font(.caption.weight(.medium))
                         .foregroundStyle(Theme.status(.negative))
                     Text(message).font(.caption2).foregroundStyle(.secondary)
-                    Button("Retry") { Task { _ = await model.refreshAccounts() } }
+                    Button(L10n.t("Retry")) { Task { _ = await model.refreshAccounts() } }
                         .buttonStyle(.bordered).controlSize(.small)
                 }
             }
@@ -187,11 +187,11 @@ extension SettingsScreen {
     }
 
     @ViewBuilder var secretsGroup: some View {
-        settingsGroup("Secrets", "key") {
-            Text("Secret values live in the v2 0600 file store. Run params and artifacts store refs/metadata only.")
+        settingsGroup(L10n.t("Secrets"), "key") {
+            Text(L10n.t("Secret values live in the v2 0600 file store. Run params and artifacts store refs/metadata only."))
                 .font(.caption)
                 .foregroundStyle(.secondary)
-            KeyValueRow(key: "Secret backend", value: model.activeSecretBackend)
+            KeyValueRow(key: L10n.t("Secret backend"), value: model.activeSecretBackend)
             if !model.activeStoredSecrets.isEmpty {
                 FlowLayout(spacing: Theme.Spacing.xs) {
                     ForEach(model.activeStoredSecrets) { secret in
@@ -223,8 +223,8 @@ extension SettingsScreen {
     }
 
     @ViewBuilder var perHarnessGroup: some View {
-        settingsGroup("Per-Harness Defaults", "slider.horizontal.3") {
-            Text("Engine-level defaults per harness: enable/disable, model override, effort, and web policy. Stored in ~/.claudexor/v3/config.yaml.")
+        settingsGroup(L10n.t("Per-Harness Defaults"), "slider.horizontal.3") {
+            Text(L10n.t("Engine-level defaults per harness: enable/disable, model override, effort, and web policy. Stored in ~/.claudexor/v3/config.yaml."))
                 .font(.caption)
                 .foregroundStyle(.secondary)
             ForEach(model.selectableHarnesses.filter { $0 != .raw }) { family in

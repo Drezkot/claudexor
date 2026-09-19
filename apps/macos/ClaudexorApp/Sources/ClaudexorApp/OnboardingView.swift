@@ -45,8 +45,8 @@ struct OnboardingView: View {
         HStack(spacing: Theme.Spacing.md) {
             Image(systemName: "sparkles").font(.title2).foregroundStyle(Theme.accent)
             VStack(alignment: .leading, spacing: 2) {
-                Text("Set Up Claudexor").font(.title3.weight(.semibold))
-                Text("Native harness auth first, API-key fallback when needed.")
+                Text(L10n.t("Set Up Claudexor")).font(.title3.weight(.semibold))
+                Text(L10n.t("Native harness auth first, API-key fallback when needed."))
                     .font(.caption).foregroundStyle(.secondary)
             }
             Spacer()
@@ -57,7 +57,7 @@ struct OnboardingView: View {
     private var nativeAuth: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.lg) {
             HStack {
-                Label("Native login setup", systemImage: "person.crop.circle.badge.checkmark")
+                Label(LocalizedPresentation.text(LocalizedPresentation.text("Native login setup")), systemImage: "person.crop.circle.badge.checkmark")
                     .font(.title3.weight(.semibold))
                     .foregroundStyle(Theme.accent)
                 Spacer()
@@ -66,12 +66,12 @@ struct OnboardingView: View {
                         await model.refreshHarnesses(fresh: true, markStaleOnFailure: true)
                     }
                 } label: {
-                    Label("Recheck", systemImage: "arrow.clockwise")
+                    Label(L10n.t("Recheck"), systemImage: "arrow.clockwise")
                 }
                 .buttonStyle(.bordered)
                 .help("Refresh harness install/auth status after running a native setup command.")
             }
-            Text("Claudexor does not broker SaaS OAuth. Every account is its own named row signed in through the official vendor CLI login; API-key refs are only the fallback route.")
+            Text(L10n.t("Claudexor does not broker SaaS OAuth. Every account is its own named row signed in through the official vendor CLI login; API-key refs are only the fallback route."))
                 .font(.callout).foregroundStyle(.secondary)
             VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
                 GitReadinessCard(
@@ -89,10 +89,10 @@ struct OnboardingView: View {
 
     private var apiKeys: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.lg) {
-            Label("API-key fallback", systemImage: "key")
+            Label(L10n.t("API-key fallback"), systemImage: "key")
                 .font(.title3.weight(.semibold))
                 .foregroundStyle(Theme.accent)
-            Text("Optional. Open a harness auth sheet to store fallback refs through the local secret store; raw values are never written into run params, jobs, patches, or summaries.")
+            Text(L10n.t("Optional. Open a harness auth sheet to store fallback refs through the local secret store; raw values are never written into run params, jobs, patches, or summaries."))
                 .font(.callout).foregroundStyle(.secondary)
             VStack(alignment: .leading, spacing: Theme.Spacing.md) {
                 FlowLayout(spacing: Theme.Spacing.sm) {
@@ -118,10 +118,10 @@ struct OnboardingView: View {
 
     private var defaults: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.lg) {
-            Label("Ready", systemImage: "checkmark.seal")
+            Label(L10n.t("Ready"), systemImage: "checkmark.seal")
                 .font(.title3.weight(.semibold))
                 .foregroundStyle(Theme.status(.positive))
-            Text("Everything happens in one chat. Pick your project in the composer's project chip (the only place projects are selected); the composer opens in Agent for direct edits (Ask is the fallback with no project); switch to Best-of to run the harness pool against each other, or Plan to draft an approach you can then implement in the same thread.")
+            Text(L10n.t("Everything happens in one chat. Pick your project in the composer's project chip (the only place projects are selected); the composer opens in Agent for direct edits (Ask is the fallback with no project); switch to Best-of to run the harness pool against each other, or Plan to draft an approach you can then implement in the same thread."))
                 .font(.callout).foregroundStyle(.secondary)
             VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
                 KeyValueRow(key: "Settings", value: "Cmd+,")
@@ -144,7 +144,7 @@ struct OnboardingView: View {
                         dismissed = true
                     }
                 } label: {
-                    Label("Smoke Test Ask", systemImage: "checkmark.seal")
+                    Label(LocalizedPresentation.text(LocalizedPresentation.text("Smoke Test Ask")), systemImage: "checkmark.seal")
                 }
                 .buttonStyle(.borderedProminent)
                 .tint(Theme.accent)
@@ -159,10 +159,10 @@ struct OnboardingView: View {
 
     private var footer: some View {
         HStack {
-            Button("Skip") { dismissed = true }
+            Button(L10n.t("Skip")) { dismissed = true }
                 .buttonStyle(.bordered)
             Spacer()
-            Button { step = max(0, step - 1) } label: { Label("Back", systemImage: "chevron.left") }
+            Button { step = max(0, step - 1) } label: { Label(L10n.t("Back"), systemImage: "chevron.left") }
                 .buttonStyle(.bordered)
                 .disabled(step == 0)
             Button {
@@ -188,7 +188,7 @@ struct OnboardingView: View {
             family: family, info: model.harnessInfo(for: family))
         return HarnessReadinessCard(presentation: presentation) {
             Button { model.authSheetTarget = AuthSheetTarget(family: family) } label: {
-                Label(presentation.available ? "Manage" : "Setup",
+                Label(presentation.available ? L10n.t("Manage") : L10n.t("Setup"),
                       systemImage: presentation.available ? "slider.horizontal.3" : "person.crop.circle.badge.checkmark")
             }
             .buttonStyle(.bordered)
@@ -199,7 +199,7 @@ struct OnboardingView: View {
                     await model.refreshHarnesses(fresh: true, markStaleOnFailure: true)
                 }
             } label: {
-                Label("Recheck", systemImage: "arrow.clockwise")
+                Label(L10n.t("Recheck"), systemImage: "arrow.clockwise")
             }
             .buttonStyle(.bordered)
             .help("Refresh \(family.label) install/auth/capability status.")

@@ -27,14 +27,14 @@ struct DecisionBar: View {
 
     var body: some View {
         HStack(spacing: Theme.Spacing.sm) {
-            Button("Accept risk & unblock…") { showAcceptSheet = true }
+            Button(L10n.t("Accept risk & unblock…")) { showAcceptSheet = true }
                 .help("Records an auditable operator decision (your risk note, bound to this exact patch), then allows apply")
-            Button("Rerun with feedback…") {
+            Button(L10n.t("Rerun with feedback…")) {
                 feedbackText = ""
                 showFeedbackSheet = true
             }
             .help("Enqueues a follow-up run seeded with YOUR feedback text")
-            Button("Override needs-human", role: .destructive) { confirmOverride = true }
+            Button(L10n.t("Override needs-human"), role: .destructive) { confirmOverride = true }
                 .help("Overrides a needs-human escalation with an auditable decision; a mutated patch invalidates it")
             Spacer()
         }
@@ -43,7 +43,7 @@ struct DecisionBar: View {
         .disabled(busy)
         .sheet(isPresented: $showAcceptSheet) {
             decisionSheet(
-                title: "Accept risk & unblock",
+                title: LocalizedPresentation.text(LocalizedPresentation.text("Accept risk & unblock")),
                 prompt: "What risk are you accepting? This exact text becomes the audit record.",
                 text: $acceptedRisksText,
                 submitLabel: "Accept risk",
@@ -54,7 +54,7 @@ struct DecisionBar: View {
         }
         .sheet(isPresented: $showFeedbackSheet) {
             decisionSheet(
-                title: "Rerun with feedback",
+                title: LocalizedPresentation.text(LocalizedPresentation.text("Rerun with feedback")),
                 prompt: "Feedback for the follow-up run (what should change).",
                 text: $feedbackText,
                 submitLabel: "Rerun",
@@ -68,12 +68,12 @@ struct DecisionBar: View {
             isPresented: $confirmOverride,
             titleVisibility: .visible,
         ) {
-            Button("Override & allow apply", role: .destructive) {
+            Button(L10n.t("Override & allow apply"), role: .destructive) {
                 Task { await decide(action: "override_needs_human") }
             }
-            Button("Cancel", role: .cancel) {}
+            Button(L10n.t("Cancel"), role: .cancel) {}
         } message: {
-            Text("This records an auditable override bound to the current patch. Apply becomes available; a mutated patch invalidates the override.")
+            Text(L10n.t("This records an auditable override bound to the current patch. Apply becomes available; a mutated patch invalidates the override."))
         }
     }
 
@@ -94,7 +94,7 @@ struct DecisionBar: View {
                 .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(.separator))
             HStack {
                 Spacer()
-                Button("Cancel") {
+                Button(L10n.t("Cancel")) {
                     showAcceptSheet = false
                     showFeedbackSheet = false
                 }

@@ -88,7 +88,7 @@ extension AppModel {
 
     func userMessageForRemote(_ error: Error) -> String {
         if isRecoverableRemoteTransportFailure(error) {
-            return "The SSH tunnel is unavailable. Reconnect the host."
+            return LocalizedPresentation.text("The SSH tunnel is unavailable. Reconnect the host.")
         }
         if let localized = error as? LocalizedError,
            let detail = localized.errorDescription, !detail.isEmpty

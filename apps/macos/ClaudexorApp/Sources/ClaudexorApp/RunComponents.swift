@@ -6,7 +6,7 @@ struct PlanListView: View {
     let items: [PlanItem]
     var body: some View {
         if items.isEmpty {
-            Text("No plan yet — the agent posts its steps here as the run starts.")
+            Text(L10n.t("No plan yet — the agent posts its steps here as the run starts."))
                 .font(.callout).foregroundStyle(.secondary)
                 .frame(maxWidth: .infinity, alignment: .leading)
         } else {
@@ -39,7 +39,7 @@ private struct PlanRow: View {
             }
             Spacer(minLength: Theme.Spacing.sm)
             if item.state == .active {
-                Text("In progress").font(.caption2.weight(.medium)).foregroundStyle(Theme.status(.info))
+                Text(L10n.t("In progress")).font(.caption2.weight(.medium)).foregroundStyle(Theme.status(.info))
             }
         }
         .padding(.vertical, Theme.Spacing.sm)

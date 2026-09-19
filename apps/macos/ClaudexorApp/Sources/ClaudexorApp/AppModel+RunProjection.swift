@@ -8,7 +8,7 @@ extension AppModel {
         let families = (summary.harnesses ?? []).map { HarnessFamily(rawValue: $0) }
         let projectName = summary.project?.projectName
             ?? summary.project?.root.map { URL(fileURLWithPath: $0).lastPathComponent }
-            ?? "No project"
+            ?? LocalizedPresentation.text("No project")
         var task = TaskRun(
             id: summary.runId,
             title: title,

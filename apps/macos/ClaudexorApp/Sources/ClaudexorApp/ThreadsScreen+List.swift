@@ -66,7 +66,7 @@ extension ThreadsScreen {
             VStack(alignment: .leading, spacing: Theme.Spacing.xxs) {
                 ForEach(model.projectListingProblems) { problem in
                     Label {
-                        Text("Threads from “\(URL(fileURLWithPath: problem.root).lastPathComponent)” are hidden — the project folder is missing. Relink it to restore them.")
+                        Text("Чаты проекта «\(URL(fileURLWithPath: problem.root).lastPathComponent)» скрыты — папка проекта отсутствует. Укажите путь заново, чтобы восстановить их.")
                             .font(.caption)
                             .fixedSize(horizontal: false, vertical: true)
                     } icon: {
@@ -83,14 +83,14 @@ extension ThreadsScreen {
 
     var renameSheet: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.md) {
-            Text("Rename thread").font(.headline)
-            TextField("Thread title", text: $renameDraft)
+            Text(L10n.t("Rename thread")).font(.headline)
+            TextField(LocalizedPresentation.text("Thread title"), text: $renameDraft)
                 .textFieldStyle(.roundedBorder)
                 .onSubmit { submitRename() }
             HStack {
                 Spacer()
-                Button("Cancel") { renameTargetId = nil }
-                Button("Rename") { submitRename() }
+                Button(L10n.t("Cancel")) { renameTargetId = nil }
+                Button(L10n.t("Rename")) { submitRename() }
                     .buttonStyle(.borderedProminent)
                     .tint(Theme.accent)
                     .disabled(renameDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
@@ -140,7 +140,7 @@ extension ThreadsScreen {
         // rename/archive ride the existing PATCH /threads/:id (server-owned
         // title/state); the row finally exposes the affordance.
         .contextMenu {
-            Button("Rename…") {
+            Button(L10n.t("Rename…")) {
                 renameDraft = thread.title ?? ""
                 renameTargetId = thread.id
                 renameTargetLocation = located.locationID
@@ -148,14 +148,14 @@ extension ThreadsScreen {
             // ThreadState is active|closed (server enum) — "closed" is the
             // archived state; Reopen PATCHes back to "active".
             if thread.state != "closed" {
-                Button("Archive") {
+                Button(L10n.t("Archive")) {
                     Task {
                         await model.archiveThread(
                             locationID: located.locationID, id: thread.id)
                     }
                 }
             } else {
-                Button("Reopen") {
+                Button(L10n.t("Reopen")) {
                     Task {
                         await model.reopenThread(
                             locationID: located.locationID, id: thread.id)
@@ -167,8 +167,8 @@ extension ThreadsScreen {
     }
 
     func threadSubtitle(_ thread: ThreadSummary) -> String {
-        let project = thread.repoRoot.map { URL(fileURLWithPath: $0).lastPathComponent } ?? "No project"
-        return "\(project) · \(thread.runIds.count) turn\(thread.runIds.count == 1 ? "" : "s")"
+        let project = thread.repoRoot.map { URL(fileURLWithPath: $0).lastPathComponent } ?? LocalizedPresentation.text("No project")
+        return "\(project) · запусков: \(thread.runIds.count)"
     }
 
     func threadSubtitle(_ located: LocatedThread) -> String {
@@ -176,6 +176,6 @@ extension ThreadsScreen {
         guard located.locationID != .local,
               let cached = model.remoteThreadCache.first(where: { $0.id == located.id })
         else { return base }
-        return "\(base) · synced \(formattedRemoteSyncTime(cached.syncedAt))"
+        return "\(base) · синхронизировано \(formattedRemoteSyncTime(cached.syncedAt))"
     }
 }

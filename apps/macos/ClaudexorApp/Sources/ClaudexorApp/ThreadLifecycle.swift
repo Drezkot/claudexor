@@ -161,7 +161,7 @@ extension AppModel {
                let connectionID = locationID.remoteConnectionID
             {
                 let host = remoteConnection(for: locationID)?.displayName ?? "remote host"
-                threadStatus = "Reconnecting to \(host)…"
+                threadStatus = "Переподключение к \(host)…"
                 pendingRemoteThreadSelection = (locationID, id)
                 await disconnectRemote(connectionID)
                 await connectRemote(connectionID)
@@ -177,14 +177,14 @@ extension AppModel {
                 } else {
                     threadStatus =
                         remoteConnectionMessages[connectionID]
-                        ?? "Could not reconnect to \(host)."
+                        ?? "Не удалось переподключиться к \(host)."
                 }
                 return
             }
             let detail = locationID == .local
                 ? userMessage(for: error)
                 : userMessageForRemote(error)
-            threadStatus = "Could not load thread: \(detail)"
+            threadStatus = "Не удалось загрузить чат: \(detail)"
         }
     }
 
@@ -238,7 +238,7 @@ extension AppModel {
         let locationID = requestedLocationID ?? selectedExecutionLocation
         let selectionWasAtTarget = selectedExecutionLocation == locationID
         let targetThreadID = selectedThreadId
-        guard let requestClient = gateway(for: locationID) else { return "Engine offline." }
+        guard let requestClient = gateway(for: locationID) else { return LocalizedPresentation.text("Engine offline.") }
         do {
             let result = try await requestClient.apply(
                 runId: runId, body: ApplyRunRequest(mode: mode))
@@ -268,7 +268,7 @@ extension AppModel {
                 route = .task(runId)
             }
             return nil
-        } catch { return "Apply failed: \(error)" }
+        } catch { return "Ошибка применения: \(error)" }
     }
 
     func retryRunExact(
@@ -278,7 +278,7 @@ extension AppModel {
         let locationID = requestedLocationID ?? selectedExecutionLocation
         let selectionWasAtTarget = selectedExecutionLocation == locationID
         let targetThreadID = selectedThreadId
-        guard let requestClient = gateway(for: locationID) else { return "Engine offline." }
+        guard let requestClient = gateway(for: locationID) else { return LocalizedPresentation.text("Engine offline.") }
         do {
             let retry = try await requestClient.retryRun(runId: runId)
             guard isCurrentGateway(requestClient, at: locationID) else {
@@ -309,7 +309,7 @@ extension AppModel {
                 }
             }
             return nil
-        } catch { return "Retry failed: \(userMessage(for: error))" }
+        } catch { return "Повторная попытка завершилась ошибкой: \(userMessage(for: error))" }
     }
 
     func loadRunAgainDraft(
@@ -328,9 +328,9 @@ extension AppModel {
     ) async -> String? {
         let selectionWasAtTarget = selectedExecutionLocation == locationID
         let targetThreadID = selectedThreadId
-        guard let requestClient = gateway(for: locationID) else { return "Engine offline." }
+        guard let requestClient = gateway(for: locationID) else { return LocalizedPresentation.text("Engine offline.") }
         if draft.accessChoice.required && access == nil {
-            return "Run Again requires an explicit access choice."
+            return LocalizedPresentation.text(LocalizedPresentation.text("Run Again requires an explicit access choice."))
         }
         do {
             let result = try await requestClient.startRunAgain(
@@ -355,7 +355,7 @@ extension AppModel {
                 }
             }
             return nil
-        } catch { return "Run Again failed: \(userMessage(for: error))" }
+        } catch { return "Повторный запуск завершился ошибкой: \(userMessage(for: error))" }
     }
 
     /// Rename a thread: server-owned title via the existing PATCH.

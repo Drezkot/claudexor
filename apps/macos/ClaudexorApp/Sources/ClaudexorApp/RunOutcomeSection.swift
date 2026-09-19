@@ -41,14 +41,14 @@ struct RunOutcomeSection: View {
     /// failed member's redacted error. Rendered from the server projection only.
     private func councilSection(_ council: CouncilInfo) -> some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
-            SectionLabel("Council", systemImage: "person.3.sequence.fill",
+            SectionLabel(LocalizedPresentation.text("Council"), systemImage: "person.3.sequence.fill",
                          accessory: council.degraded
-                            ? AnyView(Text("degraded").font(.caption.weight(.medium))
+                            ? AnyView(Text(L10n.t("degraded")).font(.caption.weight(.medium))
                                 .foregroundStyle(Theme.status(.caution))
                                 .help("Fewer drafts were accepted than requested. A failed member may retain an unverified draft; inspect its error detail."))
                             : nil)
-            Text("\(council.drafted) of \(council.requested) drafts accepted"
-                 + (council.mergedBy.map { " · merged by \($0)" } ?? " · merge did not complete"))
+            Text("Принято черновиков: \(council.drafted) из \(council.requested)"
+                 + (council.mergedBy.map { " · объединено: \($0)" } ?? " · объединение не завершено"))
                 .font(.caption).foregroundStyle(.secondary)
             ForEach(council.members) { member in
                 HStack(spacing: Theme.Spacing.sm) {
@@ -73,7 +73,7 @@ struct RunOutcomeSection: View {
     /// so it renders with the run's outcome facts (D42).
     private var candidatesSection: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.md) {
-            SectionLabel("Candidates", systemImage: "flag.checkered.2.crossed",
+            SectionLabel(LocalizedPresentation.text("Candidates"), systemImage: "flag.checkered.2.crossed",
                          accessory: RunFacts.bestOfLabel(task).map { bestOf in
                              AnyView(Text(bestOf.text)
                                 .font(.caption.weight(.medium))
@@ -173,9 +173,9 @@ struct RunOutcomeSection: View {
     @ViewBuilder
     private var planSection: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.md) {
-            SectionLabel("Plan", systemImage: "checklist",
+            SectionLabel(LocalizedPresentation.text("Plan"), systemImage: "checklist",
                          accessory: task.plan.isEmpty ? nil
-                            : AnyView(Text("\(task.planDone)/\(task.plan.count) done")
+                            : AnyView(Text("\(task.planDone)/\(task.plan.count) выполнено")
                                 .font(.caption).foregroundStyle(.secondary)))
             if let readiness = task.planReadiness {
                 let ready = readiness.state == "ready"
@@ -187,7 +187,7 @@ struct RunOutcomeSection: View {
             if !task.planQuestions.isEmpty {
                 Panel {
                     VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
-                        Text("Open questions — answer on the plan turn in chat to continue.")
+                        Text(L10n.t("Open questions — answer on the plan turn in chat to continue."))
                             .font(.caption).foregroundStyle(.secondary)
                         ForEach(task.planQuestions) { q in
                             Label(q.prompt, systemImage: "questionmark.circle")
@@ -207,13 +207,13 @@ struct RunOutcomeSection: View {
     private var reviewContent: some View {
         let verdict = task.effectiveReviewVerdict
         return VStack(alignment: .leading, spacing: Theme.Spacing.md) {
-            SectionLabel("Cross-family review", systemImage: "person.2.badge.gearshape")
+            SectionLabel(LocalizedPresentation.text("Cross-family review"), systemImage: "person.2.badge.gearshape")
             Panel {
                 Label(reviewVerdictText(verdict), systemImage: reviewVerdictGlyph(verdict))
                     .foregroundStyle(reviewVerdictColor(verdict))
             }
             if task.reviewNeedsDecision {
-                Text("This run needs a decision — decide from its card in the conversation.")
+                Text(L10n.t("This run needs a decision — decide from its card in the conversation."))
                     .font(.caption).foregroundStyle(Theme.status(.caution))
             } else if let action = task.operatorDecisionAction {
                 Label("Operator decision recorded: \(action)", systemImage: "checkmark.seal")

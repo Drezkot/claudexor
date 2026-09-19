@@ -116,7 +116,7 @@ enum ComposerAttachmentAdmission {
                 outcome: .refused,
                 admittedLaneIDs: [],
                 rejected: [],
-                message: "No available harness lane can receive the selected attachments."
+                message: LocalizedPresentation.text("No available harness lane can receive the selected attachments.")
             )
         }
         let admissions = uniqueLanes.map { resolveLane(lane: $0, attachments: attachments) }

@@ -32,7 +32,7 @@ extension SettingsScreen {
                 }
             } label: {
                 Label(
-                    presentation.available ? "Manage" : "Setup",
+                    presentation.available ? L10n.t("Manage") : L10n.t("Setup"),
                     systemImage: presentation.available
                         ? "slider.horizontal.3"
                         : "person.crop.circle.badge.checkmark")
@@ -42,16 +42,16 @@ extension SettingsScreen {
             .disabled(remoteLoginNeedsAccount)
             .help(
                 remoteLoginNeedsAccount
-                    ? "\(family.label) signs in only into a named account. Add or open a \(family.label) account in Accounts to sign in on this remote location."
+                    ? "\(family.label) поддерживает вход только в именованный аккаунт. Добавьте или откройте аккаунт \(family.label) в разделе «Аккаунты» для входа на удалённом хосте."
                     : presentation.available
-                        ? "Open \(family.label) auth details and fallback key management."
-                        : "Open setup/auth actions for \(family.label).")
+                        ? "Открыть сведения авторизации \(family.label) и управление резервным ключом."
+                        : "Открыть настройку и авторизацию \(family.label).")
             Button {
                 Task {
                     await model.refreshHarnesses(fresh: true, markStaleOnFailure: true)
                 }
             } label: {
-                Label("Recheck", systemImage: "arrow.clockwise")
+                Label(L10n.t("Recheck"), systemImage: "arrow.clockwise")
             }
             .buttonStyle(.bordered)
             .help("Refresh install/auth/capability status after setup.")

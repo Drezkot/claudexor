@@ -36,7 +36,7 @@ struct NewSSHHostSheet: View {
         VStack(alignment: .leading, spacing: 0) {
             VStack(alignment: .leading, spacing: Theme.Spacing.lg) {
                 VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
-                    Text("New SSH Host").font(.title3.weight(.semibold))
+                    Text(L10n.t("New SSH Host")).font(.title3.weight(.semibold))
                     Text(
                         "Writes a plain Host entry to ~/.ssh/config. Keys and passwords stay with OpenSSH — Claudexor never stores them.")
                         .font(.caption)
@@ -67,9 +67,9 @@ struct NewSSHHostSheet: View {
             Divider().overlay(Theme.separator)
             HStack(spacing: Theme.Spacing.sm) {
                 Spacer()
-                Button("Cancel") { dismiss() }
+                Button(L10n.t("Cancel")) { dismiss() }
                     .keyboardShortcut(.cancelAction)
-                Button("Create & Add") { createAndAdd() }
+                Button(L10n.t("Create & Add")) { createAndAdd() }
                     .buttonStyle(.borderedProminent)
                     .tint(Theme.accentSolid)
                     .keyboardShortcut(.defaultAction)
@@ -112,7 +112,7 @@ struct NewSSHHostSheet: View {
     }
 
     private var identityFileRow: some View {
-        OptionRow(label: "Identity file", labelWidth: Self.labelWidth) {
+        OptionRow(label: L10n.t("Identity file"), labelWidth: Self.labelWidth) {
             VStack(alignment: .leading, spacing: Theme.Spacing.xxs) {
                 HStack(spacing: Theme.Spacing.sm) {
                     TextField(
@@ -123,7 +123,7 @@ struct NewSSHHostSheet: View {
                     Button {
                         pickIdentityFile()
                     } label: {
-                        Label("Choose…", systemImage: "folder")
+                        Label(L10n.t("Choose…"), systemImage: "folder")
                     }
                     .buttonStyle(.bordered)
                     .help("Pick a private key; only its PATH is written, never its contents.")
@@ -144,7 +144,7 @@ struct NewSSHHostSheet: View {
 
     private var previewSection: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
-            Text("Will append to ~/.ssh/config")
+            Text(L10n.t("Will append to ~/.ssh/config"))
                 .font(.caption.weight(.semibold))
                 .foregroundStyle(.secondary)
             // Writer-owned bytes: this preview and the actual append share

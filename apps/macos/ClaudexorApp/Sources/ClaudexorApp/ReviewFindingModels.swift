@@ -34,10 +34,10 @@ enum RouteProof: String, Hashable {
     case verified, acceptedModelArg, unverified, sameModelFallback
     var label: String {
         switch self {
-        case .verified: return "Route verified"
-        case .acceptedModelArg: return "Model arg accepted"
-        case .unverified: return "Route unverified"
-        case .sameModelFallback: return "Same-model fallback"
+        case .verified: return LocalizedPresentation.text("Route verified")
+        case .acceptedModelArg: return LocalizedPresentation.text("Model arg accepted")
+        case .unverified: return LocalizedPresentation.text("Route unverified")
+        case .sameModelFallback: return LocalizedPresentation.text("Same-model fallback")
         }
     }
     var glyph: String {
@@ -85,15 +85,15 @@ enum FindingStatus: String, Hashable {
 
     var label: String {
         switch self {
-        case .proposed: return "Proposed"
-        case .accepted: return "Accepted"
-        case .rebutted: return "Rebutted"
-        case .fixed: return "Fixed"
-        case .acceptedRisk: return "Accepted Risk"
-        case .duplicate: return "Duplicate"
-        case .stale: return "Stale"
-        case .outOfScope: return "Out of Scope"
-        case .insufficientEvidence: return "Insufficient"
+        case .proposed: return LocalizedPresentation.text("Proposed")
+        case .accepted: return LocalizedPresentation.text("Accepted")
+        case .rebutted: return LocalizedPresentation.text("Rebutted")
+        case .fixed: return LocalizedPresentation.text("Fixed")
+        case .acceptedRisk: return LocalizedPresentation.text("Accepted Risk")
+        case .duplicate: return LocalizedPresentation.text("Duplicate")
+        case .stale: return LocalizedPresentation.text("Stale")
+        case .outOfScope: return LocalizedPresentation.text("Out of Scope")
+        case .insufficientEvidence: return LocalizedPresentation.text("Insufficient")
         }
     }
 
@@ -132,12 +132,12 @@ enum ReviewVerdict: String, Hashable {
 
     var label: String {
         switch self {
-        case .notRun: return "Not reviewed"
-        case .running: return "Running"
-        case .clean: return "Clean"
-        case .findings: return "Findings"
-        case .failed: return "Failed"
-        case .error: return "Error"
+        case .notRun: return LocalizedPresentation.text("Not reviewed")
+        case .running: return LocalizedPresentation.text("Running")
+        case .clean: return LocalizedPresentation.text("Clean")
+        case .findings: return LocalizedPresentation.text("Findings")
+        case .failed: return LocalizedPresentation.text("Failed")
+        case .error: return LocalizedPresentation.text("Error")
         }
     }
 }

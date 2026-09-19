@@ -13,7 +13,7 @@ extension SettingsScreen {
             SettingsGroup("Engine settings", systemImage: "arrow.clockwise") {
                 HStack(spacing: Theme.Spacing.sm) {
                     ProgressView().controlSize(.small)
-                    Text("Loading settings from this engine…")
+                    Text(L10n.t("Loading settings from this engine…"))
                         .font(.caption).foregroundStyle(.secondary)
                 }
             }
@@ -22,7 +22,7 @@ extension SettingsScreen {
                 "Engine settings", systemImage: "exclamationmark.triangle.fill"
             ) {
                 Text(message).font(.caption).foregroundStyle(Theme.status(.negative))
-                Button("Retry") { Task { await model.refreshSettings() } }
+                Button(L10n.t("Retry")) { Task { await model.refreshSettings() } }
                     .buttonStyle(.borderedProminent).controlSize(.small)
             }
         }

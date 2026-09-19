@@ -10,12 +10,12 @@ import ClaudexorKit
 
 func reviewVerdictText(_ verdict: ReviewVerdict) -> String {
     switch verdict {
-    case .clean: return "Verified final review clean."
-    case .findings: return "Review produced findings."
-    case .running: return "Review is running."
-    case .failed: return "Review failed."
-    case .error: return "Review ended with an error."
-    case .notRun: return "Not reviewed."
+    case .clean: return LocalizedPresentation.text("Verified final review clean.")
+    case .findings: return LocalizedPresentation.text("Review produced findings.")
+    case .running: return LocalizedPresentation.text("Review is running.")
+    case .failed: return LocalizedPresentation.text("Review failed.")
+    case .error: return LocalizedPresentation.text("Review ended with an error.")
+    case .notRun: return LocalizedPresentation.text("Not reviewed.")
     }
 }
 

@@ -15,10 +15,10 @@ enum WorkspaceTab: String, CaseIterable, Identifiable, Equatable {
     var id: String { rawValue }
     var label: String {
         switch self {
-        case .changes: return "Changes"
-        case .artifacts: return "Artifacts"
-        case .evidence: return "Evidence"
-        case .terminal: return "Terminal"
+        case .changes: return LocalizedPresentation.text("Changes")
+        case .artifacts: return LocalizedPresentation.text("Artifacts")
+        case .evidence: return LocalizedPresentation.text("Evidence")
+        case .terminal: return LocalizedPresentation.text("Terminal")
         }
     }
     var glyph: String {

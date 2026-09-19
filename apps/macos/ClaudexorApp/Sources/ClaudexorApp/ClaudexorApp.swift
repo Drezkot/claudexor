@@ -21,7 +21,7 @@ struct ClaudexorApp: App {
         .defaultSize(width: 1280, height: 820)
         .commands {
             CommandGroup(after: .newItem) {
-                Button("New Thread") { model.startDraftThread() }
+                Button(L10n.t("New Thread")) { model.startDraftThread() }
                     .keyboardShortcut("n", modifiers: .command)
             }
             // D-11: the standard macOS About panel, carrying the owner-locked
@@ -29,7 +29,7 @@ struct ClaudexorApp: App {
             // default About item so the app menu shows OUR panel; the
             // Check-for-Updates group below still anchors `after: .appInfo`.
             CommandGroup(replacing: .appInfo) {
-                Button("About Claudexor") {
+                Button(L10n.t("About Claudexor")) {
                     NSApp.orderFrontStandardAboutPanel(options: [
                         .credits: AboutPanel.credits,
                     ])

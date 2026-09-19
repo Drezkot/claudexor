@@ -53,7 +53,7 @@ struct AccountRowView: View {
         ]
         if row.nextUp {
             // F1 informational hint: this is who an unpinned run routes to next.
-            badges.append(AlignedRowBadge("Next up", systemImage: "arrow.turn.down.right", emphasis: .accent))
+            badges.append(AlignedRowBadge(L10n.t("Next up"), systemImage: "arrow.turn.down.right", emphasis: .accent))
         }
         var details: [AlignedRowDetail] = []
         details.append(quotaDetail)
@@ -72,7 +72,7 @@ struct AccountRowView: View {
     }
 
     private var readinessHelp: String {
-        let summary = row.verified ? "Verified" : "Not verified — log in"
+        let summary = row.verified ? L10n.t("Verified") : L10n.t("Not verified — log in")
         guard let detail = row.hiddenReadinessDetail else { return summary }
         return "\(summary)\n\(detail)"
     }
@@ -81,22 +81,22 @@ struct AccountRowView: View {
     /// single-line string (the component enforces single-line + tail truncation).
     private var quotaDetail: AlignedRowDetail {
         if row.quotaAvailabilityState == "exhausted" {
-            var text = "Quota exhausted"
+            var text = L10n.t("Quota exhausted")
             if let reset = formattedDate(row.quotaAvailabilityResetAt) {
-                text += " · resets \(reset)"
+                text += " · сброс \(reset)"
             }
             return AlignedRowDetail(0, text, emphasis: .warning)
         }
         if row.quotaAvailabilityState == "cooldown" {
-            var text = "Quota cooling down"
+            var text = L10n.t("Quota cooling down")
             if let reset = formattedDate(row.quotaAvailabilityResetAt) {
-                text += " · until \(reset)"
+                text += " · до \(reset)"
             }
             return AlignedRowDetail(0, text, emphasis: .warning)
         }
         if let window = row.worstWindow, let pct = row.worstPercent {
-            var text = "\(pct)% used"
-            if let reset = formattedDate(window.resetsAt) { text += " · resets \(reset)" }
+            var text = "Использовано \(pct)%"
+            if let reset = formattedDate(window.resetsAt) { text += " · сброс \(reset)" }
             if let scoped = row.scopedQuotaLabel { text += " · \(scoped)" }
             return AlignedRowDetail(
                 0, text,
@@ -106,7 +106,7 @@ struct AccountRowView: View {
         if let scoped = row.scopedQuotaLabel {
             return AlignedRowDetail(0, scoped, emphasis: .warning)
         }
-        return AlignedRowDetail(0, "Quota unknown", emphasis: .secondary)
+        return AlignedRowDetail(0, L10n.t("Quota unknown"), emphasis: .secondary)
     }
 
     /// D25 Enabled: symmetric on every row and LIVE — every row PATCHes its own
@@ -130,7 +130,7 @@ struct AccountRowView: View {
     }
 
     private var manageButton: some View {
-        Button(row.verified ? "Manage" : "Log in", action: login)
+        Button(row.verified ? L10n.t("Manage") : L10n.t(LocalizedPresentation.text("Log in")), action: login)
             .buttonStyle(.bordered)
             .controlSize(.small)
             .disabled(loginDisabled)

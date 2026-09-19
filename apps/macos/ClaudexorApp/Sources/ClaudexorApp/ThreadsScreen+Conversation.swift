@@ -59,13 +59,13 @@ extension ThreadsScreen {
         if model.selectedThreadId != nil, let thread = model.currentThread {
             let folder =
                 thread.repoRoot.map { URL(fileURLWithPath: $0).lastPathComponent }
-                ?? "No project"
+                ?? LocalizedPresentation.text("No project")
             if let remote = model.selectedRemoteConnection {
                 return "\(remote.displayName) · \(folder)"
             }
             return folder
         }
-        guard !model.normalizedProjectRoot.isEmpty else { return "Choose project" }
+        guard !model.normalizedProjectRoot.isEmpty else { return L10n.t("Choose project") }
         let folder = URL(fileURLWithPath: model.normalizedProjectRoot).lastPathComponent
         if let connection = model.remoteConnection(for: model.draftExecutionLocation) {
             return "\(connection.displayName) · \(folder)"
@@ -78,10 +78,10 @@ extension ThreadsScreen {
             Image(systemName: "bubble.left.and.text.bubble.right")
                 .font(.system(size: 34, weight: .regular))
                 .foregroundStyle(.secondary)
-            Text("Start a thread")
+            Text(L10n.t("Start a thread"))
                 .font(.title2.weight(.bold))
                 .foregroundStyle(.primary)
-            Text("Type below to begin. Turns run in-place so the next turn sees the work — plan, then implement, in one conversation.")
+            Text(L10n.t("Type below to begin. Turns run in-place so the next turn sees the work — plan, then implement, in one conversation."))
                 .font(.callout)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
@@ -98,12 +98,12 @@ extension ThreadsScreen {
                 // same-harness sessions on different profiles are distinguishable;
                 // the native session id moves to help. Resume never crosses
                 // profiles, so the account is the user-facing continuity identity.
-                Text("\(session.harnessId) · \(model.sessionAccountLabel(harnessId: session.harnessId, profileId: session.profileId))\(session.nativeSessionId != nil ? " · live session" : "")")
+                Text("\(session.harnessId) · \(model.sessionAccountLabel(harnessId: session.harnessId, profileId: session.profileId))\(session.nativeSessionId != nil ? " · активная сессия" : "")")
                     .font(.caption)
                     .padding(.horizontal, Theme.Spacing.sm)
                     .padding(.vertical, Theme.Spacing.xxs)
                     .background(Capsule().fill(.quaternary))
-                    .help(session.nativeSessionId.map { "Native session \($0) resumes on the next turn" } ?? "No native session yet")
+                    .help(session.nativeSessionId.map { "Нативная сессия \($0) продолжится при следующем сообщении" } ?? "Нативной сессии пока нет")
             }
             Spacer()
         }

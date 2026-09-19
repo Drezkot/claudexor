@@ -73,7 +73,7 @@ extension ThreadsScreen {
 
     var attachButton: some View {
         Button { pickAttachments() } label: {
-            Label("Attach files", systemImage: "paperclip")
+            Label(L10n.t("Attach files"), systemImage: "paperclip")
                 .labelStyle(.iconOnly)
                 .imageScale(.medium)
                 .foregroundStyle(fileAttachmentsAllowed ? Color.secondary : Color.secondary.opacity(0.4))
@@ -100,8 +100,8 @@ extension ThreadsScreen {
             ? "Attach files or images as read-only planning context"
             : "Attach files or images"
         return composerAttachmentPoolMode == .auto
-            ? "\(context); Auto may omit incompatible lanes before launch."
-            : "\(context); every explicit lane must accept the selected content."
+            ? "\(context); режим «Авто» может исключить несовместимых агентов до запуска."
+            : "\(context); каждый явно выбранный агент должен поддерживать выбранное содержимое."
     }
 
     var attachmentChips: some View {
@@ -116,8 +116,8 @@ extension ThreadsScreen {
                     .buttonStyle(.borderless)
                     // QA-003: name the icon-only remove control (else the AX name
                     // is the localized `xmark.circle.fill` description).
-                    .accessibilityLabel("Remove attachment")
-                    .help("Remove \(att.name)")
+                    .accessibilityLabel(LocalizedPresentation.text("Remove attachment"))
+                    .help("Удалить \(att.name)")
                 }
                 .font(.caption)
                 .padding(.horizontal, Theme.Spacing.sm)
@@ -155,7 +155,7 @@ extension ThreadsScreen {
 
     var captureButton: some View {
         Button { captureScreenshot() } label: {
-            Label("Capture screen region", systemImage: "camera.viewfinder")
+            Label(L10n.t("Capture screen region"), systemImage: "camera.viewfinder")
                 .labelStyle(.iconOnly)
                 .imageScale(.medium)
                 .foregroundStyle(imageAttachmentsAllowed ? Color.secondary : Color.secondary.opacity(0.4))
@@ -186,10 +186,10 @@ extension ThreadsScreen {
             HStack(spacing: Theme.Spacing.sm) {
                 ProgressView()
                     .controlSize(.small)
-                Text("Preparing attachments…")
+                Text(L10n.t("Preparing attachments…"))
                     .font(.caption2)
                     .foregroundStyle(Color.secondary)
-                Button("Cancel") {
+                Button(L10n.t("Cancel")) {
                     composerAttachmentOperations.cancelAll()
                     composerAttachmentStagingMessage = "Attachment preparation cancelled."
                 }
@@ -277,7 +277,7 @@ extension ThreadsScreen {
                       let capturedSize,
                       capturedSize > 0 else {
                     cont.resume(returning: .init(
-                        notices: ["No screenshot was attached because capture was cancelled or unavailable."]
+                        notices: [L10n.t("No screenshot was attached because capture was cancelled or unavailable.")]
                     ))
                     return
                 }

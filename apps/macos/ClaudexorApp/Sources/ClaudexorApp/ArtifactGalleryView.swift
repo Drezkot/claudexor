@@ -138,7 +138,7 @@ struct ArtifactGalleryView: View {
         ScrollView {
             if !runChangedImages.isEmpty {
                 VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
-                    Label("Images this run changed", systemImage: "photo.badge.checkmark")
+                    Label(L10n.t("Images this run changed"), systemImage: "photo.badge.checkmark")
                         .font(.caption.weight(.medium)).foregroundStyle(.secondary)
                     LazyVGrid(columns: [GridItem(.adaptive(minimum: 180), spacing: Theme.Spacing.md)],
                               alignment: .leading, spacing: Theme.Spacing.md) {
@@ -159,16 +159,16 @@ struct ArtifactGalleryView: View {
             if refreshFailed, slot.state.value != nil {
                 evidenceBanner("Could not refresh — showing last-known results.",
                                detail: failedRunIds.isEmpty ? nil
-                                   : "Failed to load: \(failedRunIds.joined(separator: ", "))")
+                                   : "Не удалось загрузить: \(failedRunIds.joined(separator: ", "))")
             } else if !failedRunIds.isEmpty, slot.state.value != nil {
                 evidenceBanner("Some runs' artifacts couldn't be loaded — showing partial results.",
-                               detail: "Failed to load: \(failedRunIds.joined(separator: ", "))")
+                               detail: "Не удалось загрузить: \(failedRunIds.joined(separator: ", "))")
             }
             if case .failed(let error) = slot.state {
                 VStack(spacing: Theme.Spacing.sm) {
                     Text(error.message).font(.callout).foregroundStyle(.secondary).textSelection(.enabled)
                         .multilineTextAlignment(.center)
-                    Button("Retry") { Task { await load() } }
+                    Button(L10n.t("Retry")) { Task { await load() } }
                         .buttonStyle(.bordered).controlSize(.small)
                 }
                 .frame(maxWidth: .infinity).padding(Theme.Spacing.xl)
@@ -233,7 +233,7 @@ struct ArtifactGalleryView: View {
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
             }
-            Button("Retry") { Task { await load() } }
+            Button(L10n.t("Retry")) { Task { await load() } }
                 .buttonStyle(.bordered).controlSize(.small)
         }
         .padding(Theme.Spacing.sm)
@@ -245,7 +245,7 @@ struct ArtifactGalleryView: View {
     /// Images: large thumbnail cards in an adaptive grid.
     private var imagesSection: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
-            Label("Images", systemImage: "photo.on.rectangle")
+            Label(L10n.t("Images"), systemImage: "photo.on.rectangle")
                 .font(.caption.weight(.medium)).foregroundStyle(.secondary)
             LazyVGrid(columns: [GridItem(.adaptive(minimum: 150), spacing: Theme.Spacing.md)],
                       alignment: .leading, spacing: Theme.Spacing.md) {
@@ -263,7 +263,7 @@ struct ArtifactGalleryView: View {
     /// Text + other files: compact list rows (name, size, one-line preview).
     private var documentsSection: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
-            Label("Files", systemImage: "doc.on.doc")
+            Label(L10n.t("Files"), systemImage: "doc.on.doc")
                 .font(.caption.weight(.medium)).foregroundStyle(.secondary)
             LazyVStack(spacing: Theme.Spacing.xxs) {
                 ForEach(documentArtifacts) { item in
@@ -366,7 +366,7 @@ private struct ArtifactImageCard: View {
             .background(Color.primary.opacity(0.05), in: RoundedRectangle(cornerRadius: 8))
         }
         .buttonStyle(.plain)
-        .help("\(art.path) — click to open full size")
+        .help("\(art.path) — нажмите, чтобы открыть в полном размере")
         .task(id: identity) { await loadImage() }
     }
 
@@ -472,7 +472,7 @@ private struct ArtifactRow: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .help(isText ? "\(art.path) — open text viewer" : "\(art.path) — open externally")
+        .help(isText ? "\(art.path) — открыть просмотр текста" : "\(art.path) — открыть во внешнем приложении")
         // Lazily fetch text for the preview + viewer (visible rows only).
         .task(id: identity) { if isText { await loadText() } }
         .sheet(isPresented: $showViewer) { textViewer }
@@ -497,8 +497,8 @@ private struct ArtifactRow: View {
             let line = text.split(whereSeparator: \.isNewline)
                 .first { !$0.trimmingCharacters(in: .whitespaces).isEmpty }
             return line.map { String($0.prefix(140)) } ?? "(blank)"
-        case .empty: return "(empty file)"
-        case .loading, .idle: return "Loading…"
+        case .empty: return LocalizedPresentation.text("(empty file)")
+        case .loading, .idle: return LocalizedPresentation.text("Loading…")
         case .failed: return nil
         }
     }
@@ -534,7 +534,7 @@ private struct ArtifactRow: View {
             HStack {
                 Text(fileName).font(.headline)
                 Spacer()
-                Button("Done") { showViewer = false }
+                Button(L10n.t(LocalizedPresentation.text("Done"))) { showViewer = false }
             }
             .padding(Theme.Spacing.md)
             Divider()
@@ -547,17 +547,17 @@ private struct ArtifactRow: View {
                             .frame(maxWidth: .infinity, alignment: .leading)
                     }
                 case .empty:
-                    ContentUnavailableView("Empty file", systemImage: "doc")
+                    ContentUnavailableView(LocalizedPresentation.text("Empty file"), systemImage: "doc")
                 case .failed(let error):
                     VStack(spacing: Theme.Spacing.sm) {
                         Text(error.message).font(.callout).foregroundStyle(.secondary).textSelection(.enabled)
                             .multilineTextAlignment(.center)
-                        Button("Retry") { Task { await loadText(force: true) } }
+                        Button(L10n.t("Retry")) { Task { await loadText(force: true) } }
                             .buttonStyle(.bordered).controlSize(.small)
                     }
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                 case .idle, .loading:
-                    ProgressView("Loading \(fileName)…").controlSize(.small)
+                    ProgressView("Загрузка \(fileName)…").controlSize(.small)
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
             }

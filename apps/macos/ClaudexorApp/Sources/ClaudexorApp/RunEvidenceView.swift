@@ -23,7 +23,7 @@ struct RunEvidenceView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.lg) {
             VStack(alignment: .leading, spacing: Theme.Spacing.md) {
-                SectionLabel("Artifacts", systemImage: "photo.on.rectangle.angled")
+                SectionLabel(L10n.t("Artifacts"), systemImage: "photo.on.rectangle.angled")
                 ArtifactGalleryView(
                     locationID: locationID,
                     runId: task.id)
@@ -38,12 +38,12 @@ struct RunEvidenceView: View {
         let runID = RunInspectCommand.diagnosticRunID(
             stableID: task.id, resolvedRunID: task.resolvedRunId)
         return VStack(alignment: .leading, spacing: Theme.Spacing.md) {
-            SectionLabel("Diagnostics summary", systemImage: "stethoscope")
+            SectionLabel(L10n.t("Diagnostics summary"), systemImage: "stethoscope")
             FlowLayout(spacing: Theme.Spacing.sm) {
                 Button {
                     copyToPasteboard(runID)
                 } label: {
-                    Label("Copy Run ID", systemImage: "number")
+                    Label(L10n.t("Copy Run ID"), systemImage: "number")
                 }
                 .buttonStyle(.bordered)
                 .help("Copy the full run id used by inspect, follow, apply, and decision commands.")
@@ -53,7 +53,7 @@ struct RunEvidenceView: View {
                         copyToPasteboard(command)
                     }
                 } label: {
-                    Label("Copy Inspect Command", systemImage: "terminal")
+                    Label(L10n.t("Copy Inspect Command"), systemImage: "terminal")
                 }
                 .buttonStyle(.bordered)
                 .disabled(RunInspectCommand.command(
@@ -65,7 +65,7 @@ struct RunEvidenceView: View {
                 Button {
                     copyDiagnostics(task)
                 } label: {
-                    Label("Copy Summary", systemImage: "doc.on.doc")
+                    Label(L10n.t("Copy Summary"), systemImage: "doc.on.doc")
                 }
                 .buttonStyle(.bordered)
                 .help("Copy the bounded diagnostics summary and run metadata.")
@@ -77,7 +77,7 @@ struct RunEvidenceView: View {
                     } else if let directory = task.runDir ?? task.repoRoot {
                         Task {
                             await model.openRemoteTerminal(
-                                directory: directory, title: "Run folder")
+                                directory: directory, title: LocalizedPresentation.text("Run folder"))
                         }
                     }
                 } label: {
@@ -143,7 +143,7 @@ struct RunEvidenceView: View {
                             : draft.request["access"]?.stringValue.flatMap(AccessProfile.init(wire:))
                         showRunAgain = true
                     }
-                } label: { Label("Run Again…", systemImage: "square.and.pencil") }
+                } label: { Label(L10n.t("Run Again…"), systemImage: "square.and.pencil") }
                 .buttonStyle(.bordered)
                 .help("Open a new editable draft; this is not an exact retry.")
             }
@@ -167,7 +167,7 @@ struct RunEvidenceView: View {
             if !task.artifactPaths.isEmpty {
                 Panel {
                     VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
-                        SectionLabel("All artifact paths", systemImage: "folder")
+                        SectionLabel(L10n.t("All artifact paths"), systemImage: "folder")
                         ForEach(task.artifactPaths, id: \.self) { path in
                             Text(path)
                                 .font(.system(.caption, design: .monospaced))
@@ -182,8 +182,8 @@ struct RunEvidenceView: View {
 
     private var runAgainSheet: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.md) {
-            Text("Run Again").font(.title2.bold())
-            Text("This creates a new editable run. Exact Retry is the immutable replay action.")
+            Text(L10n.t("Run Again")).font(.title2.bold())
+            Text(L10n.t("This creates a new editable run. Exact Retry is the immutable replay action."))
                 .font(.callout).foregroundStyle(.secondary)
             TextEditor(text: $runAgainPrompt)
                 .font(.body)
@@ -191,8 +191,8 @@ struct RunEvidenceView: View {
                 .padding(Theme.Spacing.sm)
                 .background(Theme.surfaceRaisedHi, in: RoundedRectangle(cornerRadius: Theme.Radius.control))
             if runAgainDraft?.accessChoice.required == true {
-                Picker("Access", selection: $runAgainAccess) {
-                    Text("Choose access…").tag(nil as AccessProfile?)
+                Picker(L10n.t("Access"), selection: $runAgainAccess) {
+                    Text(L10n.t("Choose access…")).tag(nil as AccessProfile?)
                     Text(AccessProfile.workspaceWrite.label)
                         .tag(AccessProfile.workspaceWrite as AccessProfile?)
                     Text(AccessProfile.full.label)
@@ -208,7 +208,7 @@ struct RunEvidenceView: View {
             }
             HStack {
                 Spacer()
-                Button("Cancel") { showRunAgain = false }
+                Button(L10n.t("Cancel")) { showRunAgain = false }
                 Button(runningAgain ? "Starting…" : "Start New Run") {
                     guard let draft = runAgainDraft else { return }
                     runningAgain = true

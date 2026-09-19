@@ -87,10 +87,10 @@ struct AuthSheetDeviceCodeCard: View {
     /// Copy above the link block. It must never tell the user to open a link
     /// that no longer works, so the lapsed wording points at the replacement.
     private var linkIntro: String {
-        if !acceptsCode { return "Complete the sign-in in your browser to finish." }
+        if !acceptsCode { return LocalizedPresentation.text("Complete the sign-in in your browser to finish.") }
         return windowLapsed
-            ? "That link expired before a code arrived. Get a new one below, then paste the code \(vendor) shows:"
-            : "Open this sign-in link, then paste the code \(vendor) shows back here:"
+            ? "Ссылка истекла до получения кода. Получите новую ссылку ниже и вставьте код, который покажет \(vendor):"
+            : "Откройте ссылку для входа и вставьте сюда код, который покажет \(vendor):"
     }
 
     var body: some View {
@@ -99,14 +99,14 @@ struct AuthSheetDeviceCodeCard: View {
                 SectionLabel("Sign in to \(vendor)", systemImage: "person.badge.key")
 
                 if disclosure.hasUserCode {
-                    Text("Enter this one-time code on the \(vendor) sign-in page:")
+                    Text("Введите этот одноразовый код на странице входа \(vendor):")
                         .font(.caption).foregroundStyle(.secondary)
                     HStack(spacing: Theme.Spacing.md) {
                         Text(disclosure.userCode)
                             .font(.system(size: 30, weight: .bold, design: .monospaced))
                             .tracking(2)
                             .textSelection(.enabled)
-                            .accessibilityLabel("One-time code \(disclosure.userCode)")
+                            .accessibilityLabel("Одноразовый код \(disclosure.userCode)")
                         Button {
                             // Explicit copy only — the one-time code is NEVER
                             // auto-copied to the pasteboard.
@@ -148,14 +148,14 @@ struct AuthSheetDeviceCodeCard: View {
                     Button {
                         session.open(url: disclosure.verificationUrl)
                     } label: {
-                        Label("Open private sign-in", systemImage: "lock.shield")
+                        Label(L10n.t("Open private sign-in"), systemImage: "lock.shield")
                     }
                     .buttonStyle(.borderedProminent)
                     .tint(Theme.accentSolid)
                     .disabled(windowLapsed)
                     .help(windowLapsed
                           ? AuthSheetPresentation.lapsedSignInLinkHelp
-                          : "Open the \(vendor) sign-in page in a private browser session.")
+                          : "Открыть страницу входа \(vendor) в приватном окне браузера.")
 
                     if disclosure.hasUserCode || acceptsCode {
                         // A plain fallback to the default browser for anyone who
@@ -166,13 +166,13 @@ struct AuthSheetDeviceCodeCard: View {
                                 NSWorkspace.shared.open(url)
                             }
                         } label: {
-                            Label("Open in browser", systemImage: "safari")
+                            Label(L10n.t("Open in browser"), systemImage: "safari")
                         }
                         .buttonStyle(.bordered)
                         .disabled(windowLapsed)
                         .help(windowLapsed
                               ? AuthSheetPresentation.lapsedSignInLinkHelp
-                              : "Open the \(vendor) sign-in page in your default browser.")
+                              : "Открыть страницу входа \(vendor) в браузере по умолчанию.")
                     }
 
                     if acceptsCode {
@@ -201,7 +201,7 @@ struct AuthSheetDeviceCodeCard: View {
                 // HARNESS, and for codex that is "Codex" — a CLI, not the issuer of the
                 // account. The revocation risk here belongs to the account provider
                 // (OpenAI), so naming the harness made the sentence plainly false.
-                Text("Claudexor requested a private browser session. Completing the sign-in in a window that is not signed into another account for this vendor reduces the risk of signing out other apps on this Mac — the vendor may still invalidate sibling sessions on its side.")
+                Text(L10n.t("Claudexor requested a private browser session. Completing the sign-in in a window that is not signed into another account for this vendor reduces the risk of signing out other apps on this Mac — the vendor may still invalidate sibling sessions on its side."))
                     .font(.caption2).foregroundStyle(.secondary)
 
                 if acceptsCode { signInCodeSection }
@@ -209,12 +209,12 @@ struct AuthSheetDeviceCodeCard: View {
                 if waiting {
                     HStack(spacing: Theme.Spacing.sm) {
                         ProgressView().controlSize(.small)
-                        Text("Waiting for \(vendor)…").font(.caption).foregroundStyle(.secondary)
+                        Text("Ожидание \(vendor)…").font(.caption).foregroundStyle(.secondary)
                     }
                 }
 
                 HStack(spacing: Theme.Spacing.sm) {
-                    Button("Cancel", role: .destructive) {
+                    Button(L10n.t("Cancel"), role: .destructive) {
                         session.cancel()
                         cancel()
                     }
@@ -232,7 +232,7 @@ struct AuthSheetDeviceCodeCard: View {
                             session.cancel()
                             useBrowserCallback()
                         } label: {
-                            Label("Use browser sign-in instead", systemImage: "arrow.triangle.2.circlepath")
+                            Label(L10n.t("Use browser sign-in instead"), systemImage: "arrow.triangle.2.circlepath")
                         }
                         .buttonStyle(.link)
                         .disabled(actionInFlight)
@@ -325,20 +325,20 @@ struct AuthSheetDeviceCodeCard: View {
                 // second paste field: both would only invite cancelling a
                 // sign-in that may already have succeeded. The way out stays
                 // available but quiet, for the case the vendor refuses it.
-                Label("Code delivered. Waiting for \(vendor) to finish the sign-in…",
+                Label("Код отправлен. Ожидание завершения входа \(vendor)…",
                       systemImage: "checkmark.circle")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                 newLinkButton(prominent: false)
             } else {
-                Text("Paste the code from the sign-in page:")
+                Text(L10n.t("Paste the code from the sign-in page:"))
                     .font(.caption).foregroundStyle(.secondary)
                 HStack(spacing: Theme.Spacing.sm) {
-                    TextField("Sign-in code", text: $code)
+                    TextField(L10n.t(LocalizedPresentation.text("Sign-in code")), text: $code)
                         .textFieldStyle(.roundedBorder)
                         .font(.system(.body, design: .monospaced))
                         .onSubmit { submit() }
-                        .accessibilityLabel("Sign-in code")
+                        .accessibilityLabel(LocalizedPresentation.text("Sign-in code"))
                     Button(action: submit) {
                         Label(sending ? "Sending…" : "Submit", systemImage: "arrow.right.circle")
                     }
@@ -363,20 +363,20 @@ struct AuthSheetDeviceCodeCard: View {
     /// pressing it would throw a live token exchange away.
     @ViewBuilder private func newLinkButton(prominent: Bool) -> some View {
         if prominent {
-            Button { reissue(false) } label: { Label("Get a new link", systemImage: "arrow.clockwise") }
+            Button { reissue(false) } label: { Label(L10n.t("Get a new link"), systemImage: "arrow.clockwise") }
                 .buttonStyle(.borderedProminent)
                 .tint(Theme.accentSolid)
                 .disabled(actionInFlight)
                 .help(actionInFlight
-                      ? "Wait for the current action to finish."
-                      : "Start a fresh \(vendor) sign-in and show a new link.")
+                      ? LocalizedPresentation.text("Wait for the current action to finish.")
+                      : "Начать новый вход \(vendor) и показать новую ссылку.")
         } else {
-            Button { reissue(false) } label: { Label("Get a new link", systemImage: "arrow.clockwise") }
+            Button { reissue(false) } label: { Label(L10n.t("Get a new link"), systemImage: "arrow.clockwise") }
                 .buttonStyle(.bordered)
                 .disabled(actionInFlight)
                 .help(actionInFlight
-                      ? "Wait for the current action to finish."
-                      : "Cancel this sign-in and start a fresh one — only if \(vendor) refused the code you sent.")
+                      ? LocalizedPresentation.text("Wait for the current action to finish.")
+                      : "Отменить этот вход и начать новый — только если \(vendor) отклонил отправленный код.")
         }
     }
 

@@ -18,7 +18,7 @@ struct InteractionCard: View {
             HStack(spacing: Theme.Spacing.sm) {
                 Image(systemName: "questionmark.bubble.fill")
                     .foregroundStyle(Theme.status(.attention))
-                Text("Needs your answer")
+                Text(L10n.t("Needs your answer"))
                     .font(.subheadline.weight(.semibold))
                 if let harness = interaction.harnessId.flatMap({ HarnessFamily(rawValue: $0) }) {
                     HarnessChip(family: harness)
@@ -61,7 +61,7 @@ struct InteractionCard: View {
                             .help(option.description ?? option.label)
                         }
                     }
-                    TextField("Or answer in your own words…", text: binding(for: question.id))
+                    TextField(L10n.t("Or answer in your own words…"), text: binding(for: question.id))
                         .textFieldStyle(.roundedBorder)
                         .font(.callout)
                 }
@@ -74,7 +74,7 @@ struct InteractionCard: View {
                     if sending {
                         ProgressView().controlSize(.small)
                     } else {
-                        Label("Send answer", systemImage: "paperplane.fill")
+                        Label(L10n.t("Send answer"), systemImage: "paperplane.fill")
                     }
                 }
                 .buttonStyle(.borderedProminent)
@@ -130,10 +130,10 @@ struct InteractionCard: View {
 @MainActor
 enum InteractionExpiryPresentation {
     static func label(timeoutAt: String?, now: Date = .now) -> String {
-        guard let timeoutAt else { return "No automatic expiry" }
+        guard let timeoutAt else { return LocalizedPresentation.text("No automatic expiry") }
         // Shared static formatters (AppModel.parseEventDate): formatter
         // allocation is expensive and this label re-evaluates on every render.
-        guard let date = AppModel.parseEventDate(timeoutAt) else { return "Expiry unavailable" }
+        guard let date = AppModel.parseEventDate(timeoutAt) else { return LocalizedPresentation.text("Expiry unavailable") }
         let remaining = date.timeIntervalSince(now)
         guard remaining > 0 else { return "expiring" }
         let minutes = Int(remaining / 60)

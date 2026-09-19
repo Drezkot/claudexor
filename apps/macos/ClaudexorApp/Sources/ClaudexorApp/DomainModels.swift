@@ -12,9 +12,9 @@ enum Health: Equatable {
     case connecting, connected, offline
     var label: String {
         switch self {
-        case .connecting: return "Connecting"
-        case .connected: return "Connected"
-        case .offline: return "Offline"
+        case .connecting: return LocalizedPresentation.text("Connecting")
+        case .connected: return LocalizedPresentation.text("Connected")
+        case .offline: return LocalizedPresentation.text("Offline")
         }
     }
     var glyph: String {
@@ -139,13 +139,13 @@ enum RunPhase: String, CaseIterable, Identifiable, Hashable {
     /// "Needs review") is composed by `OutcomePresentation`, not baked here.
     var label: String {
         switch self {
-        case .queued: return "Queued"
-        case .running: return "Working"
-        case .succeeded: return "Done"
-        case .failed: return "Failed"
-        case .cancelled: return "Cancelled"
-        case .interrupted: return "Interrupted"
-        case .unknown: return "Unknown"
+        case .queued: return LocalizedPresentation.text(LocalizedPresentation.text("Queued"))
+        case .running: return LocalizedPresentation.text("Working")
+        case .succeeded: return LocalizedPresentation.text(LocalizedPresentation.text("Done"))
+        case .failed: return LocalizedPresentation.text("Failed")
+        case .cancelled: return LocalizedPresentation.text(LocalizedPresentation.text("Cancelled"))
+        case .interrupted: return LocalizedPresentation.text("Interrupted")
+        case .unknown: return LocalizedPresentation.text("Unknown")
         }
     }
     var glyph: String {
@@ -184,19 +184,19 @@ enum RunPhase: String, CaseIterable, Identifiable, Hashable {
 enum RunReasonLabel {
     static func label(_ reason: String?) -> String? {
         switch reason {
-        case "harness_failed": return "Harness failed"
-        case "no_changes": return "No changes"
-        case "review_blocked": return "Review blocked"
-        case "checks_failed": return "Checks failed"
-        case "budget_exhausted": return "Exhausted"
-        case "budget_overshoot": return "Budget overshot"
-        case "cost_unverifiable": return "Cost unverifiable"
-        case "not_converged": return "Not converged"
-        case "stuck_no_progress": return "Stuck/no progress"
-        case "workspace_unavailable": return "Workspace unavailable"
-        case "wall_clock_exceeded": return "Time limit reached"
-        case "crash_interrupted": return "Interrupted"
-        case "user_cancelled": return "Cancelled"
+        case "harness_failed": return LocalizedPresentation.text("Harness failed")
+        case "no_changes": return LocalizedPresentation.text("No changes")
+        case "review_blocked": return LocalizedPresentation.text("Review blocked")
+        case "checks_failed": return LocalizedPresentation.text("Checks failed")
+        case "budget_exhausted": return LocalizedPresentation.text("Exhausted")
+        case "budget_overshoot": return LocalizedPresentation.text("Budget overshot")
+        case "cost_unverifiable": return LocalizedPresentation.text("Cost unverifiable")
+        case "not_converged": return LocalizedPresentation.text("Not converged")
+        case "stuck_no_progress": return LocalizedPresentation.text("Stuck/no progress")
+        case "workspace_unavailable": return LocalizedPresentation.text("Workspace unavailable")
+        case "wall_clock_exceeded": return LocalizedPresentation.text("Time limit reached")
+        case "crash_interrupted": return LocalizedPresentation.text("Interrupted")
+        case "user_cancelled": return LocalizedPresentation.text(LocalizedPresentation.text("Cancelled"))
         default: return nil
         }
     }
@@ -271,15 +271,15 @@ enum RunMode: String, CaseIterable, Identifiable, Hashable {
     }
     var label: String {
         switch self {
-        case .ask: return "Ask"
-        case .agent: return "Agent"
-        case .bestOfN: return "Best-of-N"
-        case .maxAttempts: return "Max Attempts"
-        case .untilClean: return "Until Clean"
-        case .plan: return "Plan"
-        case .create: return "Create"
-        case .readOnlyAudit: return "Read-only Audit"
-        case .unknown: return "Unknown Mode"
+        case .ask: return L10n.t("Ask")
+        case .agent: return L10n.t("Agent")
+        case .bestOfN: return LocalizedPresentation.text("Best-of-N")
+        case .maxAttempts: return LocalizedPresentation.text("Max Attempts")
+        case .untilClean: return LocalizedPresentation.text("Until Clean")
+        case .plan: return L10n.t(LocalizedPresentation.text("Plan"))
+        case .create: return LocalizedPresentation.text("Create")
+        case .readOnlyAudit: return LocalizedPresentation.text("Read-only Audit")
+        case .unknown: return LocalizedPresentation.text("Unknown Mode")
         }
     }
     var glyph: String {
@@ -440,11 +440,11 @@ enum ReviewState: String, Hashable {
     case pending, clean, changesRequested, winner, rejected
     var label: String {
         switch self {
-        case .pending: return "Reviewing"
-        case .clean: return "Clean"
-        case .changesRequested: return "Changes requested"
-        case .winner: return "Winner"
-        case .rejected: return "Rejected"
+        case .pending: return LocalizedPresentation.text("Reviewing")
+        case .clean: return LocalizedPresentation.text("Clean")
+        case .changesRequested: return LocalizedPresentation.text("Changes requested")
+        case .winner: return LocalizedPresentation.text("Winner")
+        case .rejected: return LocalizedPresentation.text("Rejected")
         }
     }
     var color: Color {

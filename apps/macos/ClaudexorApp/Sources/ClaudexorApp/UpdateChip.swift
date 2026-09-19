@@ -53,18 +53,18 @@ struct UpdateChip: View {
             HStack(spacing: Theme.Spacing.xs) {
                 Image(systemName: "arrow.down.circle.fill")
                     .font(.caption).foregroundStyle(Theme.accent)
-                Text("Update available")
+                Text(L10n.t("Update available"))
                     .font(.caption).foregroundStyle(.secondary)
                 Image(systemName: "arrow.right").font(.caption2).foregroundStyle(.tertiary)
                 Text("v\(update.version)")
                     .font(.caption.weight(.medium)).foregroundStyle(Theme.accent)
                     .monospacedDigit()
                 Spacer(minLength: 0)
-                Button("Install") { Task { await model.installRuntimeUpdate() } }
+                Button(L10n.t("Install")) { Task { await model.installRuntimeUpdate() } }
                     .buttonStyle(.borderedProminent)
                     .controlSize(.mini)
-                    .help("Download, verify, and install engine v\(update.version) in place")
-                Button("View release") { openURL(update.url.flatMap(URL.init) ?? Self.releaseURL) }
+                    .help("Загрузить, проверить и установить движок v\(update.version)")
+                Button(L10n.t("View release")) { openURL(update.url.flatMap(URL.init) ?? Self.releaseURL) }
                     .buttonStyle(.bordered)
                     .controlSize(.mini)
                     .help("Open the GitHub release to download the update manually")
@@ -78,7 +78,7 @@ struct UpdateChip: View {
             }
             .padding(.horizontal, Theme.Spacing.md)
             .padding(.vertical, Theme.Spacing.xs)
-            .help("Update to v\(update.version) is available — install in place or download manually.")
+            .help("Доступно обновление до v\(update.version) — установите его автоматически или загрузите вручную.")
         } else if let status = model.runtimeInstallStatus, !status.isEmpty {
             // A finished/failed install (rolled back, failed, or done): quiet,
             // verbatim line until the next check clears it.

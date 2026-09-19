@@ -75,7 +75,7 @@ extension AppModel {
             }
         } catch {
             runtimeUpdateStatus = (error as? RuntimeUpdateError)?.errorDescription
-                ?? "Update check failed: \(error.localizedDescription)"
+                ?? "Не удалось проверить обновление: \(error.localizedDescription)"
         }
     }
 
@@ -86,7 +86,7 @@ extension AppModel {
         case .upToDate:
             runtimeUpdateStatus = "Up to date"
         case let .available(manifest):
-            runtimeUpdateStatus = "Update available: v\(manifest.version)"
+            runtimeUpdateStatus = "Доступно обновление: v\(manifest.version)"
         case let .appUpdateRequired(minAppVersion, _):
             runtimeUpdateStatus =
                 "App update required — install the latest app "
@@ -95,7 +95,7 @@ extension AppModel {
             runtimeUpdateStatus =
                 resolvedRunningEngineVersion() == "dev"
                 ? Self.devBuildUpdateStatus
-                : "Update status unknown: \(reason)"
+                : "Статус обновления неизвестен: \(reason)"
         }
     }
 
@@ -119,7 +119,7 @@ extension AppModel {
             return
         }
         runtimeInstalling = true
-        runtimeInstallStatus = "Preparing update to v\(manifest.version)…"
+        runtimeInstallStatus = "Подготовка обновления до v\(manifest.version)…"
         defer { runtimeInstalling = false }
 
         let transport = makeRuntimeTransport()
@@ -127,7 +127,7 @@ extension AppModel {
             transport: transport, archiveName: manifest.archiveName)
         else {
             runtimeInstallStatus =
-                "Could not locate the runtime download for v\(manifest.version)."
+                "Не удалось найти пакет среды выполнения v\(manifest.version)."
             return
         }
         guard resolved.absoluteString == manifest.archiveUrl,
@@ -149,7 +149,7 @@ extension AppModel {
         do {
             let version = try await coordinator.install(
                 manifest: manifest, assetURL: assetURL)
-            runtimeInstallStatus = "Updated to engine v\(version)."
+            runtimeInstallStatus = "Движок обновлён до v\(version)."
             await runtimeUpdater?.recordInstalledVersion(
                 version, appVersion: Self.appVersionString())
             applyRuntimeDecision(.upToDate)
@@ -157,7 +157,7 @@ extension AppModel {
             runtimeInstallStatus =
                 (error as? RuntimeInstallError)?.errorDescription
                 ?? (error as? RuntimeUpdateError)?.errorDescription
-                ?? "Update failed: \(error.localizedDescription)"
+                ?? "Ошибка обновления: \(error.localizedDescription)"
         }
     }
 
@@ -178,11 +178,11 @@ extension AppModel {
         case .relaunching:
             runtimeInstallStatus = "Relaunching the engine…"
         case let .done(version):
-            runtimeInstallStatus = "Updated to engine v\(version)."
+            runtimeInstallStatus = "Движок обновлён до v\(version)."
         case let .rolledBack(reason):
-            runtimeInstallStatus = "Update rolled back: \(reason)."
+            runtimeInstallStatus = "Обновление отменено с откатом: \(reason)."
         case let .failed(reason):
-            runtimeInstallStatus = "Update failed: \(reason)."
+            runtimeInstallStatus = "Ошибка обновления: \(reason)."
         }
     }
 }

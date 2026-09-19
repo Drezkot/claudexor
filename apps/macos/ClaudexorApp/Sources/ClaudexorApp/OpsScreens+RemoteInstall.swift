@@ -20,7 +20,7 @@ struct RemoteHarnessInstallSection: View {
         @Bindable var model = model
         if !model.remoteConnections.isEmpty {
             VStack(alignment: .leading, spacing: Theme.Spacing.md) {
-                SectionLabel("Remote Harness Install", systemImage: "arrow.down.circle")
+                SectionLabel(L10n.t("Remote Harness Install"), systemImage: "arrow.down.circle")
                 Text(
                     "Puts a vendor CLI on an SSH host. Claude and Codex install the exact npm version this Claudexor release was verified against; OpenCode installs its exact pinned version as a deterministic target (not covered by recorded verification fixtures); the Antigravity and Cursor installer scripts ship no pinnable npm artifact, so each is downloaded in full and runs in the embedded terminal where you watch it. Nothing runs before you confirm the exact command.")
                     .font(.caption).foregroundStyle(.secondary)
@@ -66,13 +66,13 @@ struct RemoteHarnessInstallSection: View {
                         model.dismissRemoteHarnessInstallPrompt(prompt)
                     })
             ) {
-                Button("Run installer") {
+                Button(L10n.t("Run installer")) {
                     guard let prompt = model.remoteHarnessInstallPrompt,
                           model.acceptRemoteHarnessInstallPrompt(prompt)
                     else { return }
                     Task { await model.confirmRemoteHarnessInstall(prompt) }
                 }
-                Button("Cancel", role: .cancel) {
+                Button(L10n.t("Cancel"), role: .cancel) {
                     guard let prompt = model.remoteHarnessInstallPrompt else { return }
                     model.dismissRemoteHarnessInstallPrompt(prompt)
                 }

@@ -133,7 +133,7 @@ struct PlanQuestionCard: View {
             HStack(spacing: Theme.Spacing.sm) {
                 Image(systemName: "list.bullet.clipboard.fill")
                     .foregroundStyle(Theme.status(.attention))
-                Text("The plan needs your answers")
+                Text(L10n.t("The plan needs your answers"))
                     .font(.subheadline.weight(.semibold))
                 Spacer()
                 if effectiveSubmittedPrompt != nil {
@@ -147,7 +147,7 @@ struct PlanQuestionCard: View {
             }
             if let submitted = effectiveSubmittedPrompt {
                 VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
-                    Text("Answers submitted")
+                    Text(L10n.t("Answers submitted"))
                         .font(.callout.weight(.semibold))
                     Text(submitted)
                         .font(.caption)
@@ -181,7 +181,7 @@ struct PlanQuestionCard: View {
                             .font(.caption)
                             .foregroundStyle(Theme.status(.caution))
                     } else if model.isThreadBusy(target.threadID, at: target.locationID) {
-                        Label("Wait for the running turn to finish", systemImage: "clock")
+                        Label(L10n.t("Wait for the running turn to finish"), systemImage: "clock")
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
@@ -211,13 +211,13 @@ struct PlanQuestionCard: View {
             HStack(spacing: Theme.Spacing.xs) {
                 Text(question.prompt).font(.callout.weight(.medium))
                 if question.kind == "multi" {
-                    Text("pick one or more").font(.caption2).foregroundStyle(.secondary)
+                    Text(L10n.t("pick one or more")).font(.caption2).foregroundStyle(.secondary)
                 }
                 if unansweredQuestionIDs.contains(question.id) {
-                    Text("required")
+                    Text(L10n.t("required"))
                         .font(.caption2.weight(.semibold))
                         .foregroundStyle(Theme.status(.caution))
-                        .accessibilityLabel("Answer required")
+                        .accessibilityLabel(LocalizedPresentation.text("Answer required"))
                 }
             }
             if !question.options.isEmpty {

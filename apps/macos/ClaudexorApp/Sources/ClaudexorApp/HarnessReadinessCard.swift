@@ -19,7 +19,7 @@ struct GitReadinessPresentation: Equatable {
     ) -> GitReadinessPresentation {
         guard readinessFresh, let capability else {
             return GitReadinessPresentation(
-                title: "Workspace Git",
+                title: L10n.t("Workspace Git"),
                 status: "Unknown",
                 detail: "Refresh Harness Doctor to check workspace prerequisites.",
                 remediation: nil,
@@ -29,15 +29,15 @@ struct GitReadinessPresentation: Equatable {
         switch capability.status {
         case "available":
             return GitReadinessPresentation(
-                title: "Workspace Git",
-                status: "Available",
+                title: L10n.t("Workspace Git"),
+                status: L10n.t("Available"),
                 detail: capability.version ?? "Available in this engine environment.",
                 remediation: nil,
                 tone: .positive,
                 glyph: "checkmark.circle.fill")
         case "developer_tools_stub":
             return GitReadinessPresentation(
-                title: "Workspace Git",
+                title: L10n.t("Workspace Git"),
                 status: "Developer tools required",
                 detail: capability.detail ?? "Git cannot run until Apple Command Line Tools are installed.",
                 remediation: capability.remediation,
@@ -45,7 +45,7 @@ struct GitReadinessPresentation: Equatable {
                 glyph: "exclamationmark.triangle.fill")
         case "missing":
             return GitReadinessPresentation(
-                title: "Workspace Git",
+                title: L10n.t("Workspace Git"),
                 status: "Missing",
                 detail: capability.detail ?? "Git is not installed or is not on this engine's PATH.",
                 remediation: capability.remediation,
@@ -53,7 +53,7 @@ struct GitReadinessPresentation: Equatable {
                 glyph: "exclamationmark.triangle.fill")
         default:
             return GitReadinessPresentation(
-                title: "Workspace Git",
+                title: L10n.t("Workspace Git"),
                 status: "Failed",
                 detail: capability.detail ?? "The engine found Git but could not run it successfully.",
                 remediation: capability.remediation,
@@ -175,7 +175,7 @@ struct HarnessReadinessPresentation: Equatable {
         return checks.map { row in
             guard row.id == "stored_key", row.status == "fail" else { return row }
             return ReadinessCheck(
-                kind: row.kind, id: row.id, title: row.title,
+                kind: row.kind, id: row.id, title: L10n.t(row.title),
                 status: "skip", detail: "not configured (optional API-key fallback)")
         }
     }
@@ -210,7 +210,7 @@ struct HarnessReadinessCard<Actions: View>: View {
                     .font(.caption).foregroundStyle(.secondary)
                     .lineLimit(2)
                 Spacer(minLength: Theme.Spacing.md)
-                Label(presentation.health.rawValue.capitalized,
+                Label(L10n.t(presentation.health.rawValue.capitalized),
                       systemImage: presentation.health.glyph)
                     .font(.caption.weight(.medium))
                     .foregroundStyle(presentation.health.color)
@@ -229,10 +229,10 @@ struct HarnessReadinessCard<Actions: View>: View {
                             dotColor: Self.rowColor(row.status),
                             dotSystemImage: Self.rowGlyph(row.status),
                             dotHelp: row.status,
-                            title: row.title,
+                            title: L10n.t(row.title),
                             titleFont: .caption,
                             details: (row.detail?.isEmpty == false)
-                                ? [AlignedRowDetail(0, row.detail!)] : []
+                                ? [AlignedRowDetail(0, L10n.t(row.detail!))] : []
                         )) { EmptyView() }
                     }
                 }
@@ -244,7 +244,7 @@ struct HarnessReadinessCard<Actions: View>: View {
                         NSPasteboard.general.clearContents()
                         NSPasteboard.general.setString(presentation.rawEvidence, forType: .string)
                     } label: {
-                        Label("Copy raw", systemImage: "doc.on.doc")
+                        Label(L10n.t("Copy raw"), systemImage: "doc.on.doc")
                     }
                     .buttonStyle(.borderless)
                     .font(.caption)

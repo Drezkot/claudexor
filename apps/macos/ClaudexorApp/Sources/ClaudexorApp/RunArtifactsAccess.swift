@@ -156,6 +156,6 @@ enum ArtifactFetchError {
         if let message = decoded?.message, !message.isEmpty {
             return "Refused — \(message)"
         }
-        return "The engine refused to serve this file."
+        return LocalizedPresentation.text(LocalizedPresentation.text("The engine refused to serve this file."))
     }
 }

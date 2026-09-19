@@ -301,7 +301,7 @@ final class AppModel {
         return groups.keys.sorted().map { name in
             let ids = (groups[name] ?? []).map(\.id)
             return Project(id: name, name: name,
-                           specs: [Spec(id: "\(name)-runs", title: "Runs", frozen: false, version: 0, runIds: ids)])
+                           specs: [Spec(id: "\(name)-runs", title: LocalizedPresentation.text("Runs"), frozen: false, version: 0, runIds: ids)])
         }
     }
 
@@ -553,7 +553,7 @@ final class AppModel {
     var hasCurrentProject: Bool { !normalizedProjectRoot.isEmpty }
 
     var currentProjectName: String {
-        guard hasCurrentProject else { return "No project" }
+        guard hasCurrentProject else { return LocalizedPresentation.text("No project") }
         return URL(fileURLWithPath: normalizedProjectRoot).lastPathComponent
     }
 
@@ -629,10 +629,10 @@ final class AppModel {
         }
         let launchRepoRoot = repoRootOverride?.trimmingCharacters(in: .whitespacesAndNewlines) ?? normalizedProjectRoot
         guard !mode.requiresProject || !launchRepoRoot.isEmpty else {
-            settingsStatus = "Choose a Current Project before launching \(mode.label). Ask can run without a project."
+            settingsStatus = "Выберите проект перед запуском \(mode.label). Режим «Вопрос» может работать без проекта."
             return
         }
-        let launchProjectName = launchRepoRoot.isEmpty ? "No project" : URL(fileURLWithPath: launchRepoRoot).lastPathComponent
+        let launchProjectName = launchRepoRoot.isEmpty ? LocalizedPresentation.text("No project") : URL(fileURLWithPath: launchRepoRoot).lastPathComponent
         let hasExplicitCap = capUsd != nil
         var optimistic = TaskRun(
             id: "pending-\(UUID().uuidString.prefix(6))",
@@ -648,7 +648,7 @@ final class AppModel {
             spendKnown: false, capKnown: hasExplicitCap,
             routeProof: .unverified,
             attentionNote: nil,
-            plan: [], activity: [ActivityEvent(.system, "Queued · \(mode.label)")],
+            plan: [], activity: [ActivityEvent(.system, "В очереди · \(mode.label)")],
             candidates: [], findings: [], diff: [],
             isLive: true
         )
@@ -740,7 +740,7 @@ final class AppModel {
                         routeProof: .unverified, attentionNote: nil,
                         plan: [], activity: prev.activity, candidates: [], findings: [], diff: [],
                         isLive: true)
-                    row.activity.append(ActivityEvent(.system, "Queued in daemon · \(info.state)"))
+                    row.activity.append(ActivityEvent(.system, "В очереди демона · \(info.state)"))
                     if let error = info.error {
                         row.engineError = error
                         row.diagnosticText = error
@@ -757,9 +757,9 @@ final class AppModel {
         } catch {
             if let idx = liveTasks.firstIndex(where: { $0.id == optimistic.id }) {
                 liveTasks[idx].phase = .failed
-                liveTasks[idx].engineError = "Failed to start: \(error)"
+                liveTasks[idx].engineError = "Не удалось запустить: \(error)"
                 liveTasks[idx].diagnosticText = liveTasks[idx].engineError
-                liveTasks[idx].activity.append(ActivityEvent(.system, "Failed to start: \(error)"))
+                liveTasks[idx].activity.append(ActivityEvent(.system, "Не удалось запустить: \(error)"))
             }
         }
     }
@@ -1065,7 +1065,7 @@ final class AppModel {
     func applyThread(id: String, mode: String = "apply") async -> String? {
         let locationID = selectedExecutionLocation
         guard let requestClient = gateway(for: locationID) else {
-            return "Engine offline — reconnect to apply this thread."
+            return LocalizedPresentation.text("Engine offline — reconnect to apply this thread.")
         }
         do {
             let res = try await requestClient.applyThread(
@@ -1091,13 +1091,13 @@ final class AppModel {
     /// Human-readable label for a ControlThreadApplyResponse.status.
     private static func threadApplyLabel(_ status: String) -> String {
         switch status {
-        case "applied": return "Applied"
-        case "branched": return "Applied as branch"
-        case "committed": return "Committed"
-        case "pr_opened": return "PR opened"
-        case "empty": return "Nothing to apply"
-        case "conflict": return "Conflict — apply refused"
-        case "rejected": return "Apply rejected"
+        case "applied": return LocalizedPresentation.text("Applied")
+        case "branched": return LocalizedPresentation.text("Applied as branch")
+        case "committed": return LocalizedPresentation.text("Committed")
+        case "pr_opened": return LocalizedPresentation.text("PR opened")
+        case "empty": return LocalizedPresentation.text("Nothing to apply")
+        case "conflict": return LocalizedPresentation.text("Conflict — apply refused")
+        case "rejected": return LocalizedPresentation.text("Apply rejected")
         default: return status
         }
     }
@@ -1187,7 +1187,7 @@ final class AppModel {
             return thread.id
         } catch {
             applyComposerCompletionStatus(
-                "Could not create thread: \(userMessage(for: error))",
+                "Не удалось создать чат: \(userMessage(for: error))",
                 isRelevant: completionIsRelevant
             )
             return nil

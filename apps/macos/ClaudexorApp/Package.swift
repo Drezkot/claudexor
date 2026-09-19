@@ -7,6 +7,7 @@ import PackageDescription
 // macOS 26 (Tahoe) so Liquid Glass APIs are first-class rather than availability-gated.
 let package = Package(
     name: "ClaudexorApp",
+    defaultLocalization: "en",
     platforms: [.macOS(.v26)],
     dependencies: [
         .package(path: "../ClaudexorKit"),

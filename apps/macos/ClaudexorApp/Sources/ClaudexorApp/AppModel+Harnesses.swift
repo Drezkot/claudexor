@@ -383,9 +383,9 @@ extension AppModel {
     /// (one presentational owner per fact, INV-134; F4 final review #3).
     private static func harnessReadinessText(status: HarnessStatus, health: HarnessHealth) -> String {
         switch health {
-        case .ok: return "Ready by doctor."
-        case .degraded: return "Not ready: doctor degraded."
-        case .unavailable: return "Not ready: unavailable."
+        case .ok: return L10n.t("Ready by doctor.")
+        case .degraded: return L10n.t("Not ready: doctor degraded.")
+        case .unavailable: return L10n.t("Not ready: unavailable.")
         }
     }
 

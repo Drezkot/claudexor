@@ -77,9 +77,9 @@ struct TranscriptView: View, Equatable {
     }
 
     /// "Thinking · 12s" / "Thinking · 2m 05s" once the segment's span is
-    /// known from event timestamps; a plain "Thinking" while unknown (0).
+    /// known from event timestamps; a plain LocalizedPresentation.text("Thinking") while unknown (0).
     static func thinkingLabel(seconds: Double) -> String {
-        guard seconds >= 1 else { return "Thinking" }
+        guard seconds >= 1 else { return LocalizedPresentation.text("Thinking") }
         let s = Int(seconds)
         return s < 60
             ? "Thinking · \(s)s"

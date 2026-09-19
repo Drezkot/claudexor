@@ -79,7 +79,7 @@ enum AuthSheetPresentation {
 
     /// The ONE presentational owner of the Store-key action's availability
     /// (issue #132 class fix, INV-134): the inner panel button AND the footer
-    /// "Store key" CTA both derive disabled + hover from THIS projection, so
+    /// LocalizedPresentation.text("Store key") CTA both derive disabled + hover from THIS projection, so
     /// an unavailable store is a visibly disabled control that explains its
     /// real cause — never a silent no-op click. Causes rank by severity:
     /// an offline engine makes busy/empty moot; busy outranks the empty field.
@@ -93,9 +93,9 @@ enum AuthSheetPresentation {
             /// while the real blocker is the engine connection.
             var help: String {
                 switch self {
-                case .gatewayOffline: return "Engine offline: reconnect before storing a key."
-                case .actionInFlight: return "Wait for the current action to finish."
-                case .emptyKeyField: return "Enter the API key in the fallback field first."
+                case .gatewayOffline: return LocalizedPresentation.text("Engine offline: reconnect before storing a key.")
+                case .actionInFlight: return LocalizedPresentation.text("Wait for the current action to finish.")
+                case .emptyKeyField: return LocalizedPresentation.text("Enter the API key in the fallback field first.")
                 }
             }
         }
@@ -137,9 +137,9 @@ enum AuthSheetPresentation {
 
             var help: String {
                 switch self {
-                case .windowLapsed: return "The sign-in window closed. Get a new link first."
-                case .sending: return "Delivering the code to the sign-in…"
-                case .emptyField: return "Paste the code from the sign-in page first."
+                case .windowLapsed: return LocalizedPresentation.text("The sign-in window closed. Get a new link first.")
+                case .sending: return LocalizedPresentation.text("Delivering the code to the sign-in…")
+                case .emptyField: return LocalizedPresentation.text("Paste the code from the sign-in page first.")
                 }
             }
         }
@@ -340,11 +340,11 @@ enum AuthSheetPresentation {
 
         var label: String {
             switch self {
-            case .login: return "Log in"
-            case .retryProbe: return "Retry check"
-            case .storeKey: return "Store key"
-            case .reconnect: return "Reconnect"
-            case .done: return "Done"
+            case .login: return LocalizedPresentation.text("Log in")
+            case .retryProbe: return LocalizedPresentation.text("Retry check")
+            case .storeKey: return LocalizedPresentation.text("Store key")
+            case .reconnect: return LocalizedPresentation.text("Reconnect")
+            case .done: return LocalizedPresentation.text("Done")
             }
         }
     }
@@ -382,28 +382,28 @@ enum AuthSheetPresentation {
         exitCode: Int?
     ) -> String {
         switch state {
-        case .queued: return "Queued"
+        case .queued: return LocalizedPresentation.text("Queued")
         case .running, .waitingForInput:
             switch phase {
-            case .launching: return "Launching the native login…"
-            case .awaitingUser: return "Waiting for you to finish the login"
-            case .verifying: return "Verifying the session…"
-            case .cancelling: return "Cancelling…"
-            default: return "Working…"
+            case .launching: return LocalizedPresentation.text("Launching the native login…")
+            case .awaitingUser: return LocalizedPresentation.text("Waiting for you to finish the login")
+            case .verifying: return LocalizedPresentation.text("Verifying the session…")
+            case .cancelling: return LocalizedPresentation.text("Cancelling…")
+            default: return LocalizedPresentation.text("Working…")
             }
         case .succeeded:
-            return "Login verified"
+            return LocalizedPresentation.text("Login verified")
         case .cancelled:
-            return "Cancelled"
+            return LocalizedPresentation.text("Cancelled")
         case .timedOut:
-            return "Timed out waiting for the login"
+            return LocalizedPresentation.text("Timed out waiting for the login")
         case .notSupported:
-            return "Not supported for this harness"
+            return LocalizedPresentation.text("Not supported for this harness")
         case .failed, .interruptedUnknown:
             // The single honest failure phrase: the typed reason when it says
             // more than "error"; the exit code only when it IS the evidence.
             if let reason = outcomeReason, reason == "termination_unconfirmed" {
-                return "Process termination is unconfirmed"
+                return LocalizedPresentation.text("Process termination is unconfirmed")
             }
             if let code = exitCode, code != 0 { return "Failed (exit \(code))" }
             if let reason = outcomeReason, !reason.isEmpty, reason != "completed" {
@@ -424,9 +424,9 @@ extension AuthSheetPresentation.PrimaryCTA {
         // The store-key projection carries its own severity order (offline
         // beats busy beats empty), so its cause wins the merged ladder here.
         if self == .storeKey, let cause = storeKeyBlocked { return cause.help }
-        if busy { return "Wait for the current action to finish." }
+        if busy { return LocalizedPresentation.text("Wait for the current action to finish.") }
         if loginBlocked, self == .login {
-            return "Login is unavailable until setup state resolves (an active job, recovery, or an unconfirmed prior process)."
+            return LocalizedPresentation.text("Login is unavailable until setup state resolves (an active job, recovery, or an unconfirmed prior process).")
         }
         return help(family: family)
     }
@@ -434,10 +434,10 @@ extension AuthSheetPresentation.PrimaryCTA {
     func help(family: String) -> String {
         switch self {
         case .login: return "Start the native \(family) login flow."
-        case .retryProbe: return "Run a fresh, non-cached Harness Doctor probe."
-        case .storeKey: return "Store the API key entered in the fallback field below."
-        case .reconnect: return "Re-establish setup truth (re-snapshot the job / prove the process gone)."
-        case .done: return "Close this auth sheet."
+        case .retryProbe: return LocalizedPresentation.text("Run a fresh, non-cached Harness Doctor probe.")
+        case .storeKey: return LocalizedPresentation.text("Store the API key entered in the fallback field below.")
+        case .reconnect: return LocalizedPresentation.text("Re-establish setup truth (re-snapshot the job / prove the process gone).")
+        case .done: return LocalizedPresentation.text("Close this auth sheet.")
         }
     }
 }
@@ -454,9 +454,9 @@ enum AuthSheetClosePolicy {
     }
 
     static func confirmationTitle(job: SetupJob?, stateUnresolved: Bool) -> String {
-        if job?.blocksReplacement == true { return "Process termination is unconfirmed" }
-        if stateUnresolved { return "Setup state is still resolving" }
-        return "Native login is still active"
+        if job?.blocksReplacement == true { return LocalizedPresentation.text("Process termination is unconfirmed") }
+        if stateUnresolved { return LocalizedPresentation.text("Setup state is still resolving") }
+        return LocalizedPresentation.text("Native login is still active")
     }
 
     static func cancellationLabel(job: SetupJob?) -> String {
@@ -465,11 +465,11 @@ enum AuthSheetClosePolicy {
 
     static func confirmationMessage(job: SetupJob?, stateUnresolved: Bool) -> String {
         if job?.blocksReplacement == true {
-            return "Keep Running closes this sheet without claiming the process stopped. Cancel asks the daemon again and closes only after termination is confirmed. Stay keeps the recovery details visible."
+            return LocalizedPresentation.text("Keep Running closes this sheet without claiming the process stopped. Cancel asks the daemon again and closes only after termination is confirmed. Stay keeps the recovery details visible.")
         }
         if stateUnresolved {
-            return "Claudexor cannot yet prove whether a setup job is active. Keep Running leaves any accepted job in the background. Cancel first reconciles server state and closes only after confirmed termination."
+            return LocalizedPresentation.text("Claudexor cannot yet prove whether a setup job is active. Keep Running leaves any accepted job in the background. Cancel first reconciles server state and closes only after confirmed termination.")
         }
-        return "Keep Running closes this sheet while the daemon job continues. Cancel Login waits for confirmed process termination before closing."
+        return LocalizedPresentation.text("Keep Running closes this sheet while the daemon job continues. Cancel Login waits for confirmed process termination before closing.")
     }
 }

@@ -7,10 +7,10 @@ struct DiffView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.md) {
-            SectionLabel("Diff", systemImage: "plusminus.circle",
+            SectionLabel(L10n.t("Diff"), systemImage: "plusminus.circle",
                          accessory: AnyView(diffSummary))
             if files.isEmpty {
-                Panel { Text("No file changes in this run yet.").foregroundStyle(.secondary).frame(maxWidth: .infinity, alignment: .leading) }
+                Panel { Text(L10n.t("No file changes in this run yet.")).foregroundStyle(.secondary).frame(maxWidth: .infinity, alignment: .leading) }
             } else {
                 ForEach(files) { FileDiff(file: $0) }
             }
@@ -19,7 +19,7 @@ struct DiffView: View {
 
     private var diffSummary: some View {
         HStack(spacing: Theme.Spacing.sm) {
-            Text("\(files.count) files").font(.caption).foregroundStyle(.secondary)
+            Text("Файлов: \(files.count)").font(.caption).foregroundStyle(.secondary)
             Text("+\(files.reduce(0) { $0 + $1.added })").font(.caption.weight(.medium)).foregroundStyle(Theme.status(.positive))
             Text("−\(files.reduce(0) { $0 + $1.removed })").font(.caption.weight(.medium)).foregroundStyle(Theme.status(.negative))
         }
@@ -36,7 +36,7 @@ private struct FileDiff: View {
             // chevron-only 12px button was the same dead-label defect class as
             // the platform DisclosureGroup.
             DisclosureRow(
-                accessibilityName: "Diff of \(file.path)",
+                accessibilityName: "Изменения файла \(file.path)",
                 isExpanded: $expanded,
                 headerBackground: Theme.surfaceRaised
             ) {

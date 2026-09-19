@@ -332,7 +332,7 @@ enum ComposerAttachmentStager {
         if let error = error as? ComposerAttachmentStagingError {
             return error.message
         }
-        return "the file could not be read"
+        return LocalizedPresentation.text("the file could not be read")
     }
 
     private static func refusalMessage(_ admission: ComposerAttachmentPoolAdmission) -> String {
@@ -351,10 +351,10 @@ private enum ComposerAttachmentStagingError: Error {
 
     var message: String {
         switch self {
-        case .notRegularFile: return "it is not a regular file"
-        case .missingSize: return "its size could not be determined"
-        case .fileChanged: return "the file changed while it was being read"
-        case .couldNotRead: return "the file could not be read"
+        case .notRegularFile: return LocalizedPresentation.text("it is not a regular file")
+        case .missingSize: return LocalizedPresentation.text("its size could not be determined")
+        case .fileChanged: return LocalizedPresentation.text("the file changed while it was being read")
+        case .couldNotRead: return LocalizedPresentation.text("the file could not be read")
         }
     }
 }

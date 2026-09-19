@@ -27,8 +27,8 @@ struct WorkspaceChangesView: View {
             }
             if runIds.isEmpty {
                 EmptyStateView(
-                    title: "No project output in this thread",
-                    message: "No run in this thread produced a patch.",
+                    title: LocalizedPresentation.text("No project output in this thread"),
+                    message: LocalizedPresentation.text("No run in this thread produced a patch."),
                     systemImage: "plusminus.circle")
             } else {
                 ForEach(runIds, id: \.self) { runId in
@@ -128,12 +128,12 @@ struct RunDiffSection: View {
                 VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
                     Label(error.message, systemImage: "exclamationmark.triangle.fill")
                         .foregroundStyle(Theme.status(.caution))
-                    Button("Retry") { Task { await loadDiff() } }
+                    Button(L10n.t("Retry")) { Task { await loadDiff() } }
                         .buttonStyle(.bordered).controlSize(.small)
                 }
             }
         case .empty:
-            Text("No changes in this run.")
+            Text(L10n.t("No changes in this run."))
                 .font(.caption).foregroundStyle(.secondary)
         case .idle, .loading:
             // QA-069: an active run has no final patch yet — say so honestly
@@ -142,7 +142,7 @@ struct RunDiffSection: View {
             if run?.phase.isActive == true {
                 HStack(spacing: Theme.Spacing.sm) {
                     ProgressView().controlSize(.small)
-                    Text("Changes will appear after the run captures its final patch.")
+                    Text(L10n.t("Changes will appear after the run captures its final patch."))
                         .font(.caption).foregroundStyle(.secondary)
                 }
             } else {
@@ -155,12 +155,12 @@ struct RunDiffSection: View {
         if let run {
             VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
                 if applied {
-                    Label("Applied to project", systemImage: "checkmark.seal.fill")
+                    Label(L10n.t(LocalizedPresentation.text("Applied to project")), systemImage: "checkmark.seal.fill")
                         .font(.caption).foregroundStyle(Theme.status(.positive))
                 } else if canApply {
                     HStack(spacing: Theme.Spacing.sm) {
-                        Button("Apply patch") { apply(mode: "apply") }
-                        Button("Apply as branch") { apply(mode: "branch") }
+                        Button(L10n.t("Apply patch")) { apply(mode: "apply") }
+                        Button(L10n.t("Apply as branch")) { apply(mode: "branch") }
                         Spacer()
                     }
                     .buttonStyle(.borderedProminent).controlSize(.small)

@@ -43,9 +43,9 @@ enum RemoteDeviceLoginTerminalPresentation: Equatable {
 
     var label: String {
         switch self {
-        case .verified: "Login verified"
+        case .verified: LocalizedPresentation.text("Login verified")
         case .readyWithWarning: "Signed in; setup check failed"
-        case .failed: "Login failed"
+        case .failed: LocalizedPresentation.text("Login failed")
         }
     }
 

@@ -21,23 +21,23 @@ struct SettingsScreen: View {
         @Bindable var model = model
         TabView {
             settingsTab { generalGroup; loadedSettings { advancedGroup } }
-                .tabItem { Label("General", systemImage: "gearshape") }
+                .tabItem { Label(L10n.t("General"), systemImage: "gearshape") }
             settingsTab { loadedSettings { routingGroup } }
-                .tabItem { Label("Routing", systemImage: "point.3.connected.trianglepath.dotted") }
+                .tabItem { Label(L10n.t("Routing"), systemImage: "point.3.connected.trianglepath.dotted") }
             settingsTab {
                 harnessDoctorGroup
                 RemoteHarnessInstallSection()
                 loadedSettings { perHarnessGroup }
             }
-                .tabItem { Label("Harnesses", systemImage: "cpu") }
+                .tabItem { Label(L10n.t("Harnesses"), systemImage: "cpu") }
             settingsTab { ConnectionsSettingsView() }
-                .tabItem { Label("Connections", systemImage: "network") }
+                .tabItem { Label(L10n.t("Connections"), systemImage: "network") }
             settingsTab { loadedSettings { budgetGroup; interactiveGroup } }
-                .tabItem { Label("Budget", systemImage: "dollarsign.circle") }
+                .tabItem { Label(L10n.t("Budget"), systemImage: "dollarsign.circle") }
             settingsTab { secretsGroup; TrustSettingsSection() }
-                .tabItem { Label("Secrets", systemImage: "key") }
+                .tabItem { Label(L10n.t("Secrets"), systemImage: "key") }
             settingsTab { appearanceGroup }
-                .tabItem { Label("Appearance", systemImage: "paintpalette") }
+                .tabItem { Label(L10n.t(LocalizedPresentation.text("Appearance")), systemImage: "paintpalette") }
         }
         .frame(minWidth: 720, minHeight: 600)
         .task { await refreshAll() }
@@ -62,10 +62,10 @@ struct SettingsScreen: View {
 
 
     @ViewBuilder private var budgetGroup: some View {
-        settingsGroup("Budget", "dollarsign.circle") {
+        settingsGroup(L10n.t("Budget"), "dollarsign.circle") {
             HStack {
                 Toggle(
-                    "Unlimited paid budget",
+                    L10n.t("Unlimited paid budget"),
                     isOn: draftBinding(\.budgetUnlimited, lane: .paidBudget)
                 )
                 .toggleStyle(.switch)
@@ -74,7 +74,7 @@ struct SettingsScreen: View {
                 laneStatus(.paidBudget)
             }
             TextField(
-                "Max USD per run",
+                L10n.t("Max USD per run"),
                 text: draftBinding(\.maxUsdPerRun, lane: .paidBudget, debounced: true)
             )
             .textFieldStyle(.roundedBorder)
@@ -88,20 +88,20 @@ struct SettingsScreen: View {
     }
 
     @ViewBuilder private var interactiveGroup: some View {
-        settingsGroup("Interactive questions", "questionmark.bubble") {
+        settingsGroup(L10n.t("Interactive questions"), "questionmark.bubble") {
             Picker(
-                "Waiting policy",
+                L10n.t("Waiting policy"),
                 selection: draftBinding(\.interactionTimeoutMode, lane: .interactionTimeout)
             ) {
-                Text("Continue after timeout").tag(InteractionTimeoutMode.finite)
-                Text("No automatic expiry").tag(InteractionTimeoutMode.disabled)
+                Text(L10n.t("Continue after timeout")).tag(InteractionTimeoutMode.finite)
+                Text(L10n.t(LocalizedPresentation.text("No automatic expiry"))).tag(InteractionTimeoutMode.disabled)
             }
             .pickerStyle(.segmented)
             .help("Disabled removes automatic expiry only; answering, cancelling, restart cleanup, and terminal cleanup still release the question.")
             if activeDraft.interactionTimeoutMode == .finite {
                 HStack(spacing: Theme.Spacing.md) {
                     TextField(
-                        "Positive whole minutes",
+                        L10n.t("Positive whole minutes"),
                         text: draftBinding(
                             \.interactionTimeoutMinutes,
                             lane: .interactionTimeout,
@@ -122,30 +122,30 @@ struct SettingsScreen: View {
     }
 
     @ViewBuilder private var advancedGroup: some View {
-        settingsGroup("Advanced & About", "info.circle") {
-                    KeyValueRow(key: "App", value: "Claudexor for macOS")
-                    KeyValueRow(key: "Author", value: AboutInfo.author)
-                    KeyValueRow(key: "License", value: AboutInfo.license)
+        settingsGroup(L10n.t("Advanced & About"), "info.circle") {
+                    KeyValueRow(key: L10n.t("App"), value: "Claudexor for macOS")
+                    KeyValueRow(key: L10n.t("Author"), value: AboutInfo.author)
+                    KeyValueRow(key: L10n.t("License"), value: AboutInfo.license)
                     // Single source: the bundle version stamped at packaging time
                     // (a hardcoded string here shipped stale in the past).
-                    KeyValueRow(key: "Version", value: "v\(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "dev")")
+                    KeyValueRow(key: L10n.t("Version"), value: "v\(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "dev")")
                     // Real engine build identity, retained from the connect
                     // handshake (QA-002/D20) instead of dropped: a stale-daemon
                     // skew is visible, and the git sha is "unknown" honestly
                     // until packaged stamping lands (Ф4).
-                    KeyValueRow(key: "Engine version", value: model.engineVersionDisplay, mono: true)
-                    KeyValueRow(key: "Engine sha", value: model.engineShaDisplay, mono: true)
-                    KeyValueRow(key: "Engine", value: "@claudexor/control-api (loopback HTTP+SSE)")
+                    KeyValueRow(key: L10n.t("Engine version"), value: model.engineVersionDisplay, mono: true)
+                    KeyValueRow(key: L10n.t("Engine sha"), value: model.engineShaDisplay, mono: true)
+                    KeyValueRow(key: L10n.t("Engine"), value: "@claudexor/control-api (loopback HTTP+SSE)")
                     aboutLinkRow("Telegram", AboutInfo.telegramLabel, AboutInfo.telegramURL)
                     aboutLinkRow("X", AboutInfo.twitterLabel, AboutInfo.twitterURL)
-                    aboutLinkRow("Repository", AboutInfo.repoLabel, AboutInfo.repoURL)
-                    KeyValueRow(key: "Review protocol", value: "Inline per-turn review; server-owned decision/apply endpoints")
+                    aboutLinkRow(L10n.t("Repository"), AboutInfo.repoLabel, AboutInfo.repoURL)
+                    KeyValueRow(key: L10n.t("Review protocol"), value: "Inline per-turn review; server-owned decision/apply endpoints")
                     if let runtime = model.activeSettingsSnapshot?.runtime {
-                        KeyValueRow(key: "Reviewer timeout", value: "\(max(1, runtime.reviewerTimeoutMs / 60_000)) min")
-                        KeyValueRow(key: "Reviewer retries", value: "\(runtime.transientRetry.maxRetries)")
+                        KeyValueRow(key: L10n.t("Reviewer timeout"), value: "\(max(1, runtime.reviewerTimeoutMs / 60_000)) min")
+                        KeyValueRow(key: L10n.t("Reviewer retries"), value: "\(runtime.transientRetry.maxRetries)")
                     }
-                    KeyValueRow(key: "Delivery protocol", value: "Inspect artifacts, dry-run before mutation")
-                    KeyValueRow(key: "Public architecture", value: "CLAUDEXOR_BIBLE.md + docs/ARCHITECTURE.md", mono: true)
+                    KeyValueRow(key: L10n.t("Delivery protocol"), value: "Inspect artifacts, dry-run before mutation")
+                    KeyValueRow(key: L10n.t("Public architecture"), value: "CLAUDEXOR_BIBLE.md + docs/ARCHITECTURE.md", mono: true)
                 }
     }
 
@@ -400,7 +400,7 @@ struct SettingsScreen: View {
         case .clean:
             EmptyView()
         case .editing:
-            Text("Editing…")
+            Text(L10n.t("Editing…"))
                 .font(.caption2)
                 .foregroundStyle(.secondary)
         case .invalid(let message):
@@ -410,11 +410,11 @@ struct SettingsScreen: View {
                 .lineLimit(2)
                 .help(message)
         case .queued, .saving:
-            Label("Saving…", systemImage: "arrow.triangle.2.circlepath")
+            Label(L10n.t("Saving…"), systemImage: "arrow.triangle.2.circlepath")
                 .font(.caption2)
                 .foregroundStyle(.secondary)
         case .saved:
-            Label("Saved", systemImage: "checkmark.circle.fill")
+            Label(L10n.t("Saved"), systemImage: "checkmark.circle.fill")
                 .font(.caption2)
                 .foregroundStyle(Theme.status(.positive))
         case .failed(let message):
@@ -424,7 +424,7 @@ struct SettingsScreen: View {
                     .foregroundStyle(Theme.status(.negative))
                     .lineLimit(2)
                     .help(message)
-                Button("Retry") { retry(lane) }
+                Button(L10n.t("Retry")) { retry(lane) }
                     .buttonStyle(.borderless)
                     .font(.caption2)
             }

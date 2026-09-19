@@ -28,7 +28,7 @@ struct RootView: View {
                     ThreadsScreen()
                 } else {
                     ContentUnavailableView(
-                        model.health == .connecting ? "Connecting to engine" : "Engine offline",
+                        model.health == .connecting ? "Connecting to engine" : LocalizedPresentation.text("Engine offline"),
                         systemImage: model.health == .connecting ? "dot.radiowaves.left.and.right" : "wifi.slash",
                         description: Text(model.health == .connecting
                             ? "Operational data will appear after the local engine handshake completes."
@@ -102,17 +102,17 @@ struct RootView: View {
             AppearanceMenu()
 
             Button { model.inspectorPresented.toggle() } label: {
-                Label("Thread workspace", systemImage: "sidebar.trailing")
+                Label(L10n.t("Thread workspace"), systemImage: "sidebar.trailing")
             }
             .labelStyle(.iconOnly)
             .help("Toggle the thread workspace — changes, artifacts, evidence")
 
-            SettingsLink { Label("Settings", systemImage: "gearshape") }
+            SettingsLink { Label(L10n.t("Settings"), systemImage: "gearshape") }
                 .labelStyle(.iconOnly)
                 .help("Preferences, budget, harness doctor (⌘,)")
 
             Button { model.startDraftThread() } label: {
-                Label("New Thread", systemImage: "square.and.pencil")
+                Label(L10n.t("New Thread"), systemImage: "square.and.pencil")
             }
             .labelStyle(.iconOnly)
             .help("New thread — pick a project and the first message starts it")
@@ -127,7 +127,7 @@ struct AppearanceMenu: View {
     var body: some View {
         @Bindable var model = model
         Menu {
-            Picker("Appearance", selection: $model.appearance) {
+            Picker(L10n.t(LocalizedPresentation.text("Appearance")), selection: $model.appearance) {
                 ForEach(AppearanceMode.allCases) { mode in
                     Label(mode.label, systemImage: mode.glyph).tag(mode)
                 }
@@ -137,13 +137,13 @@ struct AppearanceMenu: View {
             appearanceLabelIcon
         }
         // QA-003 (issue-003): the primary AX NAME stays the stable English
-        // product concept "Appearance"; the SELECTED mode is exposed as the
+        // product concept LocalizedPresentation.text("Appearance"); the SELECTED mode is exposed as the
         // accessibility VALUE. Otherwise the label inferred from the mode glyph
         // (`sun.max` / `moon.stars` / `circle.lefthalf.filled`) and read as the
         // host-localized SF Symbol description (`Ясная Ночь` / `Повысить
         // Яркость`) — a name that also RENAMED the action every time the theme
         // changed. `.help` stays the separate hover hint, never the name.
-        .accessibilityLabel("Appearance")
+        .accessibilityLabel(LocalizedPresentation.text("Appearance"))
         .accessibilityValue(model.appearance.label)
         .help("Light / Dark / System")
     }

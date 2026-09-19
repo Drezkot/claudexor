@@ -12,7 +12,7 @@ struct AccountsAutoBalanceControl: View {
         let state = model.autoBalanceState
         VStack(alignment: .leading, spacing: 2) {
             HStack(spacing: Theme.Spacing.sm) {
-                Text("Auto-switch accounts at quota limit").font(.callout)
+                Text(L10n.t("Auto-switch accounts at quota limit")).font(.callout)
                 // Per-harness actions disagree → the aggregate is indeterminate:
                 // show "—" (no selected segment) rather than misreporting it.
                 if state == .mixed {
@@ -28,9 +28,9 @@ struct AccountsAutoBalanceControl: View {
                         Task { await model.setAutoBalance(choice) }
                     }
                 )) {
-                    Text("Off").tag(AccountsAutoBalance.Choice?.some(.fail))
-                    Text("Auto").tag(AccountsAutoBalance.Choice?.some(.auto))
-                    Text("On").tag(AccountsAutoBalance.Choice?.some(.rotate))
+                    Text(L10n.t("Off")).tag(AccountsAutoBalance.Choice?.some(.fail))
+                    Text(L10n.t(LocalizedPresentation.text("Auto"))).tag(AccountsAutoBalance.Choice?.some(.auto))
+                    Text(L10n.t("On")).tag(AccountsAutoBalance.Choice?.some(.rotate))
                 }
                 .pickerStyle(.segmented)
                 .labelsHidden()
@@ -60,15 +60,15 @@ struct AccountsAutoBalanceControl: View {
             // auto-switch reactively under the engine's kind-aware default —
             // this control only governs harnesses with a quota source, so its
             // absence must not read as "auto-switch is off".
-            return "Add a second Claude, Codex, or agy account to control auto-switch here; Cursor accounts already switch automatically at a vendor limit."
+            return LocalizedPresentation.text("Add a second Claude, Codex, or agy account to control auto-switch here; Cursor accounts already switch automatically at a vendor limit.")
         case .mixed:
-            return "Harnesses disagree (—) — pick a mode to set them all consistently."
+            return LocalizedPresentation.text("Harnesses disagree (—) — pick a mode to set them all consistently.")
         case .auto:
-            return "Subscription accounts switch to another enabled account at their quota limit; metered API keys stop instead."
+            return LocalizedPresentation.text("Subscription accounts switch to another enabled account at their quota limit; metered API keys stop instead.")
         case .on:
-            return "When one account hits its quota, runs continue on another enabled account of the same harness."
+            return LocalizedPresentation.text("When one account hits its quota, runs continue on another enabled account of the same harness.")
         case .off:
-            return "Runs stop at a quota limit instead of switching accounts."
+            return LocalizedPresentation.text("Runs stop at a quota limit instead of switching accounts.")
         }
     }
 }

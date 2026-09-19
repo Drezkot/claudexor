@@ -192,7 +192,7 @@ struct AuthSheet: View {
                             .help(cta.help(family: family.label, busy: actionInFlight,
                                            loginBlocked: cta == .login && newSetupDisabled,
                                            storeKeyBlocked: storeKeyAvailability.blockedReason))
-                        Button("Done") { requestClose() }.buttonStyle(.bordered)
+                        Button(L10n.t(LocalizedPresentation.text("Done"))) { requestClose() }.buttonStyle(.bordered)
                     }
                 }
                 .padding(Theme.Spacing.lg)
@@ -206,9 +206,9 @@ struct AuthSheet: View {
             isPresented: $showCloseConfirmation,
             titleVisibility: .visible
         ) {
-            Button("Keep Running") { keepRunningAndClose() }
+            Button(L10n.t("Keep Running")) { keepRunningAndClose() }
             Button(closeCancellationLabel, role: .destructive) { cancelJobAndCloseWhenConfirmed() }
-            Button("Stay", role: .cancel) {}
+            Button(L10n.t("Stay"), role: .cancel) {}
         } message: {
             Text(closeConfirmationMessage)
         }
@@ -236,7 +236,7 @@ struct AuthSheet: View {
         } else {
             owner = "the default account"
         }
-        return "This setup job belongs to \(owner). Its controls continue that exact login; your selected account is unchanged."
+        return "Эта задача настройки относится к \(owner). Управление продолжает именно этот вход; выбранный аккаунт не изменён."
     }
 
     /// Account-capable default surface: the implicit default login and every named
@@ -325,7 +325,7 @@ struct AuthSheet: View {
 
     private func observeLifecycle() async {
         guard let client = model.gateway(for: model.activeExecutionLocation) else {
-            status = "Engine offline: reconnect before starting \(family.label) setup."
+            status = "Движок не подключён — переподключитесь перед настройкой \(family.label)."
             return
         }
         guard nativeHarness != nil else { return }
@@ -378,7 +378,7 @@ struct AuthSheet: View {
             }
             if closeAfterCancellation, next.lastError != nil, next.job?.phase != .cancelling {
                 closeAfterCancellation = false
-                status = "Cancellation could not be confirmed: \(next.lastError ?? "unknown error")"
+                status = "Не удалось подтвердить отмену: \(next.lastError ?? "неизвестная ошибка")"
             }
         }
         await lifecycleController.detach()
@@ -441,7 +441,7 @@ struct AuthSheet: View {
     /// Hand the pasted one-time code to the waiting login job: straight to the
     /// daemon, never stored here or logged. Returns the refusal reason, if any.
     private func submitLoginCode(_ code: String) async -> String? {
-        guard let controller else { return "Engine offline: reconnect and try again." }
+        guard let controller else { return LocalizedPresentation.text("Engine offline: reconnect and try again.") }
         actionInFlight = true
         defer { actionInFlight = false }
         return await controller.submitInput(code)
@@ -498,13 +498,13 @@ struct AuthSheet: View {
         guard !value.isEmpty else { return }
         let result = await model.storeSecret(name: name, value: value, for: family)
         guard result.stored else {
-            status = "Could not store \(name); reconnect the local engine and try again."
+            status = "Не удалось сохранить \(name); переподключите локальный движок и повторите попытку."
             return
         }
         secretValue = ""
         status = result.readinessRefreshed
-            ? "Stored \(name) and refreshed its exact credential readiness."
-            : "Stored \(name), but its exact readiness refresh failed. Use Recheck before relying on it."
+            ? "Сохранено \(name); состояние учётных данных обновлено."
+            : "Сохранено \(name), но обновить состояние готовности не удалось. Перед использованием выполните повторную проверку."
     }
 
     private func requestClose() {
@@ -546,7 +546,7 @@ struct AuthSheet: View {
                     dismiss()
                 } else {
                     closeAfterCancellation = false
-                    status = "Cancellation could not be confirmed: \(latest.lastError ?? "setup state remains unknown")"
+                    status = "Не удалось подтвердить отмену: \(latest.lastError ?? "состояние настройки остаётся неизвестным")"
                 }
                 return
             }
@@ -563,7 +563,7 @@ struct AuthSheet: View {
                 status = terminationUnconfirmedMessage
             } else if latest.lastError != nil, latest.job?.phase != .cancelling {
                 closeAfterCancellation = false
-                status = "Cancellation could not be confirmed: \(latest.lastError ?? "unknown error")"
+                status = "Не удалось подтвердить отмену: \(latest.lastError ?? "неизвестная ошибка")"
             }
         }
     }

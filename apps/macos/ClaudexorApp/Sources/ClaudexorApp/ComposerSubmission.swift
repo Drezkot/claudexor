@@ -14,7 +14,7 @@ extension ThreadsScreen {
         if capUsdInvalid {
             // Highest priority: a bad budget cap blocks Send — say so even with the
             // "⋯" popover closed, so the disabled Send isn't a mystery.
-            Label("Budget cap must be a non-negative number (in ⋯)", systemImage: "exclamationmark.triangle.fill")
+            Label(LocalizedPresentation.text("Budget cap must be a non-negative number (in ⋯)"), systemImage: "exclamationmark.triangle.fill")
                 .font(.caption).foregroundStyle(.orange).lineLimit(1)
         } else if let testCommandMessage = testCommandErrorMessage {
             Label(testCommandMessage, systemImage: "exclamationmark.triangle.fill")
@@ -23,11 +23,11 @@ extension ThreadsScreen {
             HStack(alignment: .firstTextBaseline, spacing: Theme.Spacing.sm) {
                 Label(blocker, systemImage: "exclamationmark.triangle.fill")
                     .font(.caption).foregroundStyle(.orange).lineLimit(2)
-                Button("Recheck") { Task { await model.refreshRunApplicability() } }
+                Button(L10n.t("Recheck")) { Task { await model.refreshRunApplicability() } }
                     .buttonStyle(.link).font(.caption)
             }
         } else if !threadHasProject {
-            Text("Pick a project to use Agent · Plan · Best-of")
+            Text(L10n.t("Pick a project to use Agent · Plan · Best-of"))
                 .font(.caption).foregroundStyle(.secondary).lineLimit(1)
                 .help("Without a project, only Ask (read-only) is available")
         } else if model.selectedThreadId == nil {

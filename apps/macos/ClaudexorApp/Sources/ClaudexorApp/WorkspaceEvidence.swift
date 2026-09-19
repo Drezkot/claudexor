@@ -52,12 +52,12 @@ struct RunEvidenceSection: View {
                 }
         } else {
             DisclosureRow(
-                accessibilityName: "Run \(String(runId.suffix(6))) evidence",
+                accessibilityName: "Данные запуска \(String(runId.suffix(6)))",
                 isExpanded: $expanded
             ) {
                 HStack(spacing: Theme.Spacing.sm) {
                     Image(systemName: "stethoscope").foregroundStyle(.secondary)
-                    Text("Run \(String(runId.suffix(6)))").font(.callout.weight(.medium))
+                    Text("Запуск \(String(runId.suffix(6)))").font(.callout.weight(.medium))
                     if let phase = run?.phase {
                         Circle().fill(phase.color).frame(width: 7, height: 7)
                         Text(phase.label).font(.caption2).foregroundStyle(.secondary)
@@ -74,7 +74,7 @@ struct RunEvidenceSection: View {
         if let run {
             RunEvidenceView(locationID: locationID, task: run)
         } else {
-            Text("This run is no longer available.")
+            Text(L10n.t("This run is no longer available."))
                 .font(.caption).foregroundStyle(.secondary)
         }
     }

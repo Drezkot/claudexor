@@ -19,9 +19,8 @@ struct ConnectionsSettingsView: View {
         VStack(alignment: .leading, spacing: Theme.Spacing.lg) {
             // The same shell every other Settings section uses (SettingsGroup):
             // this pane used to hand-copy the recipe and read as a different app.
-            SettingsGroup("SSH Connections", systemImage: "network") {
-                Text(
-                    "Hosts come from ~/.ssh/config. Claudexor delegates keys, ssh-agent, known_hosts, MFA, ProxyJump, and ProxyCommand to /usr/bin/ssh.")
+            SettingsGroup(L10n.t("SSH Connections"), systemImage: "network") {
+                Text(L10n.t("Hosts come from ~/.ssh/config. Claudexor delegates keys, ssh-agent, known_hosts, MFA, ProxyJump, and ProxyCommand to /usr/bin/ssh."))
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     // Wrap instead of clipping: this sentence is longer than the
@@ -30,8 +29,8 @@ struct ConnectionsSettingsView: View {
                 // Two paths, one mental model: add an EXISTING alias directly
                 // (app-local, immediate), or create a NEW host in a sheet (a
                 // five-field ~/.ssh/config mutation). Never one behind the other.
-                OptionRow(label: "From config", labelWidth: 84) {
-                    Picker("SSH host", selection: $selectedAlias) {
+                OptionRow(label: L10n.t("From config"), labelWidth: 84) {
+                    Picker(L10n.t("SSH host"), selection: $selectedAlias) {
                         Text(picker.placeholder).tag("")
                         ForEach(picker.addable) { host in
                             Text(host.alias).tag(host.alias)
@@ -45,7 +44,7 @@ struct ConnectionsSettingsView: View {
                         addFailure = model.addRemoteConnection(alias: selectedAlias)
                         if addFailure == nil { selectedAlias = "" }
                     } label: {
-                        Label("Add", systemImage: "plus")
+                        Label(L10n.t("Add"), systemImage: "plus")
                     }
                     .buttonStyle(.bordered)
                     .disabled(selectedAlias.isEmpty)
@@ -56,13 +55,13 @@ struct ConnectionsSettingsView: View {
                     Button {
                         model.refreshSSHHosts()
                     } label: {
-                        Label("Rescan", systemImage: "arrow.clockwise")
+                        Label(L10n.t("Rescan"), systemImage: "arrow.clockwise")
                     }
                     .buttonStyle(.bordered)
                     .help("Re-read ~/.ssh/config.")
                 }
-                OptionRow(label: "New host", labelWidth: 84) {
-                    Button("New SSH Host…") { showNewHostSheet = true }
+                OptionRow(label: L10n.t("New host"), labelWidth: 84) {
+                    Button(L10n.t("New SSH Host…")) { showNewHostSheet = true }
                         .buttonStyle(.bordered)
                         .help(
                             "Create a Host entry in ~/.ssh/config and add it as a connection in one step.")
@@ -88,12 +87,11 @@ struct ConnectionsSettingsView: View {
                 // Empty states name the ACTION: the same primary CTA as above,
                 // so the first useful step is never visually remote.
                 ContentUnavailableView {
-                    Label("No remote connections", systemImage: "network.slash")
+                    Label(L10n.t("No remote connections"), systemImage: "network.slash")
                 } description: {
-                    Text(
-                        "Create one here, or add a Host block to ~/.ssh/config yourself and press Rescan. Pattern hosts (wildcards) stay hidden — only concrete aliases can become connections.")
+                    Text(L10n.t("Create one here, or add a Host block to ~/.ssh/config yourself and press Rescan. Pattern hosts (wildcards) stay hidden — only concrete aliases can become connections."))
                 } actions: {
-                    Button("New SSH Host…") { showNewHostSheet = true }
+                    Button(L10n.t("New SSH Host…")) { showNewHostSheet = true }
                         .buttonStyle(.borderedProminent)
                         .tint(Theme.accentSolid)
                 }
@@ -133,7 +131,7 @@ private struct SSHHostReceiptCard: View {
                 Button {
                     copyBlock()
                 } label: {
-                    Label("Copy Block", systemImage: "doc.on.doc")
+                    Label(L10n.t("Copy Block"), systemImage: "doc.on.doc")
                 }
                 .buttonStyle(.borderless)
                 .help("Copy the exact appended Host block.")
@@ -197,12 +195,12 @@ private struct RemoteConnectionSettingsRow: View {
                             details: [AlignedRowDetail(0, connection.sshAlias)])
                     ) {
                         if connection.status == .connected {
-                            Button("Disconnect") {
+                            Button(L10n.t("Disconnect")) {
                                 Task { await model.disconnectRemote(connectionID) }
                             }
                             .alignedControlColumn(minWidth: 96, alignment: .trailing)
                         } else {
-                            Button("Connect") {
+                            Button(L10n.t("Connect")) {
                                 Task { await model.connectRemote(connectionID) }
                             }
                             .buttonStyle(.borderedProminent)
@@ -215,12 +213,12 @@ private struct RemoteConnectionSettingsRow: View {
                     }
                 }
                 HStack {
-                    TextField("Nickname", text: $nickname)
+                    TextField(L10n.t("Nickname"), text: $nickname)
                         .textFieldStyle(.roundedBorder)
                         .onSubmit {
                             model.setRemoteNickname(connectionID, nickname: nickname)
                         }
-                    Button("Save name") {
+                    Button(L10n.t("Save name")) {
                         model.setRemoteNickname(connectionID, nickname: nickname)
                     }
                 }
@@ -231,27 +229,27 @@ private struct RemoteConnectionSettingsRow: View {
                         set: { model.setRemoteEnabled(connectionID, enabled: $0) }))
                     .toggleStyle(.switch)
                 HStack {
-                    Button("Harness Doctor") {
+                    Button(L10n.t("Harness Doctor")) {
                         Task { await model.runRemoteHarnessDoctor(connectionID: connectionID) }
                     }
-                    Button("Install runtime…") { confirmInstall = true }
+                    Button(L10n.t("Install runtime…")) { confirmInstall = true }
                         .disabled(
                             connection.status == .connecting
                                 || connection.status == .installing)
                     Menu("Login") {
-                        Button("Claude") {
+                        Button(L10n.t("Claude")) {
                             Task {
                                 await model.startRemoteLogin(
                                     connectionID: connectionID, harness: .claude)
                             }
                         }
-                        Button("Codex (device code)") {
+                        Button(L10n.t("Codex (device code)")) {
                             Task {
                                 await model.startRemoteLogin(
                                     connectionID: connectionID, harness: .codex)
                             }
                         }
-                        Button("Cursor") {
+                        Button(L10n.t("Cursor")) {
                             Task {
                                 await model.startRemoteLogin(
                                     connectionID: connectionID, harness: .cursor)
@@ -259,16 +257,16 @@ private struct RemoteConnectionSettingsRow: View {
                         }
                     }
                     Spacer()
-                    Button("Remove…", role: .destructive) { confirmRemoval = true }
+                    Button(L10n.t("Remove…"), role: .destructive) { confirmRemoval = true }
                 }
                 if let runtime = connection.runtimeVersion {
-                    Text("Remote runtime \(runtime)")
+                    Text("Удалённая среда \(runtime)")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
                 if !connection.savedProjects.isEmpty {
                     VStack(alignment: .leading, spacing: Theme.Spacing.xxs) {
-                        Text("Saved projects").font(.caption.weight(.semibold))
+                        Text(L10n.t("Saved projects")).font(.caption.weight(.semibold))
                         ForEach(connection.savedProjects, id: \.self) { path in
                             Text(path)
                                 .font(.caption.monospaced())
@@ -296,10 +294,10 @@ private struct RemoteConnectionSettingsRow: View {
                 in: RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
             .onAppear { nickname = connection.nickname ?? "" }
             .confirmationDialog(
-                "Install the signed Claudexor runtime on \(connection.displayName)?",
+                "Установить подписанную среду Claudexor на \(connection.displayName)?",
                 isPresented: $confirmInstall
             ) {
-                Button("Install") {
+                Button(L10n.t("Install")) {
                     Task { await model.installRemoteRuntime(connectionID: connectionID) }
                 }
                 .disabled(
@@ -310,10 +308,10 @@ private struct RemoteConnectionSettingsRow: View {
                     "It installs without sudo under ~/.claudexor/remote/versions and atomically updates the current pointer.")
             }
             .confirmationDialog(
-                "Remove \(connection.displayName)?",
+                "Удалить \(connection.displayName)?",
                 isPresented: $confirmRemoval
             ) {
-                Button("Remove connection", role: .destructive) {
+                Button(L10n.t("Remove connection"), role: .destructive) {
                     Task { await model.removeRemoteConnection(connectionID) }
                 }
             } message: {
@@ -325,12 +323,12 @@ private struct RemoteConnectionSettingsRow: View {
 
     private func statusLabel(_ state: RemoteConnectionState) -> String {
         switch state {
-        case .offline: "Offline"
-        case .connecting: "Connecting"
-        case .needsInteraction: "Needs authentication"
-        case .installing: "Installing"
-        case .connected: "Connected"
-        case .failed: "Failed"
+        case .offline: LocalizedPresentation.text("Offline")
+        case .connecting: LocalizedPresentation.text("Connecting")
+        case .needsInteraction: "Требуется авторизация"
+        case .installing: "Установка"
+        case .connected: LocalizedPresentation.text("Connected")
+        case .failed: LocalizedPresentation.text("Failed")
         }
     }
 
